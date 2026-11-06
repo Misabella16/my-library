@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import {initEpubImport} from '../epub-ui.mjs';
-import {bulkEpubReport} from '../epub-bulk.mjs';
+import {bulkEpubReport,flagPossibleEpubDuplicates} from '../epub-bulk.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 
 function zipFor(title,author='A Writer'){
@@ -160,6 +160,44 @@ test('Interrupted 101-file preview resumes after last successful chunk without r
   assert.equal(f.get('epub-import-progress').value,101);
   assert.equal(f.get('upload-epubs').disabled,false);
   assert.match(f.get('epub-import-summary').textContent,/101 inspected/);
+  assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+
+test('Same work with different EPUB bytes is held for review, not silently discarded',()=>{
+ const entry=(hash,status='new')=>({metadata:{title:'The Book',author:'Writer',sha256:hash},
+  match:{status}});
+ const items=[entry('a'.repeat(64)),entry('b'.repeat(64))];
+ assert.equal(flagPossibleEpubDuplicates(items),1);
+ assert.equal(items[0].match.status,'new');
+ assert.equal(items[1].match.status,'possible_duplicate');
+ assert.equal(items[1].duplicateMatch.status,'new');
+});
+test('Existing uploaded EPUB anchors repeated-title candidates',()=>{
+ const entry=(hash,status)=>({metadata:{title:'The Book',author:'Writer',sha256:hash},
+  match:{status}});
+ const items=[entry('a'.repeat(64),'new'),entry('b'.repeat(64),'already_uploaded')];
+ assert.equal(flagPossibleEpubDuplicates(items),1);
+ assert.equal(items[0].match.status,'possible_duplicate');
+ assert.equal(items[1].match.status,'already_uploaded');
+});
+test('Owner may explicitly keep a separate EPUB version with same book metadata',async()=>{
+ const f=fixture(0);
+ try{
+  const files=[
+   new File([zipFor('Same Book')],'first.epub',{type:'application/epub+zip'}),
+   new File([zipFor('Same  Book')],'second.epub',{type:'application/epub+zip'})
+  ];
+  f.get('epub-files').files=files;
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.match(f.get('epub-import-summary').textContent,/Possible duplicate EPUB: 1/);
+  assert.match(f.get('upload-epubs').textContent,/Save 1 eligible/);
+  const card=f.get('epub-preview-list').children[1];
+  const keep=card.children.find(x=>x.textContent==='Keep this distinct EPUB version');
+  assert.ok(keep);
+  await keep.dispatch('click');
+  assert.match(f.get('upload-epubs').textContent,/Save 2 eligible/);
   assert.equal(f.stats().uploads,0);
  }finally{f.restore();}
 });
