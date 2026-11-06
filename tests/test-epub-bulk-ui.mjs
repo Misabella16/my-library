@@ -397,3 +397,19 @@ test('Repeated duplicate checks do not re-hold files the owner explicitly kept',
  assert.equal(flagPossibleEpubDuplicates(items),0);
  assert.equal(items[1].match.status,'new');
 });
+
+test('Punctuation differences and Unicode title normalization still flag duplicate EPUB versions',()=>{
+ const rows=[
+  {metadata:{title:'The Star: Garden',author:'Writer',sha256:'a'.repeat(64)},match:{status:'new'}},
+  {metadata:{title:'The Star Garden',author:'Writer',sha256:'b'.repeat(64)},match:{status:'new'}}
+ ];
+ assert.equal(flagPossibleEpubDuplicates(rows),1);
+ assert.equal(rows[1].match.status,'possible_duplicate');
+});
+test('Different authors never become the same EPUB duplicate group',()=>{
+ const rows=[
+  {metadata:{title:'The Star Garden',author:'Writer One',sha256:'a'.repeat(64)},match:{status:'new'}},
+  {metadata:{title:'The Star Garden',author:'Writer Two',sha256:'b'.repeat(64)},match:{status:'new'}}
+ ];
+ assert.equal(flagPossibleEpubDuplicates(rows),0);
+});
