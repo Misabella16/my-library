@@ -2,7 +2,8 @@
 // Pure functions; no network, storage or writes. Called only after a local CSV preview.
 export const REASONS=Object.freeze({
   safe_to_import:'New book candidate. Can be added after confirmation.',
-  already_in_library:'Already in My Library. This importer does not yet add Goodreads ratings, shelves or reviews to existing records.',
+  already_in_library:'Title and author already in My Library. This importer does not add Goodreads ratings, shelves or reviews to existing records.',
+  goodreads_id_match:'Goodreads Book ID matches a book already in My Library, even if the title or author is written differently.',
   repeated_csv_identity:'Repeated title/author or Goodreads Book ID in CSV. Possible editions; review before adding.',
   missing_author_or_title:'Title or author is missing. Needs manual matching.',
   ambiguous_library_identity:'Multiple library records match this title and author. Review needed.',
