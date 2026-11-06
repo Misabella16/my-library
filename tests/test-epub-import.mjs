@@ -181,3 +181,42 @@ test('EPUB preview supports Unicode exact titles and a bounded legacy fallback',
   assert.equal(f.queries()-before,3,'Two indexed queries plus one bounded legacy-key query');
  }finally{f.sqlite.close();}
 });
+
+test('EPUB ISBN-13 identifies an existing book even when EPUB title differs',async()=>{
+ const f=fixture();
+ try{
+  const id='99999999-9999-4999-8999-999999999999';
+  const eid='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(id,'The Book: Collector Title','Writer','the book collector title','writer');
+  f.sqlite.prepare('INSERT INTO editions(id,book_id,edition_name,format,isbn,is_special) VALUES(?,?,?,?,?,0)')
+   .run(eid,id,'Standard','hardcover','9780306406157');
+  const meta=await validMeta('The Book','Writer');
+  meta.identifier='urn:isbn:9780306406157';
+  const preview=await batchPreviewEpub(f.db,[meta]);
+  assert.equal(preview[0].status,'match');
+  assert.equal(preview[0].book_id,id);
+  const response=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(response.status,201,await response.clone().text());
+  assert.equal((await response.json()).book_created,false);
+  assert.equal(count(f.sqlite,'books'),1);
+  assert.equal(count(f.sqlite,'epub_files'),1);
+ }finally{f.sqlite.close();}
+});
+test('Conflicting ISBN authors do not merge unrelated books',async()=>{
+ const f=fixture();
+ try{
+  const id='99999999-9999-4999-8999-999999999999';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(id,'Book','Other Author','book','other author');
+  f.sqlite.prepare('INSERT INTO editions(id,book_id,edition_name,format,isbn,is_special) VALUES(?,?,?,?,?,0)')
+   .run('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',id,'Standard','hardcover','9780306406157');
+  const meta=await validMeta();
+  meta.identifier='isbn:9780306406157';
+  const preview=await batchPreviewEpub(f.db,[meta]);
+  assert.equal(preview[0].status,'needs_review');
+  const response=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(response.status,409);
+  assert.equal(count(f.sqlite,'epub_files'),0);
+ }finally{f.sqlite.close();}
+});
