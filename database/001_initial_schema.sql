@@ -78,16 +78,27 @@ CREATE INDEX IF NOT EXISTS idx_editions_book ON editions(book_id);
 CREATE INDEX IF NOT EXISTS idx_editions_isbn ON editions(isbn);
 CREATE INDEX IF NOT EXISTS idx_editions_vendor ON editions(vendor);
 
--- One record per distinct edition type, regardless of retailer for standard editions.
--- Distinct special-edition releases must have distinct names or ISBNs.
+-- Only use against the standalone My Library D1 database.
+-- One record for each distinct edition type under a book.
+-- These constraints do not touch copies, cover files or notes.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_type
-  ON editions (book_id, format, is_special, lower(trim(edition_name)),
-    CASE WHEN is_special=1 THEN lower(trim(vendor)) ELSE '' END);
--- ISBN formatting differences (hyphens and spaces) are not separate editions.
+ON editions (
+  book_id,
+  format,
+  is_special,
+  CASE WHEN lower(replace(replace(replace(replace(replace(trim(edition_name),' ',''),'-',''),'_',''),'.',''),'/',''))
+        IN ('standard','standardedition','regular','regularedition')
+       THEN 'standard'
+       ELSE lower(replace(replace(replace(replace(replace(trim(edition_name),' ',''),'-',''),'_',''),'.',''),'/',''))
+  END,
+  CASE WHEN is_special=1
+       THEN lower(replace(replace(replace(replace(trim(vendor),' ',''),'-',''),'_',''),'.',''))
+       ELSE '' END
+);
+-- Ignore superficial ISBN formatting; blank ISBNs aren't unique identifiers.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_isbn
-  ON editions (book_id, upper(replace(replace(trim(isbn),'-',''),' ','')))
-  WHERE isbn IS NOT NULL AND trim(isbn)<>'';
-
+ON editions (book_id, upper(replace(replace(trim(isbn),'-',''),' ','')))
+WHERE isbn IS NOT NULL AND trim(isbn)<>'';
 
 -- A physical copy is not the same thing as an edition.
 CREATE TABLE IF NOT EXISTS copies (
