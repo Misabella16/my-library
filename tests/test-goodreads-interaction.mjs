@@ -185,6 +185,20 @@ test('daily D1 limit stops retries and gives a safe re-preview message',async()=
   }finally{ui.restore();}
 });
 
+test('Cloudflare read and write daily limits pause immediately, without retrying all batches',async()=>{
+  for(const code of ['database_read_quota','database_write_quota']){
+    const ui=await ready({failImportTimes:1,failCode:code});
+    try{
+      await ui.get('import-goodreads').dispatch('click');
+      await ui.get('goodreads-confirm-import').dispatch('click');
+      assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads').length,1);
+      assert.equal(ui.get('import-goodreads').disabled,true);
+      assert.match(ui.get('goodreads-import-feedback').textContent,/Import paused/);
+      assert.match(ui.get('goodreads-import-hint').textContent,/usage limit/);
+    }finally{ui.restore();}
+  }
+});
+
 test('If a CSV has no safely new books, the disabled action explains why',async()=>{
   const ui=await ready({library:[{id:'11111111-1111-4111-8111-111111111111',
     title:'A Tale of Lanterns',author:'A Writer',goodreads_id:'123'}]});
