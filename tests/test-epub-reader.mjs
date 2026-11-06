@@ -81,3 +81,26 @@ test('Reject oversized and non-EPUB selections',async()=>{
  await assert.rejects(inspectEpub(new File([Buffer.alloc(10)],'test.zip')),/\.epub/);
  await assert.rejects(inspectEpub(new File([],'empty.epub')),/24 MB/);
 });
+
+test('Fallback extracts a uniquely labeled EPUB2 manifest cover without meta or guide',async()=>{
+ const oldStyle=opf.replace(' properties="cover-image"','');
+ const file=new File([fixtureZip({...content(),'OPS/content.opf':oldStyle})],'old-style.epub');
+ const book=await inspectEpub(file);
+ assert.equal(book.coverType,'image/png');
+ assert.equal(book.coverPath,'OPS/images/cover.png');
+});
+test('Never guess between multiple candidate cover images',async()=>{
+ const uncertain=opf.replace(' properties="cover-image"','').replace(
+  '</manifest>','<item id="frontcover" href="images/frontcover.png" media-type="image/png"/></manifest>');
+ const file=new File([fixtureZip({...content(),'OPS/content.opf':uncertain,
+  'OPS/images/frontcover.png':png})],'ambiguous.epub');
+ const book=await inspectEpub(file);
+ assert.equal(book.coverPath,'');
+ assert.equal(book.cover,null);
+});
+test('Unrelated image in manifest is not mistaken for cover',()=>{
+ const noncover=opf.replace(' properties="cover-image"','')
+  .replace('id="c" href="images/cover.png"','id="chapter-art" href="images/chapter.png"');
+ const value=parsePackageXml(container,noncover,'OPS/content.opf');
+ assert.equal(value.coverPath,'');
+});
