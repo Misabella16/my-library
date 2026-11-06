@@ -79,10 +79,18 @@
     <div class="surface"><h2>My Shelves</h2><p>Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under <strong>My Editions & Copies</strong>.</p><div class="tip">Want to organize by genre, favorites, reading challenge or anything else? Add a personal shelf on the book page. You can also store a physical bookcase and shelf for every individual copy.</div></div>
   </section>
   <section class="tab-panel" id="photos" hidden>
-    <div class="surface"><h2>Shelf Photos</h2><p>In Phase 6, this space will let you upload pictures of whole shelves, covers or spines, identify the individual books, and match them to existing records or add a separate physical copy.</p>
-      <div class="tip"><strong>Preview only:</strong> You can select and inspect local shelf pictures here, but nothing is uploaded, analyzed, matched, saved or shared yet. The private scanning service will be a separate, tested feature.</div>
+    <div class="surface"><h2>Shelf Photos</h2><p>Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
+      <div class="tip"><strong>Privacy-first helper:</strong> Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Automatic recognition of cover artwork or spine text is not yet available; you can search for a title or author below instead. No photo or copy information is saved automatically.</div>
       <label class="upload">Choose shelf photos <input id="photo-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
+      <p id="photo-status" class="small-status" role="status">Choose a shelf photo to preview privately.</p>
       <div id="photo-preview" class="preview-pictures"></div>
+      <p id="photo-isbn-status" class="small-status" aria-live="polite">ISBN barcode detection is optional and browser-dependent.</p>
+      <div class="photo-search-controls">
+        <label for="photo-book-search">Find a pictured book by title or author</label>
+        <input id="photo-book-search" type="search" maxlength="150" placeholder="Search the collection…">
+        <button class="btn subtle" id="photo-match-search" type="button">Find book matches</button>
+      </div>
+      <div id="photo-match-results" class="photo-match-results" aria-live="polite"></div>
     </div>
   </section>
   <section class="tab-panel" id="imports" hidden>
