@@ -1,4 +1,5 @@
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
+import {createPhotoReview,setReviewPhotos,assignPhotoMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
 // A privacy-first shelf-photo helper. Images never leave the browser.
 // Native BarcodeDetector is optional and cannot identify cover art or text.
@@ -32,15 +33,42 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   isbnStatus=get('photo-isbn-status');
  if(!input||!images||!search||!button||!results||!status)return;
  let currentUrls=[],busy=false;
+ const review=createPhotoReview();
+ const reviewArea=node('section',undefined,'photo-review-area');
+ const reviewHeading=node('h3','Photo-by-photo review');
+ const reviewText=node('p','Select a photo for each suggested book. These links are temporary and do not create copies or change your catalogue.','muted');
+ const reviewList=node('div',undefined,'photo-review-rows');
+ const exportButton=node('button','Download photo match review CSV','btn subtle mini');
+ exportButton.type='button';
+ exportButton.disabled=true;
+ reviewArea.append(reviewHeading,reviewText,reviewList,exportButton);
+ results.after?.(reviewArea);
+ exportButton.addEventListener('click',()=>{
+  const csv=photoReviewCsv(review);
+  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  const anchor=node('a');anchor.href=url;anchor.download='my-library-shelf-photo-review.csv';
+  document.body.append(anchor);anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
+ function renderReview(){
+  reviewList.replaceChildren();
+  for(const row of photoReviewRows(review)){
+   const entry=node('p',row.photoName+' → '+(row.title||'Not matched yet'),'muted');
+   reviewList.append(entry);
+  }
+  exportButton.disabled=review.photos.length===0;
+ }
  const tell=text=>{status.textContent=text;};
  const clear=()=>{
   for(const url of currentUrls)URL.revokeObjectURL(url);
   currentUrls=[];images.replaceChildren();results.replaceChildren();
+  setReviewPhotos(review,[]);renderReview();
  };
  input.addEventListener('change',async()=>{
   clear();
   const files=[...(input.files||[])].filter(x=>
    ['image/jpeg','image/png','image/webp'].includes(x.type)&&x.size<=8*1024*1024).slice(0,50);
+  setReviewPhotos(review,files);renderReview();
   for(const file of files){
    const frame=node('figure');
    const image=node('img');
@@ -95,7 +123,21 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
       tell('Book could not be opened: '+(error.message||'Request failed'));
      }finally{open.disabled=false;}
     });
-    row.append(open);results.append(row);
+    const label=node('label','Associate with photo: ','muted');
+    const select=node('select');
+    const placeholder=node('option','Select photo…');placeholder.value='';select.append(placeholder);
+    for(const photo of review.photos){
+     const option=node('option',photo.name);option.value=photo.id;select.append(option);
+    }
+    const assign=node('button','Keep as photo suggestion','btn subtle mini');assign.type='button';
+    assign.disabled=!review.photos.length;
+    assign.addEventListener('click',()=>{
+     try{
+      assignPhotoMatch(review,select.value,book);renderReview();
+      tell('Suggested match recorded for photo review only. Open the book to verify edition and physical copy.');
+     }catch(error){tell(error.message||'Choose a photo first.');}
+    });
+    label.append(select);row.append(label,assign,open);results.append(row);
    }
    tell('Showing '+order.length+' bounded catalogue suggestions. No photographs were uploaded and no copies were created.');
   }catch(e){tell('Shelf-photo matching unavailable: '+(e.message||'Request failed'));}
