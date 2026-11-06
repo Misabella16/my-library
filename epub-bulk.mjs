@@ -53,7 +53,7 @@ export function safeCsvCell(value){
 export function bulkEpubReport(items){
  const columns=['File','Relative path','Title','Author','ISBN or identifier','Matching status',
   'Matched book ID','Saved file ID','Review explanation',
-  'New book created','EPUB cover extracted','Edition ID','Manually excluded'];
+  'New book created','EPUB cover extracted','Edition ID','Manually excluded','Matched catalogue title'];
  const lines=[columns.map(safeCsvCell).join(',')];
  for(const item of items||[]){
   const m=item.metadata||{},match=item.match||{};
@@ -64,7 +64,7 @@ export function bulkEpubReport(items){
    match.book_id||match.existing?.book_id||'',match.file_id||match.existing?.id||'',item.error||match.reason||'',
    item.uploadResult?String(!!item.uploadResult.book_created):'',
    item.uploadResult?String(!!item.uploadResult.cover_extracted):'',
-   item.uploadResult?.edition_id||match.edition_id||match.existing?.edition_id||'',String(!!item.excluded)
+   item.uploadResult?.edition_id||match.edition_id||match.existing?.edition_id||'',String(!!item.excluded),match.matched_title||''
   ].map(safeCsvCell).join(','));
  }
  return '\uFEFF'+lines.join('\r\n')+'\r\n';
