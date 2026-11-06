@@ -162,6 +162,12 @@ function renderDetail(){
       '<textarea id="book-notes" class="note-editor" name="private_notes" rows="6" maxlength="120000" placeholder="Thoughts, favorite moments, quotes, reminders, reading journal…">'+safe(b.private_notes)+'</textarea>'+
       '<div class="actions"><span class="small-status" id="notes-state">Only you can see these notes.</span><button class="btn mini" type="submit">Save notes</button></div></form></section>'+
     '<div class="divider"></div>'+
+    '<details class="collapse"><summary>My Private EPUB Files ('+(b.epubs?.length||0)+')</summary>'+
+      '<p class="muted">Original files are kept in private storage. Downloads require your library login.</p>'+
+      ((b.epubs||[]).filter(e=>safeId(e.id)).map(e=>'<p class="epub-file-entry">'+
+        '<a class="btn mini subtle" href="/api/epubs/file/'+safe(e.id)+'" download>Download EPUB</a> '+
+        '<span>'+safe(e.original_filename||'Book EPUB')+'</span></p>').join('')||
+        '<p class="muted">No EPUB uploaded for this book yet.</p>')+'</details>'+
     '<details class="collapse"><summary>My Editions & Copies ('+(b.editions?.length||0)+' editions)</summary>'+
       '<div class="edition-actions"><button class="btn mini" type="button" id="add-edition">+ Add edition</button></div>'+
       (editionContent||'<p class="muted">Add a standard, digital, ARC or collector’s edition.</p>')+'</details>'+
