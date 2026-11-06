@@ -1,6 +1,7 @@
 import {handleGoodreadsApi} from './goodreads-import-api.mjs';
 import {handleGoodreadsSyncApi} from './goodreads-sync-api.mjs';
 import {handleEpubApi} from './epub-import-api.mjs';
+import {handleEpubBackfillApi} from './epub-backfill-api.mjs';
 import {classifyDatabaseError} from './database-errors.mjs';
 export {classifyDatabaseError} from './database-errors.mjs';
 // My Library Phase 2: private, independent Cloudflare Pages advanced-mode Worker.
@@ -254,6 +255,8 @@ async function serveApi(request,env,path){
   if(goodreadsSyncResponse)return goodreadsSyncResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
+  const backfillResponse=await handleEpubBackfillApi(request,db,path);
+  if(backfillResponse)return backfillResponse;
   const epubResponse=await handleEpubApi(request,db,env,path);
   if(epubResponse)return epubResponse;
   if(path==='/api/books'&&method==='GET') {
