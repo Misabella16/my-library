@@ -44,7 +44,7 @@ const csv=(title='A Tale of Lanterns',author='A Writer')=>[
 function file(text=csv()){
   return {name:'goodreads_library_export.csv',size:text.length,text:async()=>text};
 }
-async function ready({library=[],onImported=async()=>{}}={}){
+async function ready({library=[],onImported=async()=>{},failImportTimes=0,failCode='import_batch_unavailable'}={}){
   const ui=fixture();
   const priorDocument=globalThis.document;
   globalThis.document=ui.document;
@@ -60,6 +60,13 @@ async function ready({library=[],onImported=async()=>{}}={}){
     if(path==='/api/imports')return {batches:created?[{id:'11111111-1111-4111-8111-111111111111',status:'complete',
       created_at:'2026-11-05T21:00:00.000Z',created,skippedTotal:0}]:[]};
     if(path==='/api/imports/goodreads'){
+      if(failImportTimes>0){
+        failImportTimes--;
+        const e=new Error(failCode==='database_limit_reached'
+          ? 'Database daily usage limit reached. Completed imports remain saved.'
+          : 'This import batch could not be completed. Previous batches are saved.');
+        e.status=503;e.payload={code:failCode};throw e;
+      }
       created+=options.data.rows.length;
       return {created:options.data.rows.length,skippedTotal:0,createdIndices:options.data.rows.map((_,i)=>i),skippedRows:[]};
     }
@@ -133,6 +140,48 @@ test('A library larger than 5,000 books is fully checked before importing',async
     const pages=ui.requests.filter(r=>r.path.startsWith('/api/imports/catalogue?'));
     assert.equal(pages.length,6);
     assert.equal(ui.requests.filter(r=>r.method==='POST').length,0);
+  }finally{ui.restore();}
+});
+
+test('transient import failures retry the same safe batch, preserving the book count',async()=>{
+  const ui=await ready({failImportTimes:2});
+  try{
+    await ui.get('import-goodreads').dispatch('click');
+    await ui.get('goodreads-confirm-import').dispatch('click');
+    const posts=ui.requests.filter(r=>r.path==='/api/imports/goodreads');
+    assert.equal(posts.length,3);
+    assert.match(ui.get('goodreads-import-feedback').textContent,/Import finished/);
+    assert.match(ui.get('goodreads-status').textContent,/1 added/);
+  }finally{ui.restore();}
+});
+
+test('repeated transient failures leave a Resume button and do not erase the chosen file',async()=>{
+  const ui=await ready({failImportTimes:3});
+  try{
+    await ui.get('import-goodreads').dispatch('click');
+    await ui.get('goodreads-confirm-import').dispatch('click');
+    assert.match(ui.get('goodreads-import-feedback').textContent,/Import paused/);
+    assert.match(ui.get('import-goodreads').textContent,/Resume 1 remaining book/);
+    assert.equal(ui.get('import-goodreads').disabled,false);
+    assert.equal(ui.get('goodreads-file').files.length,1);
+    assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads').length,3);
+    await ui.get('import-goodreads').dispatch('click');
+    await ui.get('goodreads-confirm-import').dispatch('click');
+    assert.match(ui.get('goodreads-import-feedback').textContent,/Import finished/);
+    assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads').length,4);
+  }finally{ui.restore();}
+});
+
+test('daily D1 limit stops retries and gives a safe re-preview message',async()=>{
+  const ui=await ready({failImportTimes:1,failCode:'database_limit_reached'});
+  try{
+    await ui.get('import-goodreads').dispatch('click');
+    await ui.get('goodreads-confirm-import').dispatch('click');
+    assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads').length,1);
+    assert.equal(ui.get('import-goodreads').disabled,true);
+    assert.match(ui.get('goodreads-import-feedback').textContent,/Import paused/);
+    assert.match(ui.get('goodreads-import-hint').textContent,/database usage limit/i);
+    assert.equal(ui.get('goodreads-file').files.length,1);
   }finally{ui.restore();}
 });
 

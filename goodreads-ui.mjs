@@ -162,6 +162,23 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
 // The owner must explicitly confirm a reviewed import. No automatic upload.
 const MAX_BATCH_SUBMIT=20;
 const MAX_BATCH_STATEMENTS=85;
+const MAX_TRANSIENT_RETRIES=2;
+const retryableImportError=error=>
+  error?.payload?.code!=='database_limit_reached' &&
+  (!error?.status || [429,500,502,503,504].includes(error.status));
+async function sendGoodreadsBatch(api,rows,onRetry=()=>{}){
+  for(let retry=0;;retry++){
+    try{
+      return await api('/api/imports/goodreads',{method:'POST',data:{rows}});
+    }catch(error){
+      if(retry>=MAX_TRANSIENT_RETRIES||!retryableImportError(error))throw error;
+      // A timed-out request may have been committed. Server-side identity and
+      // Goodreads ID checks make retrying the same batch safe.
+      onRetry(retry+1,error);
+      await new Promise(resolve=>setTimeout(resolve,400*(2**retry)));
+    }
+  }
+}
 const eligible=isGoodreadsImportEligible;
 const uploadRow=entry=>({
   title:entry.title,author:entry.author,goodreadsId:entry.goodreadsId,
@@ -378,8 +395,11 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
       for(const chunk of chunks){
         setFeedback('Importing batch '+(finished+1)+' of '+chunks.length+
           '. '+created+' new books saved so far…');
-        const result=await api('/api/imports/goodreads',
-          {method:'POST',data:{rows:chunk.map(uploadRow)}});
+        const result=await sendGoodreadsBatch(api,chunk.map(uploadRow),(attempt,error)=>{
+          setFeedback('Batch '+(finished+1)+' of '+chunks.length+
+            ' needs another attempt ('+attempt+' of '+MAX_TRANSIENT_RETRIES+
+            '). Completed batches remain saved. '+(error?.payload?.code||'Temporary request error')+'.','warning');
+        });
         created+=Number(result.created)||0;
         skipped+=Number(result.skippedTotal)||0;
         for(const index of result.createdIndices||[]){
@@ -412,13 +432,32 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
         }
         renderReport();
       }
-      resetPreviewState();
+      // The failed request might have committed before its response was lost.
+      // Keep that chunk plus all later chunks eligible for a safe retry.
+      // Every retry is checked against the live DB so no existing work is overwritten.
+      const remaining=chunks.slice(finished).flat();
+      const quota=error?.payload?.code==='database_limit_reached';
+      if(remaining.length && !quota){
+        current={...current,candidates:remaining};
+        importButton.disabled=false;
+        importButton.textContent='Resume '+remaining.length+' remaining '+(remaining.length===1?'book':'books');
+        importHint.textContent='Your completed batches are saved. Resume retries only the remaining '+
+          remaining.length+' CSV books, including the uncertain last batch; duplicates are skipped by the server.';
+      }else{
+        current=null;
+        importButton.disabled=true;
+        importHint.textContent=quota
+          ? 'The database usage limit may have been reached. Your completed books are safe. Re-preview this CSV after your quota resets to continue.'
+          : 'No remaining candidates. Re-preview the CSV to reconcile the saved library.';
+      }
+      closeApproval();
       status.textContent='Import stopped after '+finished+' of '+chunks.length+
         ' batches. Completed batches: '+created+' added, '+skipped+' skipped.';
-      setFeedback('Import stopped. '+created+' books were saved in completed batches, '+
-        skipped+' were skipped; failed batches were not partially committed. Reason: '+
-        (error instanceof Error?error.message:'Unknown server error.')+
-        ' Check import history before trying again.','error');
+      setFeedback('Import paused. '+created+' books saved in confirmed batches, '+
+        skipped+' skipped. '+(error instanceof Error?error.message:'A request failed.')+
+        (quota?' Do not retry until your database allowance resets.':
+          ' Use Resume remaining books to continue without starting over.')+
+        ' Check import history if you need to verify saved batches.','error');
     }finally{
       importing=false;input.disabled=false;
       previewButton.disabled=!input.files?.length;

@@ -180,6 +180,56 @@ test('Owner-only compact identity catalogue returns all books in pages, without 
   } finally{sqlite.close();}
 });
 
+test('large-library duplicate lookup preserves existing imported works and does not scan the whole books table',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    // Legacy non-Latin records used the older ASCII-only title normalizer.
+    sqlite.prepare("INSERT INTO books(id,title,author,normalized_title,normalized_author,created_at,updated_at) VALUES(?,?,?,?,?,?,?)")
+      .run('7a68d83f-5c0c-4fbd-a2a1-5cf872edce21','天官赐福','墨香铜臭','','','2026-10-01','2026-10-01');
+    const duplicate={...payloadRows()[0],title:'天官赐福',author:'墨香铜臭',goodreadsId:'23455'};
+    const result=await (await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:[duplicate]}})).json();
+    assert.equal(result.created,0);
+    assert.equal(result.skipped.already_present,1);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,1);
+    const plan=sqlite.prepare(
+      "EXPLAIN QUERY PLAN SELECT id,title,author,goodreads_id FROM books "+
+      "WHERE archived_at IS NULL AND "+
+      "(normalized_title=? OR (normalized_title=? AND title=? COLLATE NOCASE)) LIMIT 101"
+    ).all('天官赐福','','天官赐福');
+    assert.ok(plan.some(item=>/INDEX|SEARCH/i.test(item.detail)),JSON.stringify(plan));
+    assert.ok(!plan.some(item=>/SCAN books\\b/i.test(item.detail)),JSON.stringify(plan));
+  }finally{sqlite.close();}
+});
+
+test('a failed Goodreads transaction reports quota or transient errors without changing books',async()=>{
+  for(const [message,code] of [
+    ['D1 quota limit exceeded','database_limit_reached'],
+    ['D1 temporary backend error','import_batch_unavailable']
+  ]){
+    const {sqlite,db}=makeDb();
+    try{
+      db.batch=async()=>{throw new Error(message);};
+      const res=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:[payloadRows()[0]]}});
+      assert.equal(res.status,503);
+      const result=await res.json();
+      assert.equal(result.code,code);
+      assert.match(result.error,/saved|remain/i);
+      assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,0);
+    }finally{sqlite.close();}
+  }
+});
+
+test('a failed Goodreads identity lookup provides a resumable error without committing a batch',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    db.prepare=()=>{throw new Error('D1 quota exceeded');};
+    const res=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:[payloadRows()[0]]}});
+    assert.equal(res.status,503);
+    assert.equal((await res.json()).code,'database_limit_reached');
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,0);
+  }finally{sqlite.close();}
+});
+
 test('Undo archives only unchanged newly imported books and allows clean reimport',async()=>{
   const {sqlite,db}=makeDb();
   try{
