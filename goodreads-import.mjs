@@ -37,8 +37,12 @@ export function validateImportRows(rows){
     const status=exclusive==='read'?'read':exclusive==='currently-reading'?'reading':'unread';
     let rating=null;
     if(raw.myRating!==null&&raw.myRating!==undefined&&raw.myRating!==''){
-      if(typeof raw.myRating!=='number'||!Number.isInteger(raw.myRating)||raw.myRating<0||raw.myRating>5)
-        throw Error('A Goodreads rating is invalid.');
+      // Goodreads exports may contain fractional personal ratings. The preview
+      // accepts finite 0–5 numbers and books.rating is REAL, so do not require
+      // integers here. Zero is Goodreads' "not rated" sentinel.
+      if(typeof raw.myRating!=='number'||!Number.isFinite(raw.myRating)||
+         raw.myRating<0||raw.myRating>5)
+        throw Error('A Goodreads rating must be a number between 0 and 5.');
       if(raw.myRating>0)rating=raw.myRating;
     }
     if(typeof raw.review!=='string'&&raw.review!==null&&raw.review!==undefined)
