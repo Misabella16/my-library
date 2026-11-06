@@ -157,6 +157,34 @@ test('Undo rejects shelf changes without an updated_at mutation',async()=>{
   }finally{sqlite.close();}
 });
 
+test('Undo refuses an added collector edition and preserves the entire imported batch',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    const batch=await (await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:payloadRows()}})).json();
+    const b=scalar(sqlite,'SELECT id FROM books WHERE title=?','The Paper Garden');
+    sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES(?,?,?,?,?)")
+      .run('44444444-5555-4666-8777-888888888888',b.id,'FairyLoot Exclusive','hardcover',1);
+    const res=await call(db,'/api/imports/'+batch.batch_id+'/undo',{method:'POST',data:{}});
+    assert.equal(res.status,409);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books WHERE archived_at IS NULL').n,2);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM editions').n,1);
+    assert.equal(scalar(sqlite,'SELECT status FROM import_batches WHERE id=?',batch.batch_id).status,'complete');
+  }finally{sqlite.close();}
+});
+
+test('Undo refuses untracked data changes even if the edited timestamp is unchanged',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    const batch=await (await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:payloadRows()}})).json();
+    const book=scalar(sqlite,'SELECT id FROM books WHERE title=?','The Paper Garden');
+    sqlite.prepare('UPDATE books SET private_notes=? WHERE id=?').run('New margin notes',book.id);
+    const res=await call(db,'/api/imports/'+batch.batch_id+'/undo',{method:'POST',data:{}});
+    assert.equal(res.status,409);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books WHERE archived_at IS NULL').n,2);
+    assert.equal(scalar(sqlite,'SELECT private_notes FROM books WHERE id=?',book.id).private_notes,'New margin notes');
+  }finally{sqlite.close();}
+});
+
 test('new import endpoints still require Access JWT and same-origin writes',async()=>{
   const hostile=await worker.fetch(
     new Request('https://books.example.com/api/imports/goodreads',{method:'POST',headers:{
