@@ -1,4 +1,5 @@
 import {parseGoodreadsExport, matchGoodreadsRows, MAX_GOODREADS_BYTES} from './goodreads-preview.mjs';
+import {reconciliationRows,reconciliationCounts,reconciliationCsv,isGoodreadsImportEligible} from './goodreads-reconciliation.mjs';
 
 // Read-only cross-check: fetch existing private catalogue pages for matching.
 // Never sends the Goodreads CSV, reviews or shelves to a server.
@@ -36,14 +37,17 @@ const labelStatus={
   unverified:['Not fully checked','unverified']
 };
 
-function renderSummary(container,parsed,matches,catalogue){
+function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={}){
   container.replaceChildren();
+  const allRows=reconciliationRows(parsed,matches,{outcomes});
+  const totals=reconciliationCounts(allRows);
   const summary=node('section','goodreads-summary');
-  const title=node('h3',null,'Your Goodreads preview');
+  const title=node('h3',null,'Your Goodreads reconciliation');
   const explainer=node('p','muted',
     'No changes made. Possible matches use title and author; special editions and individual copies are never overwritten.');
   const stats=node('div','goodreads-stats');
   stats.append(
+    stat('Total CSV rows',parsed.sourceCount),
     stat('Valid CSV books',parsed.entries.length),
     stat('Existing title matches',matches.counts.existing),
     stat('Needs review',matches.counts.review),
@@ -51,6 +55,11 @@ function renderSummary(container,parsed,matches,catalogue){
     stat('Not fully checked',matches.counts.unverified),
     stat('Repeated CSV identities',matches.counts.repeatedCsv)
   );
+  if(totals.imported||totals.skipped||totals.not_attempted){
+    stats.append(stat('Successfully imported',totals.imported),
+      stat('Skipped by server',totals.skipped),
+      stat('Not attempted',totals.not_attempted));
+  }
   summary.append(title,explainer,stats);
   const check=node('p','goodreads-scan-note',
     catalogue.complete
@@ -81,25 +90,54 @@ function renderSummary(container,parsed,matches,catalogue){
   container.append(metadata);
 
   const listing=node('section','goodreads-list');
-  listing.append(node('h3',null,'First 40 books'));
-  listing.append(node('p','muted','A small sample so you can check the matching before a future import.'));
-  for(const entry of matches.results.slice(0,40)){
-    const row=node('div','goodreads-row');
-    const body=node('div','goodreads-book');
-    body.append(node('strong',null,entry.title.slice(0,240)),
-      node('span','goodreads-author',entry.author||'Unknown author'));
-    const details=node('div','goodreads-row-meta');
-    const [text,status]=labelStatus[entry.matchStatus];
-    details.append(node('span','goodreads-match '+status,text));
-    if(entry.myRating!==null&&entry.myRating>0)
-      details.append(node('span',null,entry.myRating+' / 5 stars'));
-    if(entry.review)details.append(node('span',null,'Review included'));
-    if(entry.shelves.length)details.append(node('span',null,entry.shelves.slice(0,2).join(', ').slice(0,100)));
-    row.append(body,details);
-    listing.append(row);
+  listing.append(node('h3',null,'Every book in your CSV'));
+  listing.append(node('p','muted',
+    'Filter by outcome or search a title. Each entry explains why it matched or did not import.'));
+  const controls=node('div','goodreads-report-controls');
+  const filter=node('select','goodreads-filter');
+  filter.setAttribute('aria-label','Filter Goodreads rows by status');
+  for(const [key,label] of [
+    ['all','All rows'],['already_present','Already in library'],['needs_review','Needs review'],
+    ['ready','Ready to import'],['unverified','Not fully checked'],
+    ['imported','Imported'],['skipped','Skipped by server'],['not_attempted','Not attempted']
+  ]){
+    const option=node('option',null,label);option.value=key;filter.append(option);
   }
-  if(matches.results.length>40)
-    listing.append(node('p','muted','Showing 40 of '+matches.results.length+' CSV entries.'));
+  const search=node('input','goodreads-report-search');
+  search.type='search';search.placeholder='Search CSV titles or authors…';
+  search.setAttribute('aria-label','Search Goodreads rows');
+  controls.append(filter,search);
+  const counter=node('p','muted');
+  const content=node('div','goodreads-row-results');
+  const more=node('button','btn subtle mini','Show more CSV entries');
+  more.type='button';
+  let shown=60;
+  const render=()=>{
+    const q=search.value.trim().toLocaleLowerCase();
+    const filtered=allRows.filter(row=>
+      (filter.value==='all'||row.status===filter.value) &&
+      (!q||(row.title+' '+row.author+' '+row.goodreadsId).toLocaleLowerCase().includes(q)));
+    content.replaceChildren();
+    for(const row of filtered.slice(0,shown)){
+      const item=node('div','goodreads-row');
+      const main=node('div','goodreads-book');
+      main.append(node('strong',null,row.title||'(Missing title)'),
+        node('span','goodreads-author',row.author||'No author in CSV'),
+        node('span','goodreads-reason',row.explanation));
+      const details=node('div','goodreads-row-meta');
+      details.append(node('span','goodreads-match '+row.status,row.status.replaceAll('_',' ')),
+        node('span','goodreads-row-number','CSV row '+row.csvRow));
+      item.append(main,details);content.append(item);
+    }
+    counter.textContent='Showing '+Math.min(shown,filtered.length)+' of '+filtered.length+
+      ' matching rows. '+allRows.length+' valid CSV records total.';
+    more.hidden=shown>=filtered.length;
+  };
+  filter.addEventListener('change',()=>{shown=60;render();});
+  search.addEventListener('input',()=>{shown=60;render();});
+  more.addEventListener('click',()=>{shown+=60;render();});
+  listing.append(controls,counter,content,more);
+  render();
   container.append(listing);
 
   if(parsed.warnings.length){
@@ -117,10 +155,7 @@ function renderSummary(container,parsed,matches,catalogue){
 // The owner must explicitly confirm a reviewed import. No automatic upload.
 const MAX_BATCH_SUBMIT=20;
 const MAX_BATCH_STATEMENTS=85;
-const eligible=entry=>entry.matchStatus==='new'&&
-  entry.title.length<=300&&entry.author.trim()&&entry.author.length<=400&&
-  entry.shelves.length<=16&&entry.review.length<=50000&&
-  (!entry.goodreadsId||/^\d{1,36}$/.test(entry.goodreadsId));
+const eligible=isGoodreadsImportEligible;
 const uploadRow=entry=>({
   title:entry.title,author:entry.author,goodreadsId:entry.goodreadsId,
   myRating:entry.myRating,exclusiveShelf:entry.exclusiveShelf,
@@ -187,9 +222,19 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
   const status=document.querySelector('#goodreads-status');
   const output=document.querySelector('#goodreads-preview-results');
   const history=document.querySelector('#goodreads-import-history');
-  if(!input||!previewButton||!importButton||!importHint||!status||!output||!history)
+  const download=document.querySelector('#download-goodreads-report');
+  if(!input||!previewButton||!importButton||!importHint||!status||!output||!history||!download)
     throw Error('Goodreads import controls are missing.');
-  let current=null;
+  let current=null,reportData=null;
+  download.addEventListener('click',()=>{
+    if(!reportData)return;
+    const data=reconciliationCsv(reportData.parsed,reportData.matches,
+      {outcomes:reportData.outcomes});
+    const url=URL.createObjectURL(new Blob([data],{type:'text/csv;charset=utf-8'}));
+    const link=node('a');link.href=url;link.download='my-library-goodreads-reconciliation.csv';
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),250);
+  });
   const historyRefresh=async()=>{
     const data=await api('/api/imports');
     showHistory(history,data.batches||[],api,async()=>{
@@ -202,7 +247,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
     importHint.textContent='Import is available only after a complete, successful preview.';
   };
   input.addEventListener('change',()=>{
-    output.replaceChildren();noPreview();
+    output.replaceChildren();noPreview();reportData=null;download.disabled=true;
     const file=input.files?.[0];
     previewButton.disabled=!file;
     status.textContent=file
@@ -211,7 +256,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
   });
   previewButton.addEventListener('click',async()=>{
     const file=input.files?.[0];if(!file)return;
-    previewButton.disabled=true;noPreview();output.replaceChildren();
+    previewButton.disabled=true;noPreview();output.replaceChildren();reportData=null;download.disabled=true;
     status.textContent='Reading your CSV locally…';
     try{
       if(!/\.csv$/i.test(file.name))throw Error('Please select a Goodreads .csv export.');
@@ -230,7 +275,9 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
           (excluded?' '+excluded+' rows exceed import limits and require review.':'')+
           ' Existing titles, ambiguous matches and copies are skipped.'
         : 'Your catalogue is too large for a complete preview. Import is disabled to avoid duplicates.';
-      status.textContent='Preview complete. No Goodreads data has been uploaded.';
+      reportData={parsed,matches,catalogue,outcomes:new Map()};
+      download.disabled=false;
+      status.textContent='Preview complete. Every CSV row has a match status. No Goodreads data has been uploaded.';
     }catch(error){
       noPreview();
       status.textContent='Preview could not complete. No changes were made.';
@@ -252,18 +299,34 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
           {method:'POST',data:{rows:chunk.map(uploadRow)}});
         created+=Number(result.created)||0;
         skipped+=Number(result.skippedTotal)||0;
+        for(const index of result.createdIndices||[]){
+          if(chunk[index])reportData?.outcomes.set(chunk[index].rowNumber,'created');
+        }
+        for(const row of result.skippedRows||[]){
+          if(chunk[row.index]&&['already_present','ambiguous_title','goodreads_id_conflict'].includes(row.reason))
+            reportData?.outcomes.set(chunk[row.index].rowNumber,row.reason);
+        }
         finished++;
       }
-      current=null;input.value='';
-      output.replaceChildren();noPreview();
+      current=null;input.value='';noPreview();
+      if(reportData)renderSummary(output,reportData.parsed,reportData.matches,reportData.catalogue,
+        {outcomes:reportData.outcomes});
       status.textContent='Import complete: '+created+' new books added, '+skipped+
-        ' skipped after server-side duplicate checks. Your imported books are in My Books.';
+        ' skipped after server-side duplicate checks. Download the reconciliation report to see every result.';
       await onImported();
     }catch(error){
       status.textContent='Import stopped after '+finished+' of '+chunks.length+
         ' batches. '+created+' books were added in completed batches. '+
         'No failed batch was partially committed. '+(error instanceof Error?error.message:'Please retry.');
-      current=null;noPreview();output.replaceChildren();
+      if(reportData){
+        for(const entry of current?.candidates||[]){
+          if(!reportData.outcomes.has(entry.rowNumber))
+            reportData.outcomes.set(entry.rowNumber,'not_attempted');
+        }
+        renderSummary(output,reportData.parsed,reportData.matches,reportData.catalogue,
+          {outcomes:reportData.outcomes});
+      }
+      current=null;noPreview();
     }finally{
       previewButton.disabled=!input.files?.length;
       input.disabled=false;
