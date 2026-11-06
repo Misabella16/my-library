@@ -24,7 +24,8 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    previewButton=get('preview-epubs'),uploadButton=get('upload-epubs'),
    list=get('epub-preview-list'),status=get('epub-preview-status'),
    progress=get('epub-import-progress'),summary=get('epub-import-summary'),
-   exportButton=get('epub-download-report');
+   exportButton=get('epub-download-report'),
+   reviewFilter=get('epub-review-filter');
  if(!fileInput||!previewButton||!uploadButton||!list||!status||!progress)return;
  let files=[],items=[],running=false,previewComplete=false,visible=PAGE_SIZE;
  let lastPreviewCount=0;
@@ -43,7 +44,10 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      Object.entries(counts).map(([k,v])=>k+': '+v).join(' · ')
     :'No EPUBs previewed yet.';
   }
-  for(const entry of items.slice(0,visible)){
+  const chosen=reviewFilter?.value||'all';
+  const shown=chosen==='all'?items:
+   items.filter(entry=>entry.match?.status===chosen);
+  for(const entry of shown.slice(0,visible)){
    const card=create('article','epub-preview-card');
    const meta=entry.metadata||{};
    card.append(create('strong','',meta.title||entry.file.name));
@@ -161,9 +165,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    }
    list.append(card);
   }
-  if(items.length>visible){
+  if(shown.length>visible){
    const more=create('button','btn subtle mini',
-    'Show next '+Math.min(PAGE_SIZE,items.length-visible)+' results');
+    'Show next '+Math.min(PAGE_SIZE,shown.length-visible)+' results');
    more.type='button';
    more.addEventListener('click',()=>{visible+=PAGE_SIZE;render();});
    list.append(more);
@@ -199,6 +203,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   document.body.append(anchor);
   anchor.click();anchor.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
+ if(reviewFilter)reviewFilter.addEventListener('change',()=>{
+  visible=PAGE_SIZE;render();
  });
  fileInput.addEventListener('change',()=>selectFiles(fileInput.files));
  if(folderInput)folderInput.addEventListener('change',()=>selectFiles(folderInput.files));
