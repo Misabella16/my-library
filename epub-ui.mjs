@@ -221,7 +221,15 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      ...(entry.match.book_id?{book_id:entry.match.book_id}:{})
     }));
     const result=await api('/api/epubs/upload',{method:'POST',formData:form});
-    entry.match=result.uploaded?{status:'uploaded'}:result;
+    // Retain canonical book and EPUB identifiers for the review CSV.
+    if(result.uploaded){
+      entry.uploadResult=result;
+      entry.match={...entry.match,status:'uploaded',
+       book_id:result.book_id,file_id:result.file_id,
+       edition_id:result.edition_id};
+    }else{
+      entry.match=result;
+    }
     entry.error=null;
     if(result.uploaded)saved++;else skipped++;
    }catch(error){

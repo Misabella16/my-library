@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import {initEpubImport} from '../epub-ui.mjs';
+import {bulkEpubReport} from '../epub-bulk.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 
 function zipFor(title,author='A Writer'){
@@ -115,4 +116,27 @@ test('Quota interruption preserves selected files and only retries eligible EPUB
   assert.equal(f.stats().refresh,1);
   assert.equal(f.get('upload-epubs').disabled,true);
  }finally{f.restore();}
+});
+
+test('EPUB audit CSV retains canonical IDs, cover extraction and protects spreadsheet formulas',()=>{
+ const csv=bulkEpubReport([{
+  file:{name:'=danger.epub',webkitRelativePath:'=books/evil.epub'},
+  metadata:{title:'A Book',author:'Writer',identifier:'isbn:9780306406157'},
+  match:{status:'uploaded',book_id:'canonical-book',file_id:'saved-epub',edition_id:'ebook-edition'},
+  uploadResult:{book_created:false,cover_extracted:true,edition_id:'ebook-edition'}
+ }]);
+ assert.match(csv,/'=danger\.epub/);
+ assert.match(csv,/canonical-book/);
+ assert.match(csv,/saved-epub/);
+ assert.match(csv,/ebook-edition/);
+ assert.match(csv,/"false","true","ebook-edition"/);
+});
+test('Already-uploaded EPUB report includes the existing file reference',()=>{
+ const csv=bulkEpubReport([{
+  file:{name:'same.epub'},
+  match:{status:'already_uploaded',existing:{id:'existing-file-id',book_id:'existing-book-id',edition_id:'existing-edition-id'}}
+ }]);
+ assert.match(csv,/existing-file-id/);
+ assert.match(csv,/existing-book-id/);
+ assert.match(csv,/existing-edition-id/);
 });
