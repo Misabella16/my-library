@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const css = readFileSync(new URL('../romantic-academia.css', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../pastoral.css', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../_worker.js', import.meta.url), 'utf8');
 const js = readFileSync(new URL('../library.js', import.meta.url), 'utf8');
 
 test('new theme is loaded exactly once, and only the foundational CSS precedes it', () => {
   const styles = [...html.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"/g)].map(m => m[1]);
-  assert.deepEqual(styles, ['/library.css', '/romantic-academia.css']);
-  assert.match(html, /<meta name="theme-color" content="#f7f4eb">/);
+  assert.deepEqual(styles, ['/library.css', '/cute.css', '/vintage.css', '/pastoral.css']);
+  assert.match(html, /<meta name="theme-color" content="#f7f1ed">/);
 });
 
 test('theme retains all working navigation, book workflows and logout controls', () => {
@@ -28,7 +28,10 @@ test('theme retains all working navigation, book workflows and logout controls',
 });
 
 test('visual refresh has local, readable, mobile and reduced-motion styles', () => {
-  assert.match(css, /\.study-arch\s*\{/);
+  assert.match(css, /\.antique-frame\s*\{/);
+  assert.match(css, /\.botanical-spray\s*\{/);
+  assert.match(css, /\.rose-flower\s*\{/);
+  assert.match(css, /\.ribbon-bow\s*\{/);
   assert.match(css, /\.book-card\s*\{/);
   assert.match(css, /\.detail\s*,\.surface\s*\{/);
   assert.match(css, /\.notes-panel\s*\{/);
