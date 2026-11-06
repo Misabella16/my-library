@@ -255,7 +255,7 @@ async function serveApi(request,env,path){
   if(goodreadsSyncResponse)return goodreadsSyncResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
-  const backfillResponse=await handleEpubBackfillApi(request,db,path);
+  const backfillResponse=await handleEpubBackfillApi(request,db,path,env);
   if(backfillResponse)return backfillResponse;
   const epubResponse=await handleEpubApi(request,db,env,path);
   if(epubResponse)return epubResponse;
