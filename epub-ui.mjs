@@ -175,6 +175,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    list.append(more);
   }
   if(exportButton)exportButton.disabled=!items.length||running;
+  if(pauseButton)pauseButton.disabled=!uploadActive||pauseRequested;
   uploadButton.disabled=running||!previewComplete||eligible===0;
   uploadButton.textContent='Save '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
  }
