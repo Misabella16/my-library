@@ -156,3 +156,21 @@ test('adding an existing edition returns a conflict without inserting',async()=>
   assert.equal((await response.json()).existing_edition_id,existing.id);
   assert.equal(inserts,0);
 });
+
+test('logout is available even when the library rejects the current identity',async()=>{
+  const anon=await worker.fetch(new Request('https://books.example.com/_logout'),{...env});
+  assert.equal(anon.status,303);
+  assert.equal(anon.headers.get('location'),team+'/cdn-cgi/access/logout');
+  assert.match(anon.headers.get('set-cookie'),/CF_Authorization=; Max-Age=0/);
+  assert.equal(anon.headers.get('cache-control'),'no-store');
+  assert.equal(await anon.text(),'');
+  const wrongAccount=await worker.fetch(
+    req('https://books.example.com/_logout',await jwt({email:'another@example.com'})),{...env,BOOK_DB:{}});
+  assert.equal(wrongAccount.status,303);
+  const badConfig=await worker.fetch(new Request('https://books.example.com/_logout'),{...env,ACCESS_TEAM_DOMAIN:'https://elsewhere.invalid'});
+  assert.equal(badConfig.status,503);
+  const post=await worker.fetch(new Request('https://books.example.com/_logout',{method:'POST'}),{...env});
+  assert.equal(post.status,405);
+  const noAuth=await worker.fetch(new Request('https://books.example.com/'),{...env,BOOK_DB:{},ASSETS:{fetch:async()=>new Response('private')}});
+  assert.equal(noAuth.status,403);
+});
