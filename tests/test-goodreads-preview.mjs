@@ -102,7 +102,16 @@ test('Goodreads CSV preview stays local; imports require an explicit owner confi
   assert.match(frontend,/initGoodreadsPreview\(api,/);
   assert.match(ui,/\.textContent=/);
   assert.doesNotMatch(ui,/\.innerHTML|localStorage|sessionStorage|indexedDB/);
-  assert.match(ui,/confirm\('Import /);
+  assert.match(ui,/approval\.hidden=false/);
+  assert.match(ui,/confirmButton\.addEventListener\('click'/);
+  assert.match(ui,/progress\.value=Math\.round/);
+  assert.match(ui,/setFeedback\(/);
+  assert.doesNotMatch(ui,/confirm\('Import /);
+  for(const id of ['goodreads-approval','goodreads-confirm-import','goodreads-cancel-import',
+    'goodreads-import-feedback','goodreads-progress'])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.ok(html.indexOf('id="import-goodreads"')<html.indexOf('id="goodreads-preview-results"'),
+    'The import button should remain above the long CSV report.');
   assert.match(ui,/method:'POST',data:\{rows:chunk\.map\(uploadRow\)\}/);
   assert.match(ui,/\/api\/imports\/goodreads/);
   assert.doesNotMatch(ui,/\/api\/books[^'"]*['"][^;]*method:'POST'/);
