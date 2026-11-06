@@ -58,6 +58,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 }
 .brand{gap:13px}
 .brand-mark{
+  display:flex;align-items:center;justify-content:center;white-space:nowrap;
   width:53px;height:53px;
   border:2px double #bda783;
   background:linear-gradient(145deg,#fffdf7,#eee7d9);
