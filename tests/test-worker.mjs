@@ -43,6 +43,22 @@ test('valid Cloudflare Access signature and exact owner email work',async()=>{
   assert.equal(response.headers.get('cache-control'),'no-store');
 });
 
+test('invalid Access configuration is diagnosed without exposing values',async()=>{
+  const request=new Request('https://books.example.com/api/session');
+  for(const [changes, reason] of [
+    [{ACCESS_TEAM_DOMAIN:'https://not-a-team.invalid'},'config_team_domain'],
+    [{ACCESS_TEAM_DOMAIN:'books.cloudflareaccess.com'},'config_team_domain'],
+    [{ACCESS_TEAM_DOMAIN:''},'config_team_domain'],
+    [{ACCESS_AUD:' '},'config_audience'],
+    [{OWNER_EMAIL:' '},'config_owner_email'],
+    [{OWNER_EMAIL:'not-an-email'},'config_owner_email']
+  ]) {
+    const result=await verifyAccess(request,{...env,...changes});
+    assert.deepEqual(result,{ok:false,reason});
+    assert.equal(JSON.stringify(result).includes('not-an-email'),false);
+  }
+});
+
 test('invalid audience, issuer, owner, expiry and tampering are all denied',async()=>{
   for(const [claims, reason] of [
     [{aud:'wrong-audience'},'audience_mismatch'],
