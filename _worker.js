@@ -412,6 +412,19 @@ async function serveApi(request,env,path){
 export default {
   async fetch(request,env){
     const path=new URL(request.url).pathname;
+    // Logout must work when the owner token is missing or the wrong account is active.
+    // No library content or authentication data is exposed by this endpoint.
+    if(path==='/_logout') {
+      if(request.method!=='GET') return secureHeaders(fail('Method not allowed',405),true);
+      const team=validTeamDomain(env.ACCESS_TEAM_DOMAIN);
+      if(!team) return secureHeaders(fail('Access logout is not configured',503),true);
+      const response=new Response(null,{status:303,headers:{
+        location:team+'/cdn-cgi/access/logout',
+        'set-cookie':'CF_Authorization=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax',
+        'cache-control':'no-store'
+      }});
+      return secureHeaders(response,true);
+    }
     if(!env.BOOK_DB || !env.ACCESS_AUD || !env.ACCESS_TEAM_DOMAIN || !env.OWNER_EMAIL)
       return secureHeaders(fail('Private library is not configured',503),true);
     const access=await verifyAccess(request,env);
