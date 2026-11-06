@@ -43,9 +43,10 @@ class FakeNode{
  async dispatch(type){for(const fn of this.listeners[type]||[])await fn({target:this});}
 }
 const ids=['epub-files','epub-folder','preview-epubs','upload-epubs',
- 'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary'];
+ 'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary','epub-review-filter'];
 function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false}={}){
  const nodes=new Map(ids.map(id=>[id,new FakeNode()]));
+ nodes.get('epub-review-filter').value='all';
  const prior=globalThis.document;
  globalThis.document={getElementById:id=>nodes.get(id)||null,
   createElement:tag=>new FakeNode(tag)};
@@ -232,5 +233,27 @@ test('Ambiguous EPUB may search existing catalogue and safely attach only after 
   assert.match(f.get('epub-import-summary').textContent,/Matches existing book: 1/);
   assert.match(f.get('upload-epubs').textContent,/Save 1 eligible/);
   assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+
+test('EPUB review filters use existing preview data without another D1 query',async()=>{
+ const f=fixture(3);
+ try{
+  f.get('epub-files').files=f.files;
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  const before=f.calls.length;
+  const filter=f.get('epub-review-filter');
+  filter.value='needs_review';
+  await filter.dispatch('change');
+  assert.equal(f.get('epub-preview-list').children.length,0);
+  filter.value='new';
+  await filter.dispatch('change');
+  assert.equal(f.get('epub-preview-list').children.length,3);
+  filter.value='all';
+  await filter.dispatch('change');
+  assert.equal(f.get('epub-preview-list').children.length,3);
+  assert.equal(f.calls.length,before,'Filtering must not query D1');
+  assert.equal(f.get('upload-epubs').disabled,false,'Filter must not change eligible imports');
  }finally{f.restore();}
 });
