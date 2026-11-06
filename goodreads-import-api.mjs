@@ -32,25 +32,59 @@ async function importChunk(request,db){
   const accepted=[],skippedRows=[],skipped={already_present:0,ambiguous_title:0,goodreads_id_conflict:0};
   const legacyNormalize=value=>String(value||'').normalize('NFKC').toLowerCase()
     .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  const placeholders=values=>values.map(()=>'?').join(',');
+  // Each batch has at most 20 books. Fetch candidates for all titles in ONE
+  // indexed IN lookup rather than rereading the database once per book.
+  const normalizedTitles=[...new Set(selected.map(book=>book.normalized_title))];
+  const modernLimit=selected.length*101;
+  const matchesByTitle=new Map();
+  const modernRows=await rows(db,
+    'SELECT id,title,author,goodreads_id,normalized_title FROM books '+
+    'WHERE archived_at IS NULL AND normalized_title IN ('+placeholders(normalizedTitles)+') LIMIT ?',
+    [...normalizedTitles,modernLimit]);
+  for(const book of modernRows){
+    if(!matchesByTitle.has(book.normalized_title))matchesByTitle.set(book.normalized_title,[]);
+    matchesByTitle.get(book.normalized_title).push(book);
+  }
+  // A global capped result could omit a candidate for any requested title.
+  // Conservatively skip such a batch instead of creating possible duplicates.
+  const modernTruncated=modernRows.length>=modernLimit;
+  // Goodreads-ID lookups include archived records to respect unique IDs.
+  const goodreadsIds=[...new Set(selected.map(book=>book.goodreadsId).filter(Boolean))];
+  const idRows=goodreadsIds.length?await rows(db,
+    'SELECT id,title,author,goodreads_id,archived_at FROM books WHERE goodreads_id IN ('+
+      placeholders(goodreadsIds)+')',goodreadsIds):[];
+  const matchesById=new Map(idRows.map(book=>[book.goodreads_id,book]));
+  const legacyMatches=new Map();
+  // Pre-2026 records sometimes used ASCII-only title normalization. Query the
+  // indexed legacy key only for the few titles where old and new forms differ,
+  // and cache those results across rows sharing the same legacy title.
+  for(const data of selected){
+    const legacy=legacyNormalize(data.title);
+    if(legacy===data.normalized_title)continue;
+    const key=legacy+'\u0000'+data.title.toLocaleLowerCase();
+    if(legacyMatches.has(key))continue;
+    const old=await rows(db,
+      'SELECT id,title,author,goodreads_id,normalized_title FROM books '+
+      'WHERE archived_at IS NULL AND normalized_title=? AND title=? COLLATE NOCASE LIMIT 101',
+      [legacy,data.title]);
+    legacyMatches.set(key,old);
+  }
   for(const [index,data] of selected.entries()){
-    // Two indexed lookups replace the previous per-book OR + unindexed
-    // title COLLATE NOCASE table scan, which grew more expensive with each batch.
-    // The Goodreads ID unique index also catches archived records.
-    const byId=data.goodreadsId?await query(db,
-      'SELECT id,title,author,goodreads_id,archived_at FROM books WHERE goodreads_id=? LIMIT 1',
-      [data.goodreadsId]):null;
+    if(modernTruncated){
+      skipped.ambiguous_title++;skippedRows.push({index,reason:'ambiguous_title'});continue;
+    }
     const oldTitle=legacyNormalize(data.title);
-    const matches=await rows(db,
-      'SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL AND '+
-      '(normalized_title=? OR (normalized_title=? AND title=? COLLATE NOCASE)) LIMIT 101',
-      [data.normalized_title,oldTitle,data.title]);
-    // LIMIT is deliberately conservative. In the unlikely event that >100
-    // active records share a normalized title, don't risk missing a collision.
+    const legacyKey=oldTitle+'\u0000'+data.title.toLocaleLowerCase();
+    const combined=[...(matchesByTitle.get(data.normalized_title)||[]),
+      ...(legacyMatches.get(legacyKey)||[])];
+    const matches=[...new Map(combined.map(book=>[book.id,book])).values()];
     if(matches.length>=101){
       skipped.ambiguous_title++;skippedRows.push({index,reason:'ambiguous_title'});continue;
     }
     const same=matches.find(book=>importNormalize(book.title)===data.normalized_title &&
       importNormalize(book.author)===data.normalized_author);
+    const byId=data.goodreadsId?matchesById.get(data.goodreadsId):null;
     if(byId && (!same||byId.id!==same.id)){
       skipped.goodreads_id_conflict++;skippedRows.push({index,reason:'goodreads_id_conflict'});continue;
     }
