@@ -115,7 +115,8 @@ function renderSummary(container,parsed,matches,catalogue){
 }
 
 // The owner must explicitly confirm a reviewed import. No automatic upload.
-const MAX_BATCH_SUBMIT=12;
+const MAX_BATCH_SUBMIT=20;
+const MAX_BATCH_STATEMENTS=85;
 const eligible=entry=>entry.matchStatus==='new'&&
   entry.title.length<=300&&entry.author.trim()&&entry.author.length<=400&&
   entry.shelves.length<=16&&entry.review.length<=50000&&
@@ -125,9 +126,18 @@ const uploadRow=entry=>({
   myRating:entry.myRating,exclusiveShelf:entry.exclusiveShelf,
   shelves:entry.shelves,review:entry.review,dateRead:entry.dateRead
 });
-function batches(items,size){
-  const results=[];
-  for(let i=0;i<items.length;i+=size)results.push(items.slice(i,i+size));
+function batches(items){
+  // Bound the number of transactional D1 statements, even for books
+  // belonging to many Goodreads shelves.
+  const results=[];let current=[],cost=1;
+  for(const item of items){
+    const itemCost=2+2*item.shelves.length;
+    if(current.length && (current.length>=MAX_BATCH_SUBMIT || cost+itemCost>MAX_BATCH_STATEMENTS)){
+      results.push(current);current=[];cost=1;
+    }
+    current.push(item);cost+=itemCost;
+  }
+  if(current.length)results.push(current);
   return results;
 }
 function showHistory(container,batches,api,onDone){
@@ -234,7 +244,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
     if(!confirm('Import '+planned.length+' new Goodreads books and their shelves to your private library? This will upload metadata for ONLY these new books. Existing books, notes, editions and copies are preserved. You can Undo each completed import batch.'))return;
     importButton.disabled=true;previewButton.disabled=true;input.disabled=true;
     let created=0,skipped=0,finished=0;
-    const chunks=batches(planned,MAX_BATCH_SUBMIT);
+    const chunks=batches(planned);
     try{
       for(const chunk of chunks){
         status.textContent='Importing batch '+(finished+1)+' of '+chunks.length+'… ('+created+' books created)';
