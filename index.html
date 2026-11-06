@@ -167,6 +167,18 @@
       <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files or a folder to begin. Maximum 24 MB per EPUB; 3,000 EPUBs per session.</p>
       <p class="small-status" id="epub-import-summary" aria-live="polite">No EPUBs previewed yet.</p>
       <progress id="epub-import-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="EPUB upload progress"></progress>
+      <label class="epub-filter-label" for="epub-review-filter">Show EPUB results
+        <select id="epub-review-filter">
+          <option value="all">All results</option>
+          <option value="needs_review">Needs review</option>
+          <option value="possible_duplicate">Possible duplicates</option>
+          <option value="match">Existing book matches</option>
+          <option value="new">New books</option>
+          <option value="already_uploaded">Already uploaded</option>
+          <option value="uploaded">Saved</option>
+          <option value="upload_failed">Upload failures</option>
+        </select>
+      </label>
       <div id="epub-preview-list" class="epub-preview-list" aria-live="polite"></div>
       <p class="goodreads-private-note"><strong>Private storage.</strong> EPUB files, embedded covers, and explicit OPF subject tags are saved only to your owner-protected library after you select Save. Uncertain or missing metadata is held for review; you can correct titles/authors without changing the original file. Upload failures can be retried without restarting the entire folder. Imported EPUBs never create physical owned copies or overwrite special-edition artwork.</p>
     </section>
