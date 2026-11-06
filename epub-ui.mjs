@@ -60,7 +60,12 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    if(meta.description)notes.push('Description extracted');
    if(meta.coverPath)notes.push('Embedded cover detected (extracted on upload)');
    if(meta.subjects?.length)notes.push(meta.subjects.length+' EPUB subject tags');
-   if(entry.match?.status==='match')notes.push('Existing book will not be overwritten');
+   if(entry.match?.status==='match'){
+    const chosen=entry.match.matched_title||'existing catalogue book';
+    notes.push('Matched to: '+chosen+
+      (entry.match.matched_author?' by '+entry.match.matched_author:'')+
+      '. Your existing book details will not be overwritten.');
+   }
    if(entry.match?.reason)notes.push(entry.match.reason);
    if(entry.match?.status==='possible_duplicate')notes.push('Excluded from automatic upload until you choose to keep this distinct file.');
    if(entry.error)notes.push(entry.error);

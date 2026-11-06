@@ -28,12 +28,12 @@ export async function matchEpub(db,{title,author,sha256,identifier}){
   const normalizedTitle=normalizeEpubTitle(title),normalizedAuthor=normalizeEpubText(author);
   const isbn=extractIsbn13(identifier);
   if(isbn&&normalizedAuthor){
-    const byIsbn=await many(db,'SELECT DISTINCT b.id,b.author FROM editions e JOIN books b ON b.id=e.book_id WHERE e.isbn=? AND b.archived_at IS NULL LIMIT 3',[isbn]);
+    const byIsbn=await many(db,'SELECT DISTINCT b.id,b.title,b.author FROM editions e JOIN books b ON b.id=e.book_id WHERE e.isbn=? AND b.archived_at IS NULL LIMIT 3',[isbn]);
     if(byIsbn.length>1)return {status:'needs_review',reason:'ISBN points to multiple different books'};
     if(byIsbn.length===1){
       if(normalizeEpubText(byIsbn[0].author)!==normalizedAuthor)
         return {status:'needs_review',reason:'ISBN matches a book with a different author'};
-      return {status:'match',book_id:byIsbn[0].id,reason:'Exact ISBN-13 and author match'};
+      return {status:'match',book_id:byIsbn[0].id,matched_title:byIsbn[0].title,matched_author:byIsbn[0].author,reason:'Exact ISBN-13 and author match'};
     }
   }
   if(!normalizedTitle||!normalizedAuthor)
@@ -46,7 +46,7 @@ export async function matchEpub(db,{title,author,sha256,identifier}){
     [normalizedTitle]);
   if(same.length>=101)return {status:'needs_review',reason:'Too many books have this title'};
   const exact=same.filter(b=>normalizeEpubText(b.author)===normalizedAuthor);
-  if(exact.length===1)return {status:'match',book_id:exact[0].id};
+  if(exact.length===1)return {status:'match',book_id:exact[0].id,matched_title:exact[0].title,matched_author:exact[0].author};
   if(exact.length>1)return {status:'needs_review',reason:'Multiple books match this title and author'};
   if(same.length)return {status:'needs_review',reason:'Title exists with a different author'};
   const aliases=await many(db,
@@ -54,7 +54,7 @@ export async function matchEpub(db,{title,author,sha256,identifier}){
     'WHERE b.archived_at IS NULL AND a.normalized_alias=? LIMIT 101',[normalizedTitle]);
   if(aliases.length>=101)return {status:'needs_review',reason:'Too many alternate titles match'};
   const aliasExact=aliases.filter(b=>normalizeEpubText(b.author)===normalizedAuthor);
-  if(aliasExact.length===1)return {status:'match',book_id:aliasExact[0].id,reason:'Existing alternate title and author'};
+  if(aliasExact.length===1)return {status:'match',book_id:aliasExact[0].id,matched_title:aliasExact[0].title,matched_author:aliasExact[0].author,reason:'Existing alternate title and author'};
   if(aliases.length)return {status:'needs_review',reason:'Alternate title matches require review'};
   // Old books occasionally used ASCII-only normalization. An indexed fallback
   // checks only the old title key, never scans the entire catalogue.
@@ -67,7 +67,7 @@ export async function matchEpub(db,{title,author,sha256,identifier}){
     if(old.length>=101)return {status:'needs_review',reason:'Ambiguous older title normalization'};
     const sameLegacy=old.filter(b=>normalizeEpubText(b.title)===normalizedTitle);
     const exactLegacy=sameLegacy.filter(b=>normalizeEpubText(b.author)===normalizedAuthor);
-    if(exactLegacy.length===1)return {status:'match',book_id:exactLegacy[0].id};
+    if(exactLegacy.length===1)return {status:'match',book_id:exactLegacy[0].id,matched_title:exactLegacy[0].title,matched_author:exactLegacy[0].author};
     if(sameLegacy.length)return {status:'needs_review',reason:'Existing book may be a match'};
   }
   return {status:'new'};
@@ -109,7 +109,7 @@ export async function batchPreviewEpub(db,items){
   const truncated=books.length>=5051;
   const isbns=[...new Set(inputs.map(i=>extractIsbn13(i.identifier)).filter(Boolean))];
   const isbnMatches=isbns.length?await many(db,
-    'SELECT DISTINCT e.isbn,b.id,b.author FROM editions e JOIN books b ON b.id=e.book_id '+
+    'SELECT DISTINCT e.isbn,b.id,b.title,b.author FROM editions e JOIN books b ON b.id=e.book_id '+
     'WHERE b.archived_at IS NULL AND e.isbn IN ('+values(isbns)+') LIMIT 151',isbns):[];
   const isbnIndex=new Map();
   for(const row of isbnMatches){
@@ -144,7 +144,7 @@ export async function batchPreviewEpub(db,items){
       if(byIsbn.length===1){
         if(normalizeEpubText(byIsbn[0].author)!==author)
           return {status:'needs_review',reason:'ISBN matches a book with a different author'};
-        return {status:'match',book_id:byIsbn[0].id,reason:'Exact ISBN-13 and author match'};
+        return {status:'match',book_id:byIsbn[0].id,matched_title:byIsbn[0].title,matched_author:byIsbn[0].author,reason:'Exact ISBN-13 and author match'};
       }
     }
     if(truncated)return {status:'needs_review',reason:'Catalogue match requires individual review'};
@@ -152,12 +152,12 @@ export async function batchPreviewEpub(db,items){
     if(group.length>=101)return {status:'needs_review',reason:'Too many existing books match this title'};
     const exact=group.filter(b=>normalizeEpubText(b.author)===author&&
       normalizeEpubTitle(b.title)===title);
-    if(exact.length===1)return {status:'match',book_id:exact[0].id};
+    if(exact.length===1)return {status:'match',book_id:exact[0].id,matched_title:exact[0].title,matched_author:exact[0].author};
     if(exact.length||group.length)return {status:'needs_review',reason:'Same title has a conflicting or ambiguous author'};
     if(aliasTruncated)return {status:'needs_review',reason:'Alternate title matching needs individual review'};
     const aliasGroup=aliasIndex.get(title)||[];
     const aliasExact=aliasGroup.filter(b=>normalizeEpubText(b.author)===author);
-    if(aliasExact.length===1)return {status:'match',book_id:aliasExact[0].id,reason:'Existing alternate title and author'};
+    if(aliasExact.length===1)return {status:'match',book_id:aliasExact[0].id,matched_title:aliasExact[0].title,matched_author:aliasExact[0].author,reason:'Existing alternate title and author'};
     if(aliasGroup.length)return {status:'needs_review',reason:'Alternate title has ambiguous or conflicting authors'};
     // Unicode entries can be confidently previewed after the second
     // indexed check; a true old-title collision still needs manual review.
@@ -166,7 +166,7 @@ export async function batchPreviewEpub(db,items){
       if(legacyTruncated)return {status:'needs_review',reason:'Legacy title matches are ambiguous'};
       const old=(oldGroups.get(legacy)||[]).filter(b=>normalizeEpubTitle(b.title)===title);
       const exactOld=old.filter(b=>normalizeEpubText(b.author)===author);
-      if(exactOld.length===1)return {status:'match',book_id:exactOld[0].id};
+      if(exactOld.length===1)return {status:'match',book_id:exactOld[0].id,matched_title:exactOld[0].title,matched_author:exactOld[0].author};
       if(old.length)return {status:'needs_review',reason:'Ambiguous older title normalization'};
     }
     return {status:'new'};
