@@ -90,12 +90,16 @@ export async function verifyAccess(request,env){
     const header=decodePart(parts[0]), claims=decodePart(parts[1]);
     if(header.alg!=='RS256'||typeof header.kid!=='string') return {ok:false,reason:'invalid'};
     const now=Math.floor(Date.now()/1000);
-    if(claims.iss!==team ||
-       !(Array.isArray(claims.aud)?claims.aud.includes(aud):claims.aud===aud) ||
-       !Number.isFinite(claims.exp)||claims.exp<=now ||
+    // Only categorical denial reasons may be logged, never the JWT, email, or audience.
+    if(claims.iss!==team) return {ok:false,reason:'team_domain_mismatch'};
+    if(!(Array.isArray(claims.aud)?claims.aud.includes(aud):claims.aud===aud))
+      return {ok:false,reason:'audience_mismatch'};
+    if(typeof claims.email!=='string' || claims.email.toLowerCase()!==owner)
+      return {ok:false,reason:'owner_email_mismatch'};
+    if(!Number.isFinite(claims.exp)||claims.exp<=now ||
        (claims.nbf!=null && (!Number.isFinite(claims.nbf)||claims.nbf>now)) ||
-       (claims.iat!=null && (!Number.isFinite(claims.iat)||claims.iat>now+60)) ||
-       typeof claims.email!=='string' || claims.email.toLowerCase()!==owner) return {ok:false,reason:'claims'};
+       (claims.iat!=null && (!Number.isFinite(claims.iat)||claims.iat>now+60)))
+      return {ok:false,reason:'claims_invalid'};
     let keys=await loadJwks(team);
     let jwk=keys.find(k=>k.kid===header.kid && k.kty==='RSA' && (!k.alg||k.alg==='RS256'));
     if(!jwk) {
@@ -411,7 +415,11 @@ export default {
     if(!env.BOOK_DB || !env.ACCESS_AUD || !env.ACCESS_TEAM_DOMAIN || !env.OWNER_EMAIL)
       return secureHeaders(fail('Private library is not configured',503),true);
     const access=await verifyAccess(request,env);
-    if(!access.ok) return secureHeaders(fail('Private owner authentication required',403),true);
+    if(!access.ok) {
+      // A safe category only. Do not log JWTs, headers, identities, URLs or secrets.
+      console.warn('My Library Access verification rejected:',access.reason);
+      return secureHeaders(fail('Private owner authentication required',403),true);
+    }
     const isApi=path.startsWith('/api/');
     if(!['GET','HEAD','POST','PATCH','DELETE'].includes(request.method)) return secureHeaders(fail('Method not allowed',405),true);
     if(!['GET','HEAD'].includes(request.method)&&!checkWriteOrigin(request))

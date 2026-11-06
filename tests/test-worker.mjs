@@ -44,11 +44,17 @@ test('valid Cloudflare Access signature and exact owner email work',async()=>{
 });
 
 test('invalid audience, issuer, owner, expiry and tampering are all denied',async()=>{
-  for(const claims of [
-    {aud:'wrong-audience'}, {iss:'https://evil.example'},
-    {email:'friend@example.com'}, {exp:Math.floor(Date.now()/1000)-10},
-    {nbf:Math.floor(Date.now()/1000)+500}
-  ]) assert.equal((await verifyAccess(req('https://books.example.com/',await jwt(claims)),env)).ok,false);
+  for(const [claims, reason] of [
+    [{aud:'wrong-audience'},'audience_mismatch'],
+    [{iss:'https://evil.example'},'team_domain_mismatch'],
+    [{email:'friend@example.com'},'owner_email_mismatch'],
+    [{exp:Math.floor(Date.now()/1000)-10},'claims_invalid'],
+    [{nbf:Math.floor(Date.now()/1000)+500},'claims_invalid']
+  ]) {
+    const result=await verifyAccess(req('https://books.example.com/',await jwt(claims)),env);
+    assert.equal(result.ok,false);
+    assert.equal(result.reason,reason);
+  }
   assert.equal((await verifyAccess(req('https://books.example.com/',await jwt({},true)),env)).ok,false);
   assert.equal((await verifyAccess(new Request('https://books.example.com/'),env)).ok,false);
 });
