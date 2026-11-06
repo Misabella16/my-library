@@ -528,3 +528,29 @@ test('Backfill never attaches recovered EPUB cover to a special or physical edit
   assert.equal(f.objects.size,1);
  }finally{f.sqlite.close();}
 });
+
+test('Recent saved EPUB repair history remains available across visits and excludes private notes',async()=>{
+ const f=fixture();
+ try{
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,private_notes) VALUES(?,?,?,?,?,?)')
+   .run(id,'A Novel','Writer','a novel','writer','Secret personal notes');
+  const meta={...(await validMeta()),book_id:id};
+  const uploaded=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  const file=(await uploaded.json()).file_id;
+  f.sqlite.prepare('UPDATE books SET synopsis=? WHERE id=?').run('',id);
+  const stamp=f.sqlite.prepare('SELECT updated_at FROM books WHERE id=?').get(id).updated_at;
+  const applied=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/apply',
+   {method:'POST',body:JSON.stringify({file_id:file,expected_updated_at:stamp})}),
+   f.db,'/api/epubs/backfill/apply');
+  assert.equal(applied.status,200);
+  const history=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/history'),
+   f.db,'/api/epubs/backfill/history');
+  assert.equal(history.status,200);
+  const data=await history.json();
+  assert.equal(data.changes.length,1);
+  assert.equal(data.changes[0].title,'A Novel');
+  assert.ok(!JSON.stringify(data).includes('Secret personal notes'));
+  assert.ok(!JSON.stringify(data).includes('private_object_key'));
+ }finally{f.sqlite.close();}
+});

@@ -14,6 +14,8 @@ export function initEpubBackfill(api){
  const status=root.querySelector('#epub-backfill-status');
  const results=root.querySelector('#epub-backfill-results');
  const undo=root.querySelector('#epub-backfill-undo');
+ const history=root.querySelector('#epub-backfill-history');
+ const historyList=root.querySelector('#epub-backfill-history-list');
  const bulk=root.querySelector('#epub-backfill-bulk');
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
  let bulkCursor='',bulkFinished=false;
@@ -125,6 +127,43 @@ export function initEpubBackfill(api){
    errors+' need refresh. No existing synopsis or reviews were overwritten.';
   busy=false;update();
   if(applied)await load(cursor);
+ });
+ history?.addEventListener('click',async()=>{
+  if(busy)return;
+  busy=true;update();
+  historyList.replaceChildren();
+  try{
+   const response=await api('/api/epubs/backfill/history');
+   const rows=Array.isArray(response.changes)?response.changes:[];
+   if(!rows.length)historyList.append(el('p','No prior EPUB metadata repairs.','muted'));
+   for(const row of rows){
+    const card=el('article',undefined,'epub-preview-card');
+    card.append(el('strong',row.title||'EPUB metadata repair'));
+    card.append(el('p',row.created_at+(row.undone_at?' · Undone':' · Applied'),'muted'));
+    if(!row.undone_at){
+     const undoOne=el('button','Undo this repair','btn subtle mini');
+     undoOne.type='button';
+     undoOne.addEventListener('click',async()=>{
+      if(busy)return;
+      busy=true;update();undoOne.disabled=true;
+      try{
+       await api('/api/epubs/backfill/undo',{method:'POST',data:{change_id:row.id}});
+       changes=changes.filter(id=>id!==row.id);
+       row.undone_at='just now';
+       undoOne.textContent='Undone';
+       status.textContent='Historical repair undone safely.';
+      }catch(error){
+       status.textContent='Could not Undo this repair: '+(error.message||'Request failed');
+       undoOne.disabled=false;
+      }finally{busy=false;update();}
+     });
+     card.append(undoOne);
+    }
+    historyList.append(card);
+   }
+  }catch(error){
+   status.textContent='Could not load repair history: '+(error.message||'Request failed');
+  }finally{busy=false;update();}
  });
  undo.addEventListener('click',async()=>{
   if(busy||!changes.length)return;
