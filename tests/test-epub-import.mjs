@@ -311,6 +311,7 @@ test('Private EPUB download streams the original R2 object with safe headers',as
   assert.equal(response.status,200);
   assert.equal(response.headers.get('content-type'),'application/epub+zip');
   assert.match(response.headers.get('content-disposition'),/attachment/);
+  assert.match(response.headers.get('content-disposition'),/filename\*=UTF-8''novel\.epub/);
   assert.equal(response.headers.get('cache-control'),'private, no-store');
   assert.equal(response.headers.get('x-content-type-options'),'nosniff');
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())],[80,75,3,4,0,0,0,0]);

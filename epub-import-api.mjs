@@ -190,13 +190,15 @@ export async function handleEpubApi(request,db,env,path){
   if(privateDownload&&method==='GET'){
     if(!env.BOOK_FILES)return bad('Private EPUB storage is not configured',503);
     const file=await one(db,
-      'SELECT private_object_key FROM epub_files WHERE id=?',[privateDownload[1]]);
+      'SELECT private_object_key,original_filename FROM epub_files WHERE id=?',[privateDownload[1]]);
     if(!file)return bad('EPUB not found',404);
     const object=await env.BOOK_FILES.get(file.private_object_key);
     if(!object)return bad('EPUB not found',404);
+    const original=String(file.original_filename||'book.epub').slice(0,180);
+    const encoded=encodeURIComponent(original).replace(/'/g,'%27');
     return new Response(object.body,{headers:{
       'content-type':'application/epub+zip',
-      'content-disposition':'attachment; filename="book.epub"',
+      'content-disposition':`attachment; filename="book.epub"; filename*=UTF-8''${encoded}`,
       'cache-control':'private, no-store',
       'x-content-type-options':'nosniff',
       'content-security-policy':"default-src 'none'; sandbox"
