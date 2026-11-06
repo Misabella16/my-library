@@ -79,6 +79,20 @@ export async function batchPreviewEpub(db,items){
     groups.get(b.normalized_title).push(b);
   }
   const truncated=books.length>=5051;
+  // A bounded second lookup handles older ASCII-only title normalization.
+  const legacyNormalize=value=>String(value||'').normalize('NFKC').toLowerCase()
+    .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  const legacyKeys=[...new Set(inputs.map(item=>legacyNormalize(item.title))
+    .filter((key,i)=>key!==normalizeEpubTitle(inputs[i].title)))];
+  const oldBooks=legacyKeys.length?await many(db,
+    'SELECT id,title,author,normalized_title FROM books WHERE archived_at IS NULL AND normalized_title IN ('+
+    values(legacyKeys)+') LIMIT 5051',legacyKeys):[];
+  const oldGroups=new Map();
+  for(const b of oldBooks){
+    if(!oldGroups.has(b.normalized_title))oldGroups.set(b.normalized_title,[]);
+    oldGroups.get(b.normalized_title).push(b);
+  }
+  const legacyTruncated=oldBooks.length>=5051;
   const outcomes=inputs.map(item=>{
     const hash=hashIndex.get(item.sha256);
     if(hash)return {status:'already_uploaded',existing:hash};
@@ -91,11 +105,16 @@ export async function batchPreviewEpub(db,items){
       normalizeEpubTitle(b.title)===title);
     if(exact.length===1)return {status:'match',book_id:exact[0].id};
     if(exact.length||group.length)return {status:'needs_review',reason:'Same title has a conflicting or ambiguous author'};
-    // Rare legacy Unicode title matches use the targeted server fallback at
-    // upload time. Flag those rather than pretending the preview is certain.
-    const legacy=String(item.title).normalize('NFKC').toLowerCase()
-      .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
-    if(legacy!==title)return {status:'needs_review',reason:'Non-Latin title needs an individual match review'};
+    // Unicode entries can be confidently previewed after the second
+    // indexed check; a true old-title collision still needs manual review.
+    const legacy=legacyNormalize(item.title);
+    if(legacy!==title){
+      if(legacyTruncated)return {status:'needs_review',reason:'Legacy title matches are ambiguous'};
+      const old=(oldGroups.get(legacy)||[]).filter(b=>normalizeEpubTitle(b.title)===title);
+      const exactOld=old.filter(b=>normalizeEpubText(b.author)===author);
+      if(exactOld.length===1)return {status:'match',book_id:exactOld[0].id};
+      if(old.length)return {status:'needs_review',reason:'Ambiguous older title normalization'};
+    }
     return {status:'new'};
   });
   return outcomes;
