@@ -181,6 +181,18 @@
         </select>
       </label>
       <div id="epub-preview-list" class="epub-preview-list" aria-live="polite"></div>
+      <section id="epub-backfill" class="epub-tool" aria-label="Repair already uploaded EPUB metadata">
+        <h4>Repair metadata from EPUBs already uploaded</h4>
+        <p class="muted">Find missing descriptions and source-backed subjects from saved EPUB records. No file reuploads, no changes until you click Apply.</p>
+        <div class="goodreads-actions">
+          <button type="button" class="btn subtle" id="epub-backfill-preview">Preview stored metadata</button>
+          <button type="button" class="btn subtle" id="epub-backfill-next" disabled>Next 10</button>
+          <button type="button" class="btn" id="epub-backfill-apply" disabled>Fill missing metadata on this page</button>
+          <button type="button" class="btn subtle" id="epub-backfill-undo" disabled>Undo last repair</button>
+        </div>
+        <p class="small-status" id="epub-backfill-status" role="status">No repairs have been applied.</p>
+        <div id="epub-backfill-results" class="epub-preview-list"></div>
+      </section>
       <p class="goodreads-private-note"><strong>Private storage.</strong> EPUB files, embedded covers, and explicit OPF subject tags are saved only to your owner-protected library after you select Save. Uncertain or missing metadata is held for review; you can correct titles/authors without changing the original file. Upload failures can be retried without restarting the entire folder. Imported EPUBs never create physical owned copies or overwrite special-edition artwork.</p>
     </section>
     <div class="two-columns"><div class="tip"><strong>Goodreads</strong><p>Import new books with shelves, ratings, reviews and dates read. See each batch and Undo it safely.</p></div><div class="tip"><strong>EPUBs</strong><p>Preview EPUB metadata and import private digital editions without overwriting existing book records.</p></div><div class="tip"><strong>Special editions</strong><p>Edition-specific FairyLoot, Illumicrate, OwlCrate and other covers.</p></div><div class="tip"><strong>Undo</strong><p>Undo completed Goodreads batches by archiving only unchanged imported books. Any subsequent edits stop reversal safely.</p></div></div>
