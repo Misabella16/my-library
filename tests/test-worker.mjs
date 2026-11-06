@@ -71,6 +71,25 @@ test('private API and static assets require owner authentication',async()=>{
   assert.match(good.headers.get('content-security-policy'),/frame-ancestors 'none'/);
 });
 
+test('rejected owner sessions reveal only an actionable non-secret code',async()=>{
+  const badEnv={...env,BOOK_DB:{}};
+  const invalidEmail=await worker.fetch(
+    req('https://books.example.com/',await jwt({email:'not-owner@example.com'})),badEnv);
+  assert.equal(invalidEmail.status,403);
+  assert.deepEqual(await invalidEmail.json(),{
+    error:'Private owner authentication required',
+    code:'owner_email_mismatch'
+  });
+  const wrongAudience=await worker.fetch(
+    req('https://books.example.com/',await jwt({aud:'wrong'})),badEnv);
+  assert.equal((await wrongAudience.json()).code,'audience_mismatch');
+  const noToken=await worker.fetch(new Request('https://books.example.com/'),badEnv);
+  const payload=await noToken.json();
+  assert.equal(payload.code,'missing');
+  assert.equal(JSON.stringify(payload).includes('owner@example.com'),false);
+  assert.equal(noToken.headers.get('cache-control'),'no-store');
+});
+
 test('cross-origin write requests are rejected before data access',async()=>{
   const token=await jwt();
   const request=req('https://books.example.com/api/books',token,'POST',{title:'New Book'},'https://attacker.example');
