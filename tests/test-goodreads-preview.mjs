@@ -64,7 +64,7 @@ test('preview flags exact matches and title-only conflicts without merging copie
   assert.equal(match.counts.new,1);
 });
 
-test('repeated CSV identities, reused Goodreads ID and missing authors all require review',()=>{
+test('repeated work entries import only one canonical book; ID conflicts and missing authors stay under review',()=>{
   const p=parseGoodreadsExport(csvRows(
     book('1','Same Title','Same Author'),
     book('2','Same Title','Same Author'),
@@ -73,10 +73,45 @@ test('repeated CSV identities, reused Goodreads ID and missing authors all requi
     book('5','Anonymous','')
   ));
   const result=matchGoodreadsRows(p.entries,[]);
-  assert.deepEqual(result.results.map(x=>x.matchStatus),['review','review','review','review','review']);
+  assert.deepEqual(result.results.map(x=>x.matchStatus),['new','review','review','review','review']);
+  assert.deepEqual(result.results.map(x=>x.matchReason),[
+    'canonical_work_from_repeated_csv','possible_edition_same_work',
+    'conflicting_csv_goodreads_id','conflicting_csv_goodreads_id','missing_author_or_title'
+  ]);
   assert.equal(result.counts.repeatedCsv,4);
-  assert.equal(result.counts.review,5);
-  assert.equal(result.counts.new,0);
+  assert.equal(result.counts.review,4);
+  assert.equal(result.counts.new,1);
+  assert.equal(result.counts.possibleEditionRows,1);
+  assert.equal(result.counts.canonicalRepeatedWorks,1);
+});
+
+test('the same Goodreads ID under one work has one importable row, never two books',()=>{
+  const parsed=parseGoodreadsExport(csvRows(
+    book('777','A Tide of Treason','A.B. Daniels-Annachi',4,'read','favourites'),
+    book('777','A Tide of Treason','A.B. Daniels-Annachi',4,'read','special-editions')
+  ));
+  const result=matchGoodreadsRows(parsed.entries,[]);
+  assert.deepEqual(result.results.map(x=>x.matchStatus),['new','review']);
+  assert.deepEqual(result.results.map(x=>x.matchReason),[
+    'canonical_work_from_repeated_csv','duplicate_csv_entry']);
+  assert.equal(result.results[1].csvWorkRepresentativeRow,2);
+  assert.equal(result.counts.duplicateIdRows,1);
+});
+
+test('different Goodreads IDs and ISBNs of the same work are distinguishable edition candidates',()=>{
+  const parsed=parseGoodreadsExport(csvRows(
+    book('701','A Tide of Treason','A.B. Daniels-Annachi',5,'read','favorites','','','','="1111111111"','="9781111111111"'),
+    book('702','A Tide of Treason','A.B. Daniels-Annachi',5,'read','special-editions','','','','="2222222222"','="9782222222222"')
+  ));
+  const first=matchGoodreadsRows(parsed.entries,[]);
+  assert.deepEqual(first.results.map(x=>x.matchStatus),['new','review']);
+  assert.equal(first.results[1].matchReason,'possible_edition_same_work');
+  assert.deepEqual(first.results[1].relatedGoodreadsIds,['701','702']);
+  assert.equal(first.results[1].isbn13,'9782222222222');
+  const existing=[{id:'work-7',title:'A Tide of Treason',author:'A.B. Daniels-Annachi',goodreads_id:'701'}];
+  const second=matchGoodreadsRows(parsed.entries,existing);
+  assert.deepEqual(second.results.map(x=>x.matchStatus),['existing','review']);
+  assert.equal(second.results[1].matchReason,'possible_edition_of_existing_work');
 });
 
 test('Unicode book and author names match correctly and incomplete scans stay conservative',()=>{
