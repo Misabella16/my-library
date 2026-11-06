@@ -432,7 +432,13 @@ export default {
     if(!access.ok) {
       // A safe category only. Do not log JWTs, headers, identities, URLs or secrets.
       console.warn('My Library Access verification rejected:',access.reason);
-      return secureHeaders(fail('Private owner authentication required',403),true);
+      // Public-safe category only; never reveal the owner email, JWT, AUD,
+      // team domain or signing keys. This is essential when a user is locked
+      // out and cannot open Cloudflare's live logs.
+      return secureHeaders(json({
+        error:'Private owner authentication required',
+        code:access.reason
+      },403),true);
     }
     const isApi=path.startsWith('/api/');
     if(!['GET','HEAD','POST','PATCH','DELETE'].includes(request.method)) return secureHeaders(fail('Method not allowed',405),true);
