@@ -60,7 +60,10 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
     stat('Needs review',matches.counts.review),
     stat('Potentially new',matches.counts.new),
     stat('Not fully checked',matches.counts.unverified),
-    stat('Repeated CSV identities',matches.counts.repeatedCsv)
+    stat('Rows sharing CSV identities',matches.counts.repeatedCsv),
+    stat('New works from repeated titles',matches.counts.canonicalRepeatedWorks||0),
+    stat('Possible edition rows',matches.counts.possibleEditionRows||0),
+    stat('Repeated/conflicting IDs',matches.counts.duplicateIdRows||0)
   );
   if(totals.imported||totals.skipped||totals.not_attempted){
     stats.append(stat('Successfully imported',totals.imported),
@@ -99,14 +102,15 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
   const listing=node('section','goodreads-list');
   listing.append(node('h3',null,'Every book in your CSV'));
   listing.append(node('p','muted',
-    'Filter by outcome or search a title. Each entry explains why it matched or did not import.'));
+    'One work per repeated title/author group may be eligible for import. Other Goodreads entries remain listed as possible editions or duplicates. No edition or owned copy is created automatically.'));
   const controls=node('div','goodreads-report-controls');
   const filter=node('select','goodreads-filter');
   filter.setAttribute('aria-label','Filter Goodreads rows by status');
   for(const [key,label] of [
     ['all','All rows'],['already_present','Already in library'],['needs_review','Needs review'],
     ['ready','Ready to import'],['unverified','Not fully checked'],
-    ['imported','Imported'],['skipped','Skipped by server'],['not_attempted','Not attempted']
+    ['imported','Imported'],['skipped','Skipped by server'],['not_attempted','Not attempted'],
+    ['editions','Possible editions'],['duplicate_ids','Duplicate or conflicting Goodreads IDs']
   ]){
     const option=node('option',null,label);option.value=key;filter.append(option);
   }
@@ -121,9 +125,14 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
   let shown=60;
   const render=()=>{
     const q=search.value.trim().toLocaleLowerCase();
+    const editionReasons=['possible_edition_same_work','possible_edition_of_existing_work'];
+    const duplicateReasons=['duplicate_csv_entry','conflicting_csv_goodreads_id'];
     const filtered=allRows.filter(row=>
-      (filter.value==='all'||row.status===filter.value) &&
-      (!q||(row.title+' '+row.author+' '+row.goodreadsId).toLocaleLowerCase().includes(q)));
+      (filter.value==='all'||row.status===filter.value||
+       (filter.value==='editions'&&editionReasons.includes(row.reason))||
+       (filter.value==='duplicate_ids'&&duplicateReasons.includes(row.reason))) &&
+      (!q||(row.title+' '+row.author+' '+row.goodreadsId+' '+row.isbn+' '+row.isbn13)
+        .toLocaleLowerCase().includes(q)));
     content.replaceChildren();
     for(const row of filtered.slice(0,shown)){
       const item=node('div','goodreads-row');
@@ -131,6 +140,13 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
       main.append(node('strong',null,row.title||'(Missing title)'),
         node('span','goodreads-author',row.author||'No author in CSV'),
         node('span','goodreads-reason',row.explanation));
+      const identifiers=[];
+      if(row.goodreadsId)identifiers.push('Goodreads ID '+row.goodreadsId);
+      if(row.isbn13)identifiers.push('ISBN-13 '+row.isbn13);
+      else if(row.isbn)identifiers.push('ISBN '+row.isbn);
+      if(row.workGroupSize>1)
+        identifiers.push(row.workGroupSize+' related CSV rows · work represented by row '+row.representativeRow);
+      if(identifiers.length)main.append(node('span','goodreads-identifiers',identifiers.join(' · ')));
       const details=node('div','goodreads-row-meta');
       details.append(node('span','goodreads-match '+row.status,row.status.replaceAll('_',' ')),
         node('span','goodreads-row-number','CSV row '+row.csvRow));
