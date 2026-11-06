@@ -1,5 +1,6 @@
 import {parseGoodreadsExport, matchGoodreadsRows, MAX_GOODREADS_BYTES} from './goodreads-preview.mjs';
 import {reconciliationRows,reconciliationCounts,reconciliationCsv,isGoodreadsImportEligible} from './goodreads-reconciliation.mjs';
+import {initGoodreadsSync} from './goodreads-sync-ui.mjs';
 
 // Read-only cross-check: fetch existing private catalogue pages for matching.
 // Never sends the Goodreads CSV, reviews or shelves to a server.
@@ -336,6 +337,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
      !download||!approval||!approvalText||!confirmButton||!cancelButton||!feedback||!progress)
     throw Error('Goodreads import controls are missing.');
   let current=null,reportData=null,importing=false;
+  const metadataSync=initGoodreadsSync(api,{onImported});
 
   function setFeedback(message,level='info'){
     feedback.textContent=message;
@@ -390,6 +392,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
     output.replaceChildren();
     resetPreviewState();
     reportData=null;
+    metadataSync.setData(null,null,null);
     download.disabled=true;
     progress.hidden=true;progress.value=0;
     const file=input.files?.[0];
@@ -419,6 +422,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
       const candidates=matches.results.filter(eligible);
       reportData={parsed,matches,catalogue,outcomes:new Map(),editionLinks:new Map()};
       current={parsed,matches,catalogue,candidates};
+      metadataSync.setData(parsed,matches,catalogue);
       renderReport();
       download.disabled=false;
       const excluded=matches.counts.new-candidates.length;
@@ -443,6 +447,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
       status.textContent='Preview complete. No Goodreads data has been uploaded.';
     }catch(error){
       resetPreviewState();
+      metadataSync.setData(null,null,null);
       status.textContent='Preview could not complete. No changes were made.';
       setFeedback('Preview error: '+(error instanceof Error?error.message:'Unable to inspect CSV.'),'error');
       output.append(node('p','goodreads-error',
