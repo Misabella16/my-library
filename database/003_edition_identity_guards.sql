@@ -5,20 +5,27 @@ ON books(normalized_title,normalized_author) WHERE archived_at IS NULL;
 -- Only use against the standalone My Library D1 database.
 -- One record for each distinct edition type under a book.
 -- These constraints do not touch copies, cover files or notes.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_type
+-- Separate partial indexes keep edition identity rules readable and easy to
+-- apply in the Cloudflare D1 Console one statement at a time.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_standard
 ON editions (
   book_id,
   format,
-  is_special,
-  CASE WHEN lower(replace(replace(replace(replace(replace(trim(edition_name),' ',''),'-',''),'_',''),'.',''),'/',''))
-        IN ('standard','standardedition','regular','regularedition')
-       THEN 'standard'
-       ELSE lower(replace(replace(replace(replace(replace(trim(edition_name),' ',''),'-',''),'_',''),'.',''),'/',''))
-  END,
-  CASE WHEN is_special=1
-       THEN lower(replace(replace(replace(replace(trim(vendor),' ',''),'-',''),'_',''),'.',''))
-       ELSE '' END
-);
+  CASE WHEN lower(replace(replace(trim(edition_name), ' ', ''), '-', ''))
+    IN ('standard', 'standardedition', 'regular', 'regularedition')
+  THEN 'standard'
+  ELSE lower(replace(replace(trim(edition_name), ' ', ''), '-', '')) END
+)
+WHERE is_special = 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_special
+ON editions (
+  book_id,
+  format,
+  lower(replace(replace(trim(edition_name), ' ', ''), '-', '')),
+  lower(replace(replace(trim(vendor), ' ', ''), '-', ''))
+)
+WHERE is_special = 1;
 -- Ignore superficial ISBN formatting; blank ISBNs aren't unique identifiers.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_isbn
 ON editions (book_id, upper(replace(replace(trim(isbn),'-',''),' ','')))
