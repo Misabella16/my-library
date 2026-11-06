@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   });
   try {
     await api('/api/session');
-    initGoodreadsPreview(api);
+    initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
     $('#connection-status').textContent='Owner session verified · Private library connected';
     await listBooks();
     if(state.books.length) await selectBook(state.books[0].id);
