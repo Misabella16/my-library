@@ -57,6 +57,9 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
       ? 'Import results are shown below for each CSV row. Existing books, editions and copies were not overwritten.'
       : 'Preview only. No changes made. Possible matches use Goodreads ID, title and author; special editions and copies are never overwritten.');
   const stats=node('div','goodreads-stats');
+  const linkedNumber=node('strong',null,String(totals.edition_linked||0));
+  const linkedCard=node('div','goodreads-stat');
+  linkedCard.append(linkedNumber,node('span',null,'Linked editions'));
   stats.append(
     stat('Total CSV rows',parsed.sourceCount),
     stat('Valid CSV books',parsed.entries.length),
@@ -68,7 +71,7 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
     stat('New works from repeated titles',matches.counts.canonicalRepeatedWorks||0),
     stat('Possible edition rows',matches.counts.possibleEditionRows||0),
     stat('Repeated/conflicting IDs',matches.counts.duplicateIdRows||0),
-    stat('Linked editions',totals.edition_linked||0)
+    linkedCard
   );
   if(totals.imported||totals.skipped||totals.not_attempted){
     stats.append(stat('Successfully imported',totals.imported),
@@ -188,6 +191,13 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
               try{
                 const result=await onLinkEdition(row);
                 editionLinks.set(row.csvRow,{status:result.status,edition_id:result.edition_id});
+                row.status='edition_linked';
+                row.reason=result.status==='edition_added'?'edition_linked':'edition_already_linked';
+                row.explanation=result.status==='edition_added'
+                  ?'Linked as an unowned, unverified edition under the existing work.'
+                  :'This Goodreads entry was already represented. Nothing was changed.';
+                linkedNumber.textContent=String([...editionLinks.values()].filter(x=>
+                  x.status==='edition_added'||x.status==='edition_already_linked').length);
                 render();
               }catch(error){
                 const issue=node('p','goodreads-error',
