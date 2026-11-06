@@ -130,7 +130,7 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   const description=tagValue(packageXml,'description',3000);
   // OPF packages often list a UUID as the primary identifier, followed
   // by a real ISBN. Prefer any validated ISBN-13 for safe edition matching.
-  const identifiers=[...packageXml.matchAll(/<(?:[\\w.-]+:)?identifier\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w.-]+:)?identifier\\s*>/gi)]
+  const identifiers=[...packageXml.matchAll(/<(?:[\w.-]+:)?identifier\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?identifier\s*>/gi)]
     .map(match=>cleanText(match[1],250)).filter(Boolean);
   const identifier=identifiers.find(value=>extractIsbn13(value))||identifiers[0]||'';
   const subjects=[...packageXml.matchAll(/<(?:[\w.-]+:)?subject\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?subject\s*>/gi)]
