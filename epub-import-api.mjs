@@ -175,6 +175,15 @@ export async function batchPreviewEpub(db,items){
 }
 export async function handleEpubApi(request,db,env,path){
   const method=request.method;
+  // List files only when the owner explicitly opens the EPUB section.
+  // Do not add a scan to every ordinary book detail page on D1 free tier.
+  const bookFiles=/^\\/api\\/epubs\\/book\\/([0-9a-f-]{36})$/.exec(path);
+  if(bookFiles&&method==='GET'){
+    const files=await many(db,
+      'SELECT id,edition_id,original_filename,created_at FROM epub_files WHERE book_id=? ORDER BY created_at LIMIT 100',
+      [bookFiles[1]]);
+    return json({files,truncated:files.length===100});
+  }
   // Only the outer owner-authenticated Worker can reach this route.
   // Never reveal R2 keys or create public signed URLs.
   const privateDownload=/^\\/api\\/epubs\\/file\\/([0-9a-f-]{36})$/.exec(path);
