@@ -19,6 +19,8 @@ export const REASONS=Object.freeze({
   ambiguous_title:'Server found a title conflict. Nothing overwritten.',
   goodreads_id_conflict:'Server found a Goodreads ID conflict. Nothing overwritten.',
   created:'Added to My Library.',
+  edition_linked:'Linked as an unowned, unverified edition under the existing work.',
+  edition_already_linked:'This Goodreads edition was already represented. No new edition was created.',
   not_attempted:'This book was not attempted because an import stopped or was incomplete.',
   eligible:'Ready to import after confirmation.',
 });
@@ -30,11 +32,14 @@ export function isGoodreadsImportEligible(entry){
     entry.review.length<=50000 &&
     (!entry.goodreadsId||/^\d{1,36}$/.test(entry.goodreadsId));
 }
-export function reconciliationRows(parsed,matches,{outcomes=new Map()}={}){
+export function reconciliationRows(parsed,matches,{outcomes=new Map(),editionLinks=new Map()}={}){
   return matches.results.map(entry=>{
     const outcome=outcomes.get(entry.rowNumber);
+    const editionLink=editionLinks.get(entry.rowNumber);
     let status,reason;
-    if(outcome==='created'){status='imported';reason='created';}
+    if(editionLink?.status==='edition_added'){status='edition_linked';reason='edition_linked';}
+    else if(editionLink?.status==='edition_already_linked'){status='edition_linked';reason='edition_already_linked';}
+    else if(outcome==='created'){status='imported';reason='created';}
     else if(['already_present','ambiguous_title','goodreads_id_conflict'].includes(outcome)){
       status='skipped';reason=outcome;
     }
@@ -80,7 +85,7 @@ export function reconciliationCsv(parsed,matches,options={}){
   return '\uFEFF'+lines.join('\r\n')+'\r\n';
 }
 export function reconciliationCounts(rows){
-  const counts={imported:0,already_present:0,ready:0,needs_review:0,unverified:0,skipped:0,not_attempted:0};
+  const counts={imported:0,edition_linked:0,already_present:0,ready:0,needs_review:0,unverified:0,skipped:0,not_attempted:0};
   for(const row of rows){counts[row.status]=(counts[row.status]||0)+1;}
   return counts;
 }
