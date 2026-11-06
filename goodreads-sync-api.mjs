@@ -250,8 +250,25 @@ export async function undoGoodreadsSync(db,batchId){
   ?json({undone:true,restored:changes.length})
   :bad('Some books changed during Undo. Recheck this batch before continuing.',409);
 }
+async function syncHistory(request,db){
+ const raw=new URL(request.url).searchParams.get('cursor')||'';
+ if(raw&&!/^\d{1,10}$/.test(raw))return bad('Invalid sync history cursor');
+ const cursor=raw?Number(raw):2147483647;
+ const result=await all(db,
+  "SELECT rowid AS cursor,id,status,report,created_at FROM import_batches "+
+  "WHERE source='goodreads' AND rowid<? AND report LIKE ? ORDER BY rowid DESC LIMIT 41",
+  [cursor,'%"type":"goodreads_fill_missing"%']);
+ const visible=result.slice(0,40);
+ return json({batches:visible.map(b=>{
+  let report={};try{report=JSON.parse(b.report||'{}');}catch{}
+  return {id:b.id,status:b.status,created_at:b.created_at,
+   attempted:Number(report.attempted)||0};
+ }),next_cursor:result.length>40?String(visible.at(-1).cursor):null});
+}
 export async function handleGoodreadsSyncApi(request,db,path){
  try{
+  if(path==='/api/imports/goodreads/sync/history'&&request.method==='GET')
+   return syncHistory(request,db);
   if(path==='/api/imports/goodreads/sync/preview'&&request.method==='POST'){
    const input=await readInput(request,MAX_PREVIEW);
    const results=await planGoodreadsSync(db,input);
