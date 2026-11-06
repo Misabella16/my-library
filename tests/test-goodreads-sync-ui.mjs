@@ -53,7 +53,8 @@ function fixture({count=1,ambiguous=false}={}){
  ui.setData(null,{results:entries},{complete:true});
  return {ui,requests,get:id=>nodes.get(id),
   counts:()=>({committed,refreshed}),
-  restore:()=>{globalThis.document=prior;}};
+  restore:async()=>{await new Promise(resolve=>setImmediate(resolve));
+    globalThis.document=prior;}};
 }
 const countCalls=(log,path)=>log.filter(x=>x.path===path).length;
 test('No Goodreads existing-book writes until explicit preview and confirmation',async()=>{
@@ -78,7 +79,7 @@ test('No Goodreads existing-book writes until explicit preview and confirmation'
   assert.equal(f.counts().committed,1);
   assert.equal(f.counts().refreshed,1);
   assert.match(f.get('goodreads-sync-feedback').textContent,/1 books enriched/);
- }finally{f.restore();}
+ }finally{await f.restore();}
 });
 test('Forty-one safe matches preview in 40-row chunks and save in batches of at most ten',async()=>{
  const f=fixture({count:41});
@@ -94,7 +95,7 @@ test('Forty-one safe matches preview in 40-row chunks and save in batches of at 
   assert.equal(commits.length,5);
   assert.ok(commits.every(x=>x.args.data.rows.length<=10));
   assert.equal(f.counts().committed,41);
- }finally{f.restore();}
+ }finally{await f.restore();}
 });
 test('Ambiguous duplicate CSV rows targeting one book are excluded before preview',async()=>{
  const f=fixture({count:1,ambiguous:true});
@@ -102,5 +103,5 @@ test('Ambiguous duplicate CSV rows targeting one book are excluded before previe
   assert.equal(f.get('goodreads-sync-preview').disabled,true);
   assert.match(f.get('goodreads-sync-feedback').textContent,/1 ambiguous works were excluded/);
   assert.equal(f.requests.filter(x=>x.args.method==='POST').length,0);
- }finally{f.restore();}
+ }finally{await f.restore();}
 });
