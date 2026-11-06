@@ -44,7 +44,7 @@ class FakeNode{
 }
 const ids=['epub-files','epub-folder','preview-epubs','upload-epubs',
  'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary'];
-function fixture(count=101,{failFirst=false,failPreviewAt=0}={}){
+function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false}={}){
  const nodes=new Map(ids.map(id=>[id,new FakeNode()]));
  const prior=globalThis.document;
  globalThis.document={getElementById:id=>nodes.get(id)||null,
@@ -53,12 +53,19 @@ function fixture(count=101,{failFirst=false,failPreviewAt=0}={}){
  const calls=[];
  const api=async(path,opts={})=>{
   calls.push({path,opts});
+  if(reviewMatch&&path.startsWith('/api/books?')){
+   return {books:[{id:'11111111-1111-4111-8111-111111111111',
+    title:'Corrected Book',author:'A Writer'}]};
+  }
   if(path==='/api/epubs/preview'){
    previewCount++;
    if(!previewFailed&&failPreviewAt&&previewCount===failPreviewAt){
     previewFailed=true;throw new Error('Simulated database preview outage');
    }
-   return {results:opts.data.items.map(()=>({status:'new'}))};
+   return {results:opts.data.items.map(item=>
+     reviewMatch?(item.title==='Corrected Book'
+      ?{status:'match',book_id:'11111111-1111-4111-8111-111111111111'}
+      :{status:'needs_review',reason:'Ambiguous title'}):{status:'new'})};
   }
   if(path==='/api/epubs/upload'){
    if(failNext){
@@ -198,6 +205,32 @@ test('Owner may explicitly keep a separate EPUB version with same book metadata'
   assert.ok(keep);
   await keep.dispatch('click');
   assert.match(f.get('upload-epubs').textContent,/Save 2 eligible/);
+  assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+
+test('Ambiguous EPUB may search existing catalogue and safely attach only after preview confirms identity',async()=>{
+ const f=fixture(1,{reviewMatch:true});
+ try{
+  f.get('epub-files').files=f.files;
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.match(f.get('epub-import-summary').textContent,/Needs review: 1/);
+  const card=f.get('epub-preview-list').children[0];
+  const form=card.children.find(x=>x.className==='epub-manual-match');
+  const find=form.children.find(x=>x.textContent==='Find this book in My Library');
+  assert.ok(find);
+  await find.dispatch('click');
+  const search=f.calls.find(x=>x.path.startsWith('/api/books?'));
+  assert.ok(search);
+  assert.match(search.path,/limit=20/);
+  assert.match(search.path,/include_total=0/);
+  const choices=form.children.find(x=>x.className==='epub-catalogue-candidates');
+  const use=choices.children.find(x=>x.textContent.startsWith('Use Corrected Book'));
+  assert.ok(use);
+  await use.dispatch('click');
+  assert.match(f.get('epub-import-summary').textContent,/Matches existing book: 1/);
+  assert.match(f.get('upload-epubs').textContent,/Save 1 eligible/);
   assert.equal(f.stats().uploads,0);
  }finally{f.restore();}
 });
