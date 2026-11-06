@@ -211,12 +211,65 @@ test('large-library duplicate lookup preserves existing imported works and does 
     assert.equal(result.skipped.already_present,1);
     assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,1);
     const plan=sqlite.prepare(
-      "EXPLAIN QUERY PLAN SELECT id,title,author,goodreads_id FROM books "+
-      "WHERE archived_at IS NULL AND "+
-      "(normalized_title=? OR (normalized_title=? AND title=? COLLATE NOCASE)) LIMIT 101"
-    ).all('天官赐福','','天官赐福');
+      "EXPLAIN QUERY PLAN SELECT id,title,author,goodreads_id,normalized_title FROM books "+
+      "WHERE archived_at IS NULL AND normalized_title IN (?) LIMIT ?"
+    ).all('天官赐福',101);
     assert.ok(plan.some(item=>/INDEX|SEARCH/i.test(item.detail)),JSON.stringify(plan));
     assert.ok(!plan.some(item=>/SCAN books\\b/i.test(item.detail)),JSON.stringify(plan));
+  }finally{sqlite.close();}
+});
+
+test('Goodreads chunk reads indexed identities in bounded query batches rather than per book',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    const existing=Array.from({length:10},(_,i)=>({
+      ...payloadRows()[0],
+      title:'Existing Book '+i,
+      author:'Creator '+i,
+      goodreadsId:String(100000+i)
+    }));
+    const imported=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:existing}});
+    assert.equal(imported.status,201);
+    const newBooks=Array.from({length:10},(_,i)=>({
+      ...payloadRows()[0],title:'Fresh Book '+i,author:'New Author '+i,goodreadsId:String(200000+i)
+    }));
+    const attempted=existing.concat(newBooks);
+    const originalPrepare=db.prepare;
+    const lookups=[];
+    db.prepare=function(sql){
+      if(/SELECT .* FROM books WHERE/.test(sql)&&/IN \(/.test(sql))lookups.push(sql);
+      return originalPrepare.call(this,sql);
+    };
+    const result=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:attempted}});
+    assert.equal(result.status,201,await result.clone().text());
+    const data=await result.json();
+    assert.equal(data.created,10);
+    assert.equal(data.skipped.already_present,10);
+    assert.equal(data.skippedRows.length,10);
+    assert.equal(lookups.length,2,'Expected one batched title query and one batched Goodreads ID query');
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,20);
+    assert.ok(lookups.every(sql=>!sql.includes('OFFSET')));
+  }finally{sqlite.close();}
+});
+
+test('Goodreads batch preserves conflicting IDs and matching title with different authors',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    const existing={...payloadRows()[0],title:'Home Library',author:'Original Writer',goodreadsId:'777777'};
+    assert.equal((await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:[existing]}})).status,201);
+    const proposed=[
+      {...payloadRows()[0],title:'Home Library',author:'Different Writer',goodreadsId:'111'},
+      {...payloadRows()[1],title:'Alternate Title',author:'Someone Else',goodreadsId:'777777'}
+    ];
+    const res=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:proposed}});
+    assert.equal(res.status,200);
+    const result=await res.json();
+    assert.equal(result.created,0);
+    assert.deepEqual(result.skippedRows,[
+      {index:0,reason:'ambiguous_title'},
+      {index:1,reason:'goodreads_id_conflict'}
+    ]);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,1);
   }finally{sqlite.close();}
 });
 
