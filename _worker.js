@@ -227,8 +227,18 @@ async function serveApi(request,env,path){
       [normalize(title),normalize(author)]);
     if(existing) return json({error:'This title and author are already in your library. Add an edition or copy to the existing book instead.',existing_book_id:existing.id},409);
     const bookId=id(), now=stamp();
-    await run(db,'INSERT INTO books (id,title,author,normalized_title,normalized_author,synopsis,reading_status,private_notes,review,rating,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-      [bookId,title,author,normalize(title),normalize(author),rawString(b.synopsis,25000),requireEnum(b.reading_status,STATUS,'unread'),rawString(b.private_notes),rawString(b.review,50000),ratingValue(b.rating),now,now]);
+    try {
+      await run(db,'INSERT INTO books (id,title,author,normalized_title,normalized_author,synopsis,reading_status,private_notes,review,rating,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        [bookId,title,author,normalize(title),normalize(author),rawString(b.synopsis,25000),requireEnum(b.reading_status,STATUS,'unread'),rawString(b.private_notes),rawString(b.review,50000),ratingValue(b.rating),now,now]);
+    } catch (error) {
+      if(/UNIQUE constraint failed/i.test(String(error))) {
+        const concurrent=await getOne(db,'SELECT id FROM books WHERE normalized_title=? AND normalized_author=? AND archived_at IS NULL LIMIT 1',
+          [normalize(title),normalize(author)]);
+        if(concurrent) return json({error:'This book already exists. Open its record rather than adding a duplicate.',
+          existing_book_id:concurrent.id},409);
+      }
+      throw error;
+    }
     await addAudit(db,'create','books',bookId,null,{id:bookId,title});
     return json({book:await bookDetail(db,bookId)},201);
   }
