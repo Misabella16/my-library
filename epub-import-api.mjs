@@ -128,6 +128,10 @@ export async function handleEpubApi(request,db,env,path){
     try{metadata=JSON.parse(form.get('metadata')||'{}');}
     catch{return bad('Invalid EPUB metadata');}
     const title=cleanEpubTitle(metadata.title),author=cleanEpubAuthor(metadata.author);
+    const subjectList=Array.isArray(metadata.subjects)?metadata.subjects.slice(0,8):[];
+    if(subjectList.some(tag=>typeof tag!=='string'||!tag.trim()||tag.trim().length>90))
+      return bad('Invalid EPUB subject tags');
+    const subjects=[...new Map(subjectList.map(tag=>[tag.trim().toLocaleLowerCase(),tag.trim()])).values()];
     const expected=String(metadata.sha256||'');
     if(!/^[a-f0-9]{64}$/.test(expected))return bad('Invalid EPUB hash');
     const bytes=new Uint8Array(await file.arrayBuffer());
@@ -171,9 +175,22 @@ export async function handleEpubApi(request,db,env,path){
       const statements=[];
       if(matched.status==='new'){
         statements.push(db.prepare(
-          'INSERT INTO books (id,title,author,normalized_title,normalized_author,created_at,updated_at) '+
-          'VALUES (?,?,?,?,?,?,?)'
-        ).bind(bookId,title,author,normalizeEpubText(title),normalizeEpubText(author),ts,ts));
+          'INSERT INTO books (id,title,author,normalized_title,normalized_author,synopsis,created_at,updated_at) '+
+          'VALUES (?,?,?,?,?,?,?,?)'
+        ).bind(bookId,title,author,normalizeEpubText(title),normalizeEpubText(author),
+          clean(metadata.description,3000),ts,ts));
+      }
+      // Only use explicit EPUB OPF subjects. Tags are added, never removed
+      // or fabricated, and a successful import's book record remains intact.
+      for(const subject of subjects){
+        const tagId=uuid();
+        statements.push(db.prepare(
+          "INSERT OR IGNORE INTO tags(id,label,kind) VALUES (?,?,'imported')"
+        ).bind(tagId,subject));
+        statements.push(db.prepare(
+          "INSERT OR IGNORE INTO book_tags(book_id,tag_id,source) "+
+          "SELECT ?,id,'epub' FROM tags WHERE label=? COLLATE NOCASE"
+        ).bind(bookId,subject));
       }
       // Never attach EPUB artwork to special or physical editions.
       const ebook=await one(db,
@@ -196,7 +213,7 @@ export async function handleEpubApi(request,db,env,path){
         'book_id,edition_id,batch_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)'
       ).bind(fileId,actual,titleSafe,normalizeEpubText(title),key,JSON.stringify({
         title,author,description:clean(metadata.description,3000),
-        identifier:clean(metadata.identifier,250),cover_extracted:!!coverBytes
+        identifier:clean(metadata.identifier,250),subjects,cover_extracted:!!coverBytes
       }),bookId,targetEdition,batchId,ts));
       if(coverBytes){
         const existing=ebook?await one(db,
