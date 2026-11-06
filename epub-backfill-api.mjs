@@ -22,8 +22,10 @@ function unpack(value){
 }
 async function linkedFile(db,fileId){
  return one(db,'SELECT f.id,f.book_id,f.edition_id,f.sha256,f.original_filename,'+
-  'f.private_object_key,f.metadata_json,b.title,b.synopsis,b.updated_at '+
+  'f.private_object_key,f.metadata_json,b.title,b.synopsis,b.updated_at,'+
+  'e.format AS edition_format,e.is_special AS edition_special '+
   'FROM epub_files f JOIN books b ON b.id=f.book_id '+
+  'LEFT JOIN editions e ON e.id=f.edition_id '+
   'WHERE f.id=? AND b.archived_at IS NULL',[fileId]);
 }
 export async function handleEpubBackfillApi(request,db,path,env={}){
@@ -35,8 +37,10 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const requested=Number(url.searchParams.get('limit')||10);
   const limit=Number.isInteger(requested)?Math.max(1,Math.min(10,requested)):10;
   const rows=await many(db,'SELECT f.id,f.book_id,f.metadata_json,b.title,b.synopsis,b.updated_at, '+
-   "(SELECT COUNT(*) FROM edition_images im WHERE im.edition_id=f.edition_id AND im.role='cover') AS cover_count "+
+   "(SELECT COUNT(*) FROM edition_images im WHERE im.edition_id=f.edition_id AND im.role='cover') AS cover_count, "+
+   "e.format AS edition_format,e.is_special AS edition_special "+
    'FROM epub_files f JOIN books b ON b.id=f.book_id '+
+   'LEFT JOIN editions e ON e.id=f.edition_id '+
    'WHERE b.archived_at IS NULL AND f.id>? ORDER BY f.id LIMIT ?',[after,limit+1]);
   const page=rows.slice(0,limit);
   return json({files:page.map(row=>{
@@ -44,7 +48,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    return {file_id:row.id,book_id:row.book_id,title:row.title,
     expected_updated_at:row.updated_at,
     synopsis:row.synopsis?.trim()?'':extracted.synopsis,
-    subjects:extracted.tags,cover_missing:!row.cover_count};
+    subjects:extracted.tags,cover_missing:!row.cover_count&&
+     row.edition_format==='ebook'&&row.edition_special===0};
   }),next_cursor:rows.length>limit?page[page.length-1].id:null});
  }
  if(path==='/api/epubs/backfill/apply'&&method==='POST'){
@@ -66,7 +71,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const additions=tags.filter(label=>!present.has(label.toLocaleLowerCase()));
   const coverCount=await one(db,
    "SELECT COUNT(*) AS n FROM edition_images WHERE edition_id=? AND role='cover'",[row.edition_id]);
-  const needsCover=coverCount?.n===0;
+  const needsCover=coverCount?.n===0&&row.edition_format==='ebook'&&row.edition_special===0;
   let coverInfo=null,coverKey=null;
   if(needsCover&&env.BOOK_FILES){
    // Download only one bounded owner-private EPUB when a cover is missing.
