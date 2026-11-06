@@ -498,3 +498,33 @@ test('Missing embedded ebook cover can be recovered from stored private EPUB wit
   assert.equal(f.objects.size,1,'Never delete original EPUB');
  }finally{f.sqlite.close();}
 });
+
+test('Backfill never attaches recovered EPUB cover to a special or physical edition',async()=>{
+ const f=fixture();
+ try{
+  const bytes=epubArchiveWithCover();
+  const hash=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const epubId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special,vendor) VALUES (?,?,?,'hardcover',1,'FairyLoot')")
+   .run(editionId,bookId,'Exclusive');
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(epubId,hash,'novel.epub','epubs/private/legacy.epub','{}',bookId,editionId);
+  await f.env.BOOK_FILES.put('epubs/private/legacy.epub',bytes);
+  const preview=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/preview'),
+   f.db,'/api/epubs/backfill/preview',f.env);
+  const item=(await preview.json()).files[0];
+  assert.equal(item.cover_missing,false);
+  const apply=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/apply',{method:'POST',
+    body:JSON.stringify({file_id:epubId,expected_updated_at:item.expected_updated_at})}),
+   f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(apply.status,200);
+  assert.equal((await apply.json()).status,'no_changes');
+  assert.equal(count(f.sqlite,'edition_images'),0);
+  assert.equal(f.objects.size,1);
+ }finally{f.sqlite.close();}
+});
