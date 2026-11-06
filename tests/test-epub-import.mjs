@@ -153,7 +153,7 @@ test('Batch preview matches 50 EPUBs using two indexed DB queries',async()=>{
   }));
   const before=f.queries();
   const matches=await batchPreviewEpub(f.db,items);
-  assert.equal(f.queries()-before,2);
+  assert.equal(f.queries()-before,3,'SHA, title, and indexed alternate-title lookup');
   assert.equal(matches.length,50);
   assert.equal(matches[0].status,'match');
   assert.equal(matches[0].book_id,key);
@@ -178,7 +178,7 @@ test('EPUB preview supports Unicode exact titles and a bounded legacy fallback',
   assert.equal(results[0].status,'match');
   assert.equal(results[0].book_id,id);
   assert.equal(results[1].status,'new');
-  assert.equal(f.queries()-before,3,'Two indexed queries plus one bounded legacy-key query');
+  assert.equal(f.queries()-before,4,'SHA, title, alias, plus bounded legacy lookup');
  }finally{f.sqlite.close();}
 });
 
@@ -217,6 +217,42 @@ test('Conflicting ISBN authors do not merge unrelated books',async()=>{
   assert.equal(preview[0].status,'needs_review');
   const response=await post(f.db,f.env,'/api/epubs/upload',form(meta));
   assert.equal(response.status,409);
+  assert.equal(count(f.sqlite,'epub_files'),0);
+ }finally{f.sqlite.close();}
+});
+
+test('Existing alternate Goodreads title links EPUB to one canonical book',async()=>{
+ const f=fixture();
+ try{
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(id,'The Long Title','Writer','the long title','writer');
+  f.sqlite.prepare('INSERT INTO book_aliases(id,book_id,alias,normalized_alias,source) VALUES(?,?,?,?,?)')
+   .run('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',id,'Short Title','short title','goodreads');
+  const meta=await validMeta('Short Title','Writer');
+  const preview=await batchPreviewEpub(f.db,[meta]);
+  assert.equal(preview[0].status,'match');
+  assert.equal(preview[0].book_id,id);
+  const upload=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(upload.status,201,await upload.clone().text());
+  assert.equal((await upload.json()).book_created,false);
+  assert.equal(count(f.sqlite,'books'),1);
+  assert.equal(count(f.sqlite,'epub_files'),1);
+ }finally{f.sqlite.close();}
+});
+test('Conflicting author under alternate title needs review rather than duplicate',async()=>{
+ const f=fixture();
+ try{
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(id,'The Long Title','Other Writer','the long title','other writer');
+  f.sqlite.prepare('INSERT INTO book_aliases(id,book_id,alias,normalized_alias,source) VALUES(?,?,?,?,?)')
+   .run('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',id,'Short Title','short title','manual');
+  const meta=await validMeta('Short Title','Writer');
+  const preview=await batchPreviewEpub(f.db,[meta]);
+  assert.equal(preview[0].status,'needs_review');
+  const upload=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(upload.status,409);
   assert.equal(count(f.sqlite,'epub_files'),0);
  }finally{f.sqlite.close();}
 });
