@@ -61,6 +61,13 @@ class SchemaTest(unittest.TestCase):
               ("cover-2","ed","publisher","private/cover2",1))
 
 
+    def test_duplicate_books_blocked_with_unique_active_identity(self):
+        self.db.execute("""INSERT INTO books (id,title,author,normalized_title,normalized_author)
+            VALUES (?,?,?,?,?)""",("a","The Book","A. Author","the book","a author"))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO books (id,title,author,normalized_title,normalized_author)
+                VALUES (?,?,?,?,?)""",("b","The Book","A. Author","the book","a author"))
+
     def test_duplicate_edition_blocked_and_distinct_special_editions_kept(self):
         self.db.execute("INSERT INTO books (id,title,normalized_title) VALUES (?,?,?)",("book-a","Babel","babel"))
         self.db.execute("""INSERT INTO editions (id,book_id,edition_name,vendor,format,is_special,isbn)
