@@ -54,8 +54,14 @@ async function ready({library=[],onImported=async()=>{},failImportTimes=0,failCo
     requests.push({path,method:options.method||'GET'});
     if(path.startsWith('/api/imports/catalogue?')){
       const params=new URL('https://library.invalid'+path).searchParams;
-      const offset=Number(params.get('offset')||0),limit=Number(params.get('limit')||1000);
-      return {books:library.slice(offset,offset+limit),total:library.length,offset,limit};
+      const limit=Number(params.get('limit')||1000);
+      const cursor=params.get('cursor')||'';
+      const sorted=library.slice().sort((a,b)=>a.id.localeCompare(b.id));
+      const remaining=sorted.filter(book=>book.id>cursor);
+      const books=remaining.slice(0,limit);
+      return {books,next_cursor:books.length===limit?books.at(-1).id:null,
+        has_more:books.length===limit,
+        ...(params.get('include_total')==='1'?{total:library.length}:{})};
     }
     if(path==='/api/imports')return {batches:created?[{id:'11111111-1111-4111-8111-111111111111',status:'complete',
       created_at:'2026-11-05T21:00:00.000Z',created,skippedTotal:0}]:[]};
@@ -139,6 +145,11 @@ test('A library larger than 5,000 books is fully checked before importing',async
     assert.match(ui.get('goodreads-import-hint').textContent,/1 safely new book/);
     const pages=ui.requests.filter(r=>r.path.startsWith('/api/imports/catalogue?'));
     assert.equal(pages.length,6);
+    assert.equal(pages.filter(r=>new URL('https://library.invalid'+r.path)
+      .searchParams.get('include_total')==='1').length,1,
+      'Only the first Goodreads catalogue page should request a COUNT');
+    assert.ok(pages.every(r=>new URL('https://library.invalid'+r.path)
+      .searchParams.has('cursor')), 'Every catalogue request should use indexed cursors');
     assert.equal(ui.requests.filter(r=>r.method==='POST').length,0);
   }finally{ui.restore();}
 });
