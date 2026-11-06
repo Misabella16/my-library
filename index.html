@@ -190,9 +190,11 @@
           <button type="button" class="btn" id="epub-backfill-apply" disabled>Fill missing metadata on this page</button>
           <button type="button" class="btn" id="epub-backfill-bulk">Repair next 50 saved EPUBs</button>
           <button type="button" class="btn subtle" id="epub-backfill-undo" disabled>Undo last repair</button>
+          <button type="button" class="btn subtle" id="epub-backfill-history">Recent repair history</button>
         </div>
         <p class="small-status" id="epub-backfill-status" role="status">No repairs have been applied.</p>
         <div id="epub-backfill-results" class="epub-preview-list"></div>
+        <div id="epub-backfill-history-list" class="epub-preview-list" aria-live="polite"></div>
       </section>
       <p class="goodreads-private-note"><strong>Private storage.</strong> EPUB files, embedded covers, and explicit OPF subject tags are saved only to your owner-protected library after you select Save. Uncertain or missing metadata is held for review; you can correct titles/authors without changing the original file. Upload failures can be retried without restarting the entire folder. Imported EPUBs never create physical owned copies or overwrite special-edition artwork.</p>
     </section>
