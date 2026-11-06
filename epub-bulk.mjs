@@ -69,3 +69,32 @@ export function bulkEpubReport(items){
  }
  return '\uFEFF'+lines.join('\r\n')+'\r\n';
 }
+
+export function flagPossibleEpubDuplicates(entries){
+ const groups=new Map();
+ for(const entry of entries||[]){
+  const meta=entry.metadata||{};
+  const title=squash(meta.title).toLocaleLowerCase();
+  const author=squash(meta.author).toLocaleLowerCase();
+  const hash=meta.sha256;
+  if(!title||!author||!hash)continue;
+  const key=title+'\\0'+author;
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push(entry);
+ }
+ let flagged=0;
+ for(const group of groups.values()){
+  if(new Set(group.map(e=>e.metadata.sha256)).size<=1)continue;
+  // Prefer a file already stored in the library as the group anchor.
+  const existing=group.find(e=>e.match?.status==='already_uploaded')||group[0];
+  for(const entry of group){
+   if(entry===existing||entry.duplicateApproved)continue;
+   if(!['new','match'].includes(entry.match?.status))continue;
+   entry.duplicateMatch={...entry.match};
+   entry.match={status:'possible_duplicate',
+    reason:'Another EPUB with this title and author has different file bytes. Review before retaining both.'};
+   flagged++;
+  }
+ }
+ return flagged;
+}
