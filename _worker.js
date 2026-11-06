@@ -1,4 +1,6 @@
 import {handleGoodreadsApi} from './goodreads-import-api.mjs';
+import {classifyDatabaseError} from './database-errors.mjs';
+export {classifyDatabaseError} from './database-errors.mjs';
 // My Library Phase 2: private, independent Cloudflare Pages advanced-mode Worker.
 // All requests, including static assets, REQUIRE verified Cloudflare Access identity.
 // Never reuse Novel Conservatory databases, Access audience or R2 bindings.
@@ -12,21 +14,6 @@ const ROLES = new Set(['cover','dust_jacket','naked_cover','sprayed_edges','sign
 const MAX_JSON = 800_000;
 const MAX_COVER_BYTES = 8 * 1024 * 1024;
 const jwksCache = new Map();
-/** Categorize D1 failures without exposing query text, tokens or Cloudflare internals. */
-export function classifyDatabaseError(error){
-  const message=String(error?.message||error||'').toLowerCase();
-  const read=/exceeded.*(?:d1.*)?(?:daily|free tier).*row read limit|d1.*row read.*limit|daily row read limit/.test(message);
-  const write=/exceeded.*(?:d1.*)?(?:daily|free tier).*row write limit|d1.*row write.*limit|daily row write limit/.test(message);
-  if(!read&&!write)return null;
-  const reset=new Date();reset.setUTCHours(24,0,0,0);
-  return {
-    error:(read?'Cloudflare D1 daily row-read limit reached.':'Cloudflare D1 daily row-write limit reached.')+
-      ' Your saved books remain intact. Database operations can resume after the daily reset at midnight UTC.',
-    code:read?'database_read_quota':'database_write_quota',
-    reset_utc:reset.toISOString()
-  };
-}
-
 const json = (value,status=200) => new Response(JSON.stringify(value),{status,headers:HEADER});
 const fail = (message,status=400) => json({error:message},status);
 const stamp = () => new Date().toISOString();
@@ -255,6 +242,12 @@ async function serveApi(request,env,path){
   if(!db) return fail('My Library database is not configured',503);
   const method=request.method;
   if(path==='/api/session'&&method==='GET') return json({authenticated:true,owner:true});
+  if(path==='/api/health'&&method==='GET') {
+    // Lightweight, authenticated diagnostic only. No private book content
+    // is returned. A failing query is categorized by the Worker error guard.
+    await getOne(db,'SELECT 1 AS ok');
+    return json({database:'connected',authenticated:true});
+  }
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
   if(path==='/api/books'&&method==='GET') {
@@ -269,7 +262,9 @@ async function serveApi(request,env,path){
     const books=await getAll(db,
       'SELECT b.id,b.title,b.author,b.goodreads_id,b.reading_status,b.rating,b.synopsis,b.updated_at,'+
       '(SELECT im.id FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=b.id AND im.display_cover=1 ORDER BY e.is_special DESC,e.created_at LIMIT 1) AS cover_id'+
-      where+' ORDER BY b.title COLLATE NOCASE LIMIT ? OFFSET ?',[...args,limit,offset]);
+      // Use the active identity index for paging instead of a full
+      // title COLLATE NOCASE sort of thousands of imported books.
+      where+' ORDER BY b.normalized_title,b.normalized_author,b.id LIMIT ? OFFSET ?',[...args,limit,offset]);
     return json({books,total:count?.total||0,offset,limit});
   }
   if(path==='/api/books'&&method==='POST') {
