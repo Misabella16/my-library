@@ -258,14 +258,17 @@ async function serveApi(request,env,path){
     const search='%'+q.replace(/[%_\\]/g,c=>'\\'+c)+'%';
     const where=" FROM books b WHERE b.archived_at IS NULL"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
     const args=q?[search,search]:[];
-    const count=await getOne(db,'SELECT COUNT(*) AS total'+where,args);
+    // The frontend already knows the total when fetching subsequent pages.
+    // Skip scanning the full active book index on every Load more request.
+    const includeTotal=url.searchParams.get('include_total')!=='0';
+    const count=includeTotal?await getOne(db,'SELECT COUNT(*) AS total'+where,args):null;
     const books=await getAll(db,
       'SELECT b.id,b.title,b.author,b.goodreads_id,b.reading_status,b.rating,b.synopsis,b.updated_at,'+
       '(SELECT im.id FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=b.id AND im.display_cover=1 ORDER BY e.is_special DESC,e.created_at LIMIT 1) AS cover_id'+
       // Use the active identity index for paging instead of a full
       // title COLLATE NOCASE sort of thousands of imported books.
       where+' ORDER BY b.normalized_title,b.normalized_author,b.id LIMIT ? OFFSET ?',[...args,limit,offset]);
-    return json({books,total:count?.total||0,offset,limit});
+    return json({books,...(includeTotal?{total:count?.total||0}:{}),offset,limit});
   }
   if(path==='/api/books'&&method==='POST') {
     const b=await body(request), title=requiredText(b.title,'Title'), author=string(b.author,400);
