@@ -8,42 +8,58 @@
 <meta name="referrer" content="no-referrer">
 <title>My Library · Your private library</title>
 <link rel="stylesheet" href="/library.css">
+<link rel="stylesheet" href="/cute.css">
 <script type="module" src="/library.js"></script>
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/" aria-label="My Library home"><span class="brand-mark" aria-hidden="true">✦</span>
-    <span><strong>My Library</strong><small>A sister to Novel Conservatory</small></span></a>
-  <div class="account-tools"><span class="privacy">Private library</span><a class="btn subtle" href="/_logout">Log out</a></div>
+  <a class="brand" href="/" aria-label="My Library home"><span class="brand-mark" aria-hidden="true">✿</span>
+    <span><strong>My Library</strong><small>Your little bookish corner ♡</small></span></a>
+  <div class="account-tools"><span class="privacy">♡ Just for you</span><a class="btn subtle" href="/_logout">Log out</a></div>
 </header>
 <section class="hero">
   <div class="hero-inner">
-    <p class="eyebrow">My library · My reading life</p>
-    <h1>For books, <em>and every version of them.</em></h1>
-    <p class="hero-sub">A home for what you read, collect, own, annotate, and keep on your shelves.</p>
-    <p class="hero-status" id="connection-status" role="status">Connecting to your private library…</p>
+    <div class="hero-copy">
+      <p class="eyebrow">✦ A little space for your stories ✦</p>
+      <h1>A little home for <em>all your books.</em></h1>
+      <p class="hero-sub">Every story, every special edition, every well-loved copy. All tucked into one cozy place. ♡</p>
+      <p class="hero-status" id="connection-status" role="status">Preparing your bookshelf…</p>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <span class="hero-sparkle sparkle-a">✧</span>
+      <span class="hero-sparkle sparkle-b">✦</span>
+      <span class="hero-sparkle sparkle-c">✳</span>
+      <div class="book-stack">
+        <span class="spine spine-one">♡</span>
+        <span class="spine spine-two">✿</span>
+        <span class="spine spine-three">✧</span>
+        <span class="spine spine-four">♡</span>
+        <span class="spine spine-five">❀</span>
+      </div>
+      <span class="hero-note">just one more chapter ♡</span>
+    </div>
   </div>
 </section>
 <main class="main">
   <nav class="tabs" aria-label="Library sections">
-    <button class="tab active" type="button" data-tab="library" aria-current="page">Library</button>
-    <button class="tab" type="button" data-tab="shelves">My Shelves</button>
-    <button class="tab" type="button" data-tab="photos">Shelf Photos</button>
-    <button class="tab" type="button" data-tab="imports">Imports & Undo</button>
+    <button class="tab active" type="button" data-tab="library" aria-current="page"><span aria-hidden="true">📚</span> My Books</button>
+    <button class="tab" type="button" data-tab="shelves"><span aria-hidden="true">🪴</span> My Shelves</button>
+    <button class="tab" type="button" data-tab="photos"><span aria-hidden="true">📸</span> Shelf Photos</button>
+    <button class="tab" type="button" data-tab="imports"><span aria-hidden="true">🧺</span> Imports & Undo</button>
   </nav>
   <div class="notice" id="notice" role="status" hidden></div>
   <section class="tab-panel active" id="library">
     <div class="library-header">
-      <div><p class="section-kicker">The collection</p><h2>Library Explorer</h2><p class="muted" id="count">Your books will appear here.</p></div>
-      <button class="btn" type="button" id="add-book">+ Add Book</button>
+      <div><p class="section-kicker">♡ YOUR COLLECTION</p><h2>Your bookshelf <span class="heading-flower" aria-hidden="true">✿</span></h2><p class="muted" id="count">Your books will appear here.</p></div>
+      <button class="btn" type="button" id="add-book">＋ Add a Book</button>
     </div>
     <div class="toolbar">
-      <label class="search-label"><span class="visually-hidden">Search library</span><input id="search" type="search" placeholder="Search books or authors…" autocomplete="off" maxlength="150"></label>
+      <label class="search-label"><span class="visually-hidden">Search library</span><input id="search" type="search" placeholder="Find a favorite book or author…" autocomplete="off" maxlength="150"></label>
       <button class="btn subtle" type="button" id="refresh">Refresh</button>
     </div>
     <div class="layout">
       <div class="book-grid" id="book-grid" aria-live="polite">
-        <div class="empty">Loading your private books…</div>
+        <div class="empty">Getting your book nook ready… ♡</div>
       </div>
       <article class="detail" id="book-detail" aria-label="Selected book"><div class="empty"><h3>Choose a book</h3><p>Its synopsis, tags, editions and your notes will appear here.</p></div></article>
     </div>
@@ -65,7 +81,7 @@
     </div>
   </section>
 </main>
-<footer>Private by design · My Library Phase 2 · No personal book data included in the source</footer>
+<footer>Made for slow Sundays & late-night chapters ♡ <span aria-hidden="true">✦</span> Private by design</footer>
 <dialog id="add-book-dialog" aria-labelledby="add-book-title">
   <form id="add-book-form" class="form">
     <div class="modal-head"><h2 id="add-book-title">Add a Book</h2><button class="close" type="button" data-close-dialog aria-label="Close">×</button></div>
