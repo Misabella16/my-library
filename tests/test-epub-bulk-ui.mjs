@@ -337,5 +337,15 @@ test('EPUB match report shows manually excluded items',()=>{
   match:{status:'new'},excluded:true
  }]);
  assert.match(csv,/Manually excluded/);
+ assert.match(csv,/Matched catalogue title/);
  assert.match(csv,/"true"/);
+});
+
+test('EPUB report includes the exact matched catalogue title',()=>{
+ const csv=bulkEpubReport([{
+  file:{name:'alternate.epub'},
+  metadata:{title:'Short name',author:'Writer'},
+  match:{status:'match',book_id:'book-id',matched_title:'Full Book Title',matched_author:'Writer'}
+ }]);
+ assert.match(csv,/Full Book Title/);
 });
