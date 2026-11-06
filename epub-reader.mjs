@@ -154,9 +154,15 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   // illustration or the first image in the EPUB.
   if(!coverItem){
     const matches=[...manifest.values()].filter(a=>{
-      if(!/^image\\/(?:png|jpeg|webp)$/i.test(a['media-type']||''))return false;
-      const name=(a.href||'').split(/[?#]/)[0];
-      const coverName=/(?:^|\\/)(?:front[-_]?cover|cover(?:[-_]?image)?|coverimg)(?:[-_]?\\d+)?\\.(?:png|jpe?g|webp)$/i.test(name);
+      const type=(a['media-type']||'').toLowerCase();
+      if(!['image/png','image/jpeg','image/webp'].includes(type))return false;
+      const path=(a.href||'').split(/[?#]/)[0];
+      const last=path.split('/').pop()||'';
+      const dot=last.lastIndexOf('.');
+      const extension=dot<0?'':last.slice(dot+1).toLowerCase();
+      if(!['png','jpg','jpeg','webp'].includes(extension))return false;
+      const basename=last.slice(0,dot).toLowerCase();
+      const coverName=/^(?:front[-_]?cover|cover(?:[-_]?image)?|coverimg)(?:[-_]?[0-9]+)?$/.test(basename);
       const coverId=/^(?:cover|frontcover|cover-image|coverimg)$/i.test(a.id||'');
       return coverName||coverId;
     });
