@@ -4,6 +4,8 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {webcrypto} from 'node:crypto';
 import {validateImportRows} from '../goodreads-import.mjs';
+import {matchGoodreadsRows} from '../goodreads-preview.mjs';
+import {isGoodreadsImportEligible} from '../goodreads-reconciliation.mjs';
 import {handleGoodreadsApi} from '../goodreads-import-api.mjs';
 import worker from '../_worker.js';
 
@@ -227,6 +229,33 @@ test('a failed Goodreads identity lookup provides a resumable error without comm
     assert.equal(res.status,503);
     assert.equal((await res.json()).code,'database_limit_reached');
     assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,0);
+  }finally{sqlite.close();}
+});
+
+test('repeated-title Goodreads editions create one canonical work without inventing owned copies',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    const originals=[
+      {rowNumber:2,...payloadRows()[0],title:'A Tide of Treason',author:'A.B. Daniels-Annachi',goodreadsId:'701',
+        isbn13:'9781111111111'},
+      {rowNumber:3,...payloadRows()[1],title:'A Tide of Treason',author:'A.B. Daniels-Annachi',goodreadsId:'702',
+        isbn13:'9782222222222'}
+    ];
+    const preview=matchGoodreadsRows(originals,[]);
+    const eligible=preview.results.filter(isGoodreadsImportEligible);
+    assert.equal(eligible.length,1);
+    assert.equal(preview.results[1].matchReason,'possible_edition_same_work');
+    const response=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:eligible}});
+    assert.equal(response.status,201);
+    assert.equal((await response.json()).created,1);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books WHERE archived_at IS NULL').n,1);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM editions').n,0);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM copies').n,0);
+    const saved=sqlite.prepare('SELECT id,title,author,goodreads_id FROM books').all();
+    const rerun=matchGoodreadsRows(originals,saved);
+    assert.deepEqual(rerun.results.map(item=>item.matchStatus),['existing','review']);
+    assert.equal(rerun.results[1].matchReason,'possible_edition_of_existing_work');
+    assert.equal(rerun.results.filter(isGoodreadsImportEligible).length,0);
   }finally{sqlite.close();}
 });
 

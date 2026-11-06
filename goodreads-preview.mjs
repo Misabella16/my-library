@@ -100,19 +100,25 @@ export function parseGoodreadsExport(text) {
 }
 
 export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {}) {
-  const identities = new Map(), titles = new Map(), existingGoodreadsIds = new Map(),
-    csvIdentities = new Map(), csvGoodreadsIds = new Map();
-  // Mark every conflicting CSV row for review, including the first occurrence.
+  const identities = new Map(), titles = new Map(), existingGoodreadsIds = new Map();
+  const csvWorks = new Map(), csvGoodreadsIds = new Map();
+  const workKey = entry => normalize(entry.title) + '\0' + normalize(entry.author);
+
+  // Goodreads IDs identify *entries*, while title+author normally identify a
+  // work. Several entries can legitimately represent editions of one work.
   for (const entry of entries) {
-    const identity = normalize(entry.title) + '\0' + normalize(entry.author);
-    csvIdentities.set(identity, (csvIdentities.get(identity) || 0) + 1);
-    if (entry.goodreadsId)
-      csvGoodreadsIds.set(entry.goodreadsId, (csvGoodreadsIds.get(entry.goodreadsId) || 0) + 1);
+    const key = workKey(entry);
+    if (!csvWorks.has(key)) csvWorks.set(key, []);
+    csvWorks.get(key).push(entry);
+    if (entry.goodreadsId) {
+      const id = String(entry.goodreadsId).trim();
+      if (!csvGoodreadsIds.has(id)) csvGoodreadsIds.set(id, []);
+      csvGoodreadsIds.get(id).push(entry);
+    }
   }
   for (const book of existingBooks) {
-    const title = normalize(book.title);
-    const key = title + '\0' + normalize(book.author);
-    if(book.goodreads_id){
+    const title = normalize(book.title),key=title + '\0' + normalize(book.author);
+    if (book.goodreads_id) {
       const id=String(book.goodreads_id).trim();
       if(!existingGoodreadsIds.has(id))existingGoodreadsIds.set(id,[]);
       existingGoodreadsIds.get(id).push(book);
@@ -123,48 +129,66 @@ export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {
     titles.get(title).push(book);
   }
   const results = entries.map(entry => {
-    const title = normalize(entry.title), author = normalize(entry.author);
-    const identity = title + '\0' + author;
-    const repeated = csvIdentities.get(identity) > 1 ||
-      Boolean(entry.goodreadsId && csvGoodreadsIds.get(entry.goodreadsId) > 1);
-    const exact = author && title ? (identities.get(identity) || []) : [];
-    const idMatches = entry.goodreadsId ? (existingGoodreadsIds.get(entry.goodreadsId) || []) : [];
-    const titleMatches = titles.get(title) || [];
-    let matchStatus, matchReason, existingBookId = null;
-    if (repeated) {
-      // Goodreads exports can include different editions sharing the same identity.
-      matchStatus = 'review';
-      matchReason = 'repeated_csv_identity';
-    } else if (idMatches.length===1) {
-      matchStatus = 'existing';
-      matchReason = 'goodreads_id_match';
-      existingBookId = idMatches[0].id;
-    } else if(idMatches.length>1) {
-      matchStatus = 'review';
-      matchReason = 'ambiguous_library_identity';
-    } else if (!title || !author) {
-      matchStatus = 'review';
-      matchReason = 'missing_author_or_title';
-    } else if (exact.length === 1) {
-      matchStatus = 'existing';
-      matchReason = 'already_in_library';
-      existingBookId = exact[0].id;
-    } else if (exact.length > 1) {
-      matchStatus = 'review';
-      matchReason = 'ambiguous_library_identity';
-    } else if (titleMatches.length) {
-      matchStatus = 'review';
-      matchReason = 'title_author_conflict';
+    const title=normalize(entry.title),author=normalize(entry.author);
+    const key=workKey(entry),group=csvWorks.get(key)||[];
+    const sameId=entry.goodreadsId?(csvGoodreadsIds.get(String(entry.goodreadsId).trim())||[]):[];
+    const conflictingId=sameId.some(other=>workKey(other)!==key);
+    const representative=group[0];
+    const isRepresentative=representative===entry;
+    const repeated=group.length>1||sameId.length>1;
+    const exact=title&&author?(identities.get(key)||[]):[];
+    const idMatches=entry.goodreadsId?(existingGoodreadsIds.get(String(entry.goodreadsId).trim())||[]):[];
+    const titleMatches=titles.get(title)||[];
+    let matchStatus,matchReason,existingBookId=null;
+    // An ID used by different works is unsafe, even for the first row.
+    if(conflictingId){
+      matchStatus='review';matchReason='conflicting_csv_goodreads_id';
+    } else if(idMatches.length>1){
+      matchStatus='review';matchReason='ambiguous_library_identity';
+    } else if(!title||!author){
+      matchStatus='review';matchReason='missing_author_or_title';
+    } else if(exact.length>1){
+      matchStatus='review';matchReason='ambiguous_library_identity';
+    } else if(!isRepresentative&&sameId.length>1){
+      matchStatus='review';matchReason='duplicate_csv_entry';
+    } else if(!isRepresentative&&group.length>1){
+      matchStatus='review';
+      matchReason=exact.length||idMatches.length?'possible_edition_of_existing_work':'possible_edition_same_work';
+    } else if(idMatches.length===1){
+      matchStatus='existing';matchReason='goodreads_id_match';
+      existingBookId=idMatches[0].id;
+    } else if(exact.length===1){
+      matchStatus='existing';matchReason='already_in_library';
+      existingBookId=exact[0].id;
+    } else if(titleMatches.length){
+      matchStatus='review';matchReason='title_author_conflict';
     } else {
-      matchStatus = complete ? 'new' : 'unverified';
-      matchReason = complete ? 'safe_to_import' : 'incomplete_catalogue_scan';
+      // Only the first row is eligible for NEW work creation. Other entries
+      // remain in the export as edition candidates, not discarded or merged.
+      matchStatus=complete?'new':'unverified';
+      matchReason=complete
+        ?(group.length>1?'canonical_work_from_repeated_csv':'safe_to_import')
+        :'incomplete_catalogue_scan';
     }
-    return {...entry, matchStatus, matchReason, existingBookId, repeatedCsvIdentity: repeated};
+    return {
+      ...entry,matchStatus,matchReason,existingBookId,
+      repeatedCsvIdentity:repeated,
+      csvWorkGroupSize:group.length,
+      csvWorkRepresentativeRow:representative?.rowNumber??null,
+      relatedGoodreadsIds:[...new Set(group.map(row=>row.goodreadsId).filter(Boolean))],
+      isCsvWorkRepresentative:isRepresentative
+    };
   });
-  const counts = {existing:0, review:0, new:0, unverified:0, repeatedCsv:0};
-  for (const entry of results) {
+  const counts={existing:0,review:0,new:0,unverified:0,repeatedCsv:0,
+    possibleEditionRows:0,canonicalRepeatedWorks:0,duplicateIdRows:0};
+  for(const entry of results){
     counts[entry.matchStatus]++;
-    if (entry.repeatedCsvIdentity) counts.repeatedCsv++;
+    if(entry.repeatedCsvIdentity)counts.repeatedCsv++;
+    if(['possible_edition_same_work','possible_edition_of_existing_work'].includes(entry.matchReason))
+      counts.possibleEditionRows++;
+    if(entry.matchReason==='canonical_work_from_repeated_csv')counts.canonicalRepeatedWorks++;
+    if(['duplicate_csv_entry','conflicting_csv_goodreads_id'].includes(entry.matchReason))
+      counts.duplicateIdRows++;
   }
-  return {results, counts, complete};
+  return {results,counts,complete};
 }
