@@ -31,6 +31,9 @@ jobs:
           node --check epub-reader.mjs
           node --check epub-import-api.mjs
           node --check epub-ui.mjs
+          node --check epub-metadata.mjs
+          node --check epub-bulk.mjs
+          node --check shelf-photo-ui.mjs
           node --check database-errors.mjs
           node --check goodreads-reconciliation.mjs
           node --check shelf-photo-matcher.mjs

@@ -29,7 +29,7 @@ function fixtureZip(files,compressed=false){
  return Buffer.concat([...chunks,dir,eocd]);
 }
 const container='<container><rootfiles><rootfile full-path="OPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>';
-const opf='<package><metadata><dc:title>The Star &amp; Garden</dc:title><dc:creator>Anne Writer</dc:creator><dc:description>A &lt;private&gt; book.</dc:description><dc:identifier>urn:isbn:9781234567897</dc:identifier></metadata><manifest><item id="c" href="images/cover.png" media-type="image/png" properties="cover-image"/></manifest></package>';
+const opf='<package><metadata><dc:title>The Star &amp; Garden</dc:title><dc:creator>Anne Writer</dc:creator><dc:description>A &lt;private&gt; book.</dc:description><dc:identifier>urn:isbn:9781234567897</dc:identifier><dc:subject>Fantasy</dc:subject><dc:subject>Romance</dc:subject><dc:subject>fantasy</dc:subject></metadata><manifest><item id="c" href="images/cover.png" media-type="image/png" properties="cover-image"/></manifest></package>';
 const png=Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]);
 const content=()=>({'mimetype':'application/epub+zip','META-INF/container.xml':container,'OPS/content.opf':opf,'OPS/images/cover.png':png});
 test('EPUB metadata, hash and cover extraction from ZIP',async()=>{
@@ -39,6 +39,7 @@ test('EPUB metadata, hash and cover extraction from ZIP',async()=>{
  assert.equal(book.author,'Anne Writer');
  assert.equal(book.description,'A <private> book.');
  assert.equal(book.identifier,'urn:isbn:9781234567897');
+ assert.deepEqual(book.subjects,['Fantasy','Romance']);
  assert.equal(book.coverType,'image/png');
  assert.equal(book.cover.size,png.length);
  assert.equal(book.coverPath,'OPS/images/cover.png');
@@ -51,6 +52,15 @@ test('Deflate compressed EPUB XML and cover are supported',async()=>{
  assert.equal(book.title,'The Star & Garden');
  assert.equal(book.coverType,'image/png');
 });
+test('Preview omits large cover payload until upload but preserves cover path',async()=>{
+ const file=new File([fixtureZip(content())],'story.epub');
+ const book=await inspectEpub(file,{includeCover:false});
+ assert.equal(book.cover,null);
+ assert.equal(book.coverType,null);
+ assert.equal(book.coverPath,'OPS/images/cover.png');
+ assert.deepEqual(book.subjects,['Fantasy','Romance']);
+});
+
 test('EPUB2 manifest cover metadata can be read',async()=>{
  const epub2=opf.replace(' properties="cover-image"','').replace('</metadata>','<meta name="cover" content="c"/></metadata>');
  const book=await inspectEpub(new File([fixtureZip({...content(),'OPS/content.opf':epub2})],'epub2.epub'));

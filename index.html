@@ -79,10 +79,18 @@
     <div class="surface"><h2>My Shelves</h2><p>Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under <strong>My Editions & Copies</strong>.</p><div class="tip">Want to organize by genre, favorites, reading challenge or anything else? Add a personal shelf on the book page. You can also store a physical bookcase and shelf for every individual copy.</div></div>
   </section>
   <section class="tab-panel" id="photos" hidden>
-    <div class="surface"><h2>Shelf Photos</h2><p>In Phase 6, this space will let you upload pictures of whole shelves, covers or spines, identify the individual books, and match them to existing records or add a separate physical copy.</p>
-      <div class="tip"><strong>Preview only:</strong> You can select and inspect local shelf pictures here, but nothing is uploaded, analyzed, matched, saved or shared yet. The private scanning service will be a separate, tested feature.</div>
+    <div class="surface"><h2>Shelf Photos</h2><p>Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
+      <div class="tip"><strong>Privacy-first helper:</strong> Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Automatic recognition of cover artwork or spine text is not yet available; you can search for a title or author below instead. No photo or copy information is saved automatically.</div>
       <label class="upload">Choose shelf photos <input id="photo-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
+      <p id="photo-status" class="small-status" role="status">Choose a shelf photo to preview privately.</p>
       <div id="photo-preview" class="preview-pictures"></div>
+      <p id="photo-isbn-status" class="small-status" aria-live="polite">ISBN barcode detection is optional and browser-dependent.</p>
+      <div class="photo-search-controls">
+        <label for="photo-book-search">Find a pictured book by title or author</label>
+        <input id="photo-book-search" type="search" maxlength="150" placeholder="Search the collection…">
+        <button class="btn subtle" id="photo-match-search" type="button">Find book matches</button>
+      </div>
+      <div id="photo-match-results" class="photo-match-results" aria-live="polite"></div>
     </div>
   </section>
   <section class="tab-panel" id="imports" hidden>
@@ -143,19 +151,24 @@
     </section>
     <section class="epub-tool surface" aria-labelledby="epub-heading">
       <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
-      <h3 id="epub-heading">Add your saved EPUBs</h3>
-      <p>Choose up to 50 EPUBs per batch. Preview their embedded titles, authors and covers locally. Only eligible files are saved after you confirm. Matching books keep their notes, shelves and special-edition covers.</p>
+      <h3 id="epub-heading">Import EPUB files or an entire folder</h3>
+      <p>Select up to 3,000 EPUBs per session, including nested folders. Metadata is inspected on your Mac, then matches are checked in low-D1-read groups of 50. Originals remain on your computer. Embedded covers and source-backed subject tags are saved privately only for eligible books, and existing notes, physical copies and special-edition covers are preserved.</p>
       <div class="goodreads-actions">
-        <label class="goodreads-file-label" for="epub-files">Choose EPUBs
+        <label class="goodreads-file-label" for="epub-files">Choose EPUB files
           <input id="epub-files" type="file" accept=".epub,application/epub+zip" multiple>
         </label>
-        <button class="btn subtle" id="preview-epubs" type="button" disabled>Preview EPUB metadata</button>
+        <label class="goodreads-file-label" for="epub-folder">Choose an EPUB folder
+          <input id="epub-folder" type="file" accept=".epub,application/epub+zip" webkitdirectory directory multiple>
+        </label>
+        <button class="btn subtle" id="preview-epubs" type="button" disabled>Preview selected books</button>
+        <button class="btn subtle" id="epub-download-report" type="button" disabled>Download EPUB match report</button>
         <button class="btn" id="upload-epubs" type="button" disabled>Save eligible EPUBs privately</button>
       </div>
-      <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files to begin. Maximum 24 MB per EPUB.</p>
+      <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files or a folder to begin. Maximum 24 MB per EPUB; 3,000 EPUBs per session.</p>
+      <p class="small-status" id="epub-import-summary" aria-live="polite">No EPUBs previewed yet.</p>
       <progress id="epub-import-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="EPUB upload progress"></progress>
       <div id="epub-preview-list" class="epub-preview-list" aria-live="polite"></div>
-      <p class="goodreads-private-note"><strong>Private storage.</strong> Original EPUBs and extracted covers are uploaded only to your owner-protected storage after you select Save. Existing records are never replaced. Already uploaded or ambiguous books remain visible for review. The upload does not automatically create a physical owned copy.</p>
+      <p class="goodreads-private-note"><strong>Private storage.</strong> EPUB files, embedded covers, and explicit OPF subject tags are saved only to your owner-protected library after you select Save. Uncertain or missing metadata is held for review; you can correct titles/authors without changing the original file. Upload failures can be retried without restarting the entire folder. Imported EPUBs never create physical owned copies or overwrite special-edition artwork.</p>
     </section>
     <div class="two-columns"><div class="tip"><strong>Goodreads</strong><p>Import new books with shelves, ratings, reviews and dates read. See each batch and Undo it safely.</p></div><div class="tip"><strong>EPUBs</strong><p>Preview EPUB metadata and import private digital editions without overwriting existing book records.</p></div><div class="tip"><strong>Special editions</strong><p>Edition-specific FairyLoot, Illumicrate, OwlCrate and other covers.</p></div><div class="tip"><strong>Undo</strong><p>Undo completed Goodreads batches by archiving only unchanged imported books. Any subsequent edits stop reversal safely.</p></div></div>
   </div>

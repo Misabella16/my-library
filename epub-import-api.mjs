@@ -1,3 +1,4 @@
+import {cleanEpubTitle,cleanEpubAuthor,normalizeEpubTitle} from './epub-metadata.mjs';
 // Owner-only private EPUB intake. The enclosing Worker already verifies Access
 // and write origin. One file per request keeps D1/R2 usage predictable.
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store'};
@@ -23,9 +24,11 @@ export async function matchEpub(db,{title,author,sha256}){
       'SELECT id,book_id,edition_id,original_filename FROM epub_files WHERE sha256=?',[sha256]);
     if(duplicate)return {status:'already_uploaded',existing:duplicate};
   }
-  const normalizedTitle=normalizeEpubText(title),normalizedAuthor=normalizeEpubText(author);
+  const normalizedTitle=normalizeEpubTitle(title),normalizedAuthor=normalizeEpubText(author);
   if(!normalizedTitle||!normalizedAuthor)
     return {status:'needs_review',reason:'EPUB title or author is missing'};
+  // Only auto-match when original EPUB metadata confirms both title and
+  // author. Filename-only fallbacks remain in manual review.
   // Use indexed active identity, plus a conservative same-title check.
   const same=await many(db,
     'SELECT id,title,author FROM books WHERE archived_at IS NULL AND normalized_title=? LIMIT 101',
@@ -55,7 +58,7 @@ export async function batchPreviewEpub(db,items){
   if(!Array.isArray(items)||items.length<1||items.length>50)
     throw Error('Preview 1 to 50 EPUBs at a time');
   const inputs=items.map(item=>({
-    title:clean(item?.title,300),author:clean(item?.author,400),
+    title:cleanEpubTitle(item?.title),author:cleanEpubAuthor(item?.author),
     sha256:String(item?.sha256||'')
   }));
   if(inputs.some(x=>!/^[a-f0-9]{64}$/.test(x.sha256)))
@@ -66,7 +69,7 @@ export async function batchPreviewEpub(db,items){
     'SELECT id,sha256,book_id,edition_id,original_filename FROM epub_files WHERE sha256 IN ('+
     values(hashes)+')',hashes);
   const hashIndex=new Map(existing.map(row=>[row.sha256,row]));
-  const titleKeys=[...new Set(inputs.map(i=>normalizeEpubText(i.title)).filter(Boolean))];
+  const titleKeys=[...new Set(inputs.map(i=>normalizeEpubTitle(i.title)).filter(Boolean))];
   const books=titleKeys.length?await many(db,
     'SELECT id,title,author,normalized_title FROM books WHERE archived_at IS NULL AND normalized_title IN ('+
     values(titleKeys)+') LIMIT 5051',titleKeys):[];
@@ -76,22 +79,42 @@ export async function batchPreviewEpub(db,items){
     groups.get(b.normalized_title).push(b);
   }
   const truncated=books.length>=5051;
+  // A bounded second lookup handles older ASCII-only title normalization.
+  const legacyNormalize=value=>String(value||'').normalize('NFKC').toLowerCase()
+    .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  const legacyKeys=[...new Set(inputs.map(item=>legacyNormalize(item.title))
+    .filter((key,i)=>key!==normalizeEpubTitle(inputs[i].title)))];
+  const oldBooks=legacyKeys.length?await many(db,
+    'SELECT id,title,author,normalized_title FROM books WHERE archived_at IS NULL AND normalized_title IN ('+
+    values(legacyKeys)+') LIMIT 5051',legacyKeys):[];
+  const oldGroups=new Map();
+  for(const b of oldBooks){
+    if(!oldGroups.has(b.normalized_title))oldGroups.set(b.normalized_title,[]);
+    oldGroups.get(b.normalized_title).push(b);
+  }
+  const legacyTruncated=oldBooks.length>=5051;
   const outcomes=inputs.map(item=>{
     const hash=hashIndex.get(item.sha256);
     if(hash)return {status:'already_uploaded',existing:hash};
-    const title=normalizeEpubText(item.title),author=normalizeEpubText(item.author);
+    const title=normalizeEpubTitle(item.title),author=normalizeEpubText(item.author);
     if(!title||!author)return {status:'needs_review',reason:'EPUB title or author is missing'};
     if(truncated)return {status:'needs_review',reason:'Catalogue match requires individual review'};
     const group=groups.get(title)||[];
     if(group.length>=101)return {status:'needs_review',reason:'Too many existing books match this title'};
-    const exact=group.filter(b=>normalizeEpubText(b.author)===author);
+    const exact=group.filter(b=>normalizeEpubText(b.author)===author&&
+      normalizeEpubTitle(b.title)===title);
     if(exact.length===1)return {status:'match',book_id:exact[0].id};
     if(exact.length||group.length)return {status:'needs_review',reason:'Same title has a conflicting or ambiguous author'};
-    // Rare legacy Unicode title matches use the targeted server fallback at
-    // upload time. Flag those rather than pretending the preview is certain.
-    const legacy=String(item.title).normalize('NFKC').toLowerCase()
-      .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
-    if(legacy!==title)return {status:'needs_review',reason:'Non-Latin title needs an individual match review'};
+    // Unicode entries can be confidently previewed after the second
+    // indexed check; a true old-title collision still needs manual review.
+    const legacy=legacyNormalize(item.title);
+    if(legacy!==title){
+      if(legacyTruncated)return {status:'needs_review',reason:'Legacy title matches are ambiguous'};
+      const old=(oldGroups.get(legacy)||[]).filter(b=>normalizeEpubTitle(b.title)===title);
+      const exactOld=old.filter(b=>normalizeEpubText(b.author)===author);
+      if(exactOld.length===1)return {status:'match',book_id:exactOld[0].id};
+      if(old.length)return {status:'needs_review',reason:'Ambiguous older title normalization'};
+    }
     return {status:'new'};
   });
   return outcomes;
@@ -123,7 +146,11 @@ export async function handleEpubApi(request,db,env,path){
     let metadata;
     try{metadata=JSON.parse(form.get('metadata')||'{}');}
     catch{return bad('Invalid EPUB metadata');}
-    const title=clean(metadata.title,300),author=clean(metadata.author,400);
+    const title=cleanEpubTitle(metadata.title),author=cleanEpubAuthor(metadata.author);
+    const subjectList=Array.isArray(metadata.subjects)?metadata.subjects.slice(0,8):[];
+    if(subjectList.some(tag=>typeof tag!=='string'||!tag.trim()||tag.trim().length>90))
+      return bad('Invalid EPUB subject tags');
+    const subjects=[...new Map(subjectList.map(tag=>[tag.trim().toLocaleLowerCase(),tag.trim()])).values()];
     const expected=String(metadata.sha256||'');
     if(!/^[a-f0-9]{64}$/.test(expected))return bad('Invalid EPUB hash');
     const bytes=new Uint8Array(await file.arrayBuffer());
@@ -167,9 +194,22 @@ export async function handleEpubApi(request,db,env,path){
       const statements=[];
       if(matched.status==='new'){
         statements.push(db.prepare(
-          'INSERT INTO books (id,title,author,normalized_title,normalized_author,created_at,updated_at) '+
-          'VALUES (?,?,?,?,?,?,?)'
-        ).bind(bookId,title,author,normalizeEpubText(title),normalizeEpubText(author),ts,ts));
+          'INSERT INTO books (id,title,author,normalized_title,normalized_author,synopsis,created_at,updated_at) '+
+          'VALUES (?,?,?,?,?,?,?,?)'
+        ).bind(bookId,title,author,normalizeEpubText(title),normalizeEpubText(author),
+          clean(metadata.description,3000),ts,ts));
+      }
+      // Only use explicit EPUB OPF subjects. Tags are added, never removed
+      // or fabricated, and a successful import's book record remains intact.
+      for(const subject of subjects){
+        const tagId=uuid();
+        statements.push(db.prepare(
+          "INSERT OR IGNORE INTO tags(id,label,kind) VALUES (?,?,'imported')"
+        ).bind(tagId,subject));
+        statements.push(db.prepare(
+          "INSERT OR IGNORE INTO book_tags(book_id,tag_id,source) "+
+          "SELECT ?,id,'epub' FROM tags WHERE label=? COLLATE NOCASE"
+        ).bind(bookId,subject));
       }
       // Never attach EPUB artwork to special or physical editions.
       const ebook=await one(db,
@@ -192,7 +232,7 @@ export async function handleEpubApi(request,db,env,path){
         'book_id,edition_id,batch_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)'
       ).bind(fileId,actual,titleSafe,normalizeEpubText(title),key,JSON.stringify({
         title,author,description:clean(metadata.description,3000),
-        identifier:clean(metadata.identifier,250),cover_extracted:!!coverBytes
+        identifier:clean(metadata.identifier,250),subjects,cover_extracted:!!coverBytes
       }),bookId,targetEdition,batchId,ts));
       if(coverBytes){
         const existing=ebook?await one(db,
