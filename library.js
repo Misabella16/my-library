@@ -1,6 +1,7 @@
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
+import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
 'use strict';
@@ -131,7 +132,8 @@ function editionBlock(e){
       '<label>Details<textarea name="details" rows="3">'+safe(e.details)+'</textarea></label>'+
       '<div class="actions"><button class="btn mini" type="submit">Save edition</button></div></form></details>'+
     '<details class="collapse"><summary>Edition covers '+(imgCover?'· Selected':'')+'</summary>'+
-      '<p class="muted">Upload a cover from your collection. Automatic edition-cover retrieval is planned for Phase 5.</p>'+
+      '<p class="muted">Upload an exact cover from your collection. For collector editions, research the specific vendor and ISBN first; results are not verified and nothing is saved automatically.</p>'+
+      '<div class="edition-cover-search">'+editionCoverSearches({title:state.detail?.title,author:state.detail?.author,vendor:e.vendor,edition_name:e.edition_name,isbn:e.isbn}).map(item=>'<a class="btn mini subtle" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" href="'+safe(item.url)+'">'+safe(item.label)+'</a>').join('')+'</div>'+
       (thumbnails?'<div class="cover-thumbs">'+thumbnails+'</div>':'<p class="muted">No cover images yet.</p>')+
       '<label class="upload">Upload cover (JPG, PNG or WebP; max 8 MB)<input type="file" accept="image/jpeg,image/png,image/webp" data-upload-cover="'+safe(e.id)+'"></label></details>'+
     '<h4>My copies</h4>'+(copyRows||'<p class="muted">No owned copies recorded. Add one above.</p>')+
