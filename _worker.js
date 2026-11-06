@@ -70,11 +70,17 @@ function validTeamDomain(raw) {
 async function loadJwks(team,refresh=false) {
   const cache = jwksCache.get(team);
   if(!refresh && cache && cache.until>Date.now()) return cache.keys;
-  const res=await fetch(team+'/cdn-cgi/access/certs',{redirect:'error',headers:{accept:'application/json'}});
-  if(!res.ok) throw Error('Access keys unavailable');
-  const data=await res.json();
+  let res;
+  try {
+    res=await fetch(team+'/cdn-cgi/access/certs',{redirect:'follow',headers:{accept:'application/json'}});
+  } catch {
+    throw Error('signing_keys_fetch_failed');
+  }
+  if(!res.ok) throw Error('signing_keys_http_error');
+  let data;
+  try {data=await res.json();} catch {throw Error('signing_keys_invalid_response');}
   const keys=Array.isArray(data.keys)?data.keys:[];
-  if(!keys.length) throw Error('Missing Access keys');
+  if(!keys.length) throw Error('signing_keys_invalid_response');
   jwksCache.set(team,{keys,until:Date.now()+15*60*1000});
   return keys;
 }
@@ -105,17 +111,36 @@ export async function verifyAccess(request,env){
        (claims.nbf!=null && (!Number.isFinite(claims.nbf)||claims.nbf>now)) ||
        (claims.iat!=null && (!Number.isFinite(claims.iat)||claims.iat>now+60)))
       return {ok:false,reason:'claims_invalid'};
-    let keys=await loadJwks(team);
+    let keys;
+    try {keys=await loadJwks(team);} catch (error) {
+      // No JWKS contents, URLs or certificates are included in error codes.
+      const reason=String(error?.message||'');
+      return {ok:false,reason:reason.startsWith('signing_keys_')?reason:'signing_keys_fetch_failed'};
+    }
     let jwk=keys.find(k=>k.kid===header.kid && k.kty==='RSA' && (!k.alg||k.alg==='RS256'));
     if(!jwk) {
-      keys=await loadJwks(team,true);
+      try {keys=await loadJwks(team,true);} catch (error) {
+        const reason=String(error?.message||'');
+        return {ok:false,reason:reason.startsWith('signing_keys_')?reason:'signing_keys_fetch_failed'};
+      }
       jwk=keys.find(k=>k.kid===header.kid && k.kty==='RSA' && (!k.alg||k.alg==='RS256'));
     }
     if(!jwk) return {ok:false,reason:'unknown_key'};
-    const key=await crypto.subtle.importKey('jwk',jwk,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
-    const sig=decodeBase64url(parts[2]);
+    if(typeof jwk.n!=='string'||typeof jwk.e!=='string')
+      return {ok:false,reason:'signing_keys_invalid_response'};
+    let key;
+    try {
+      // Import only the RSA public-key fields, excluding any unsupported JWK metadata.
+      key=await crypto.subtle.importKey('jwk',
+        {kty:'RSA',n:jwk.n,e:jwk.e,alg:'RS256',ext:true},
+        {name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+    } catch {return {ok:false,reason:'signing_key_import_failed'};}
+    let sig;
+    try {sig=decodeBase64url(parts[2]);} catch {return {ok:false,reason:'token_signature_malformed'};}
     const data=new TextEncoder().encode(parts[0]+'.'+parts[1]);
-    const valid=await crypto.subtle.verify('RSASSA-PKCS1-v1_5',key,sig,data);
+    let valid;
+    try {valid=await crypto.subtle.verify('RSASSA-PKCS1-v1_5',key,sig,data);}
+    catch {return {ok:false,reason:'signature_verification_failed'};}
     return valid?{ok:true,email:owner}:{ok:false,reason:'signature'};
   } catch {return {ok:false,reason:'invalid'};}
 }
