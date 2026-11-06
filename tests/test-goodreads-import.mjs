@@ -176,6 +176,23 @@ test('Owner-only compact identity catalogue returns all books in pages, without 
     assert.equal(next.total,2);
     assert.equal(next.books.length,1);
     assert.notEqual(next.books[0].id,result.books[0].id);
+    const firstCursor=await (await call(db,'/api/imports/catalogue?limit=1&cursor=&include_total=1')).json();
+    assert.equal(firstCursor.total,2);
+    assert.equal(firstCursor.books.length,1);
+    assert.equal(firstCursor.has_more,true);
+    assert.ok(firstCursor.next_cursor);
+    const secondCursor=await (await call(db,
+      '/api/imports/catalogue?limit=1&cursor='+firstCursor.next_cursor)).json();
+    assert.equal(secondCursor.books.length,1);
+    assert.equal(secondCursor.has_more,true);
+    assert.equal('total' in secondCursor,false,'Following pages must not re-run COUNT');
+    assert.notEqual(firstCursor.books[0].id,secondCursor.books[0].id);
+    const doneCursor=await (await call(db,
+      '/api/imports/catalogue?limit=1&cursor='+secondCursor.next_cursor)).json();
+    assert.deepEqual(doneCursor.books,[]);
+    assert.equal(doneCursor.has_more,false);
+    const badCursor=await call(db,'/api/imports/catalogue?limit=1&cursor=bad');
+    assert.equal(badCursor.status,400);
     const malformed=await call(db,'/api/imports/catalogue?limit=1001&offset=0');
     assert.equal(malformed.status,400);
     assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,2);
