@@ -139,12 +139,15 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  previewButton.addEventListener('click',async()=>{
   if(running||!files.length||files.length>MAX_SELECTION)return;
   running=true;previewComplete=false;previewButton.disabled=true;uploadButton.disabled=true;
-  items=[];visible=PAGE_SIZE;lastPreviewCount=0;
-  const seen=new Set();
-  progress.hidden=false;progress.max=files.length;progress.value=0;
+  // A failed preview resumes at the last fully matched batch, rather than
+  // repeating SHA hashing and D1 lookups for previously completed chunks.
+  const completed=items.length;
+  const seen=new Set(items.map(x=>x.metadata?.sha256).filter(Boolean));
+  lastPreviewCount=completed;
+  progress.hidden=false;progress.max=files.length;progress.value=completed;
   try{
-   for(let start=0;start<files.length;start+=PREVIEW_BATCH){
-    const batch=files.slice(start,start+PREVIEW_BATCH),toMatch=[];
+   for(let start=completed;start<files.length;start+=PREVIEW_BATCH){
+    const batch=files.slice(start,start+PREVIEW_BATCH),toMatch=[],pending=[];
     for(const file of batch){
      const entry={file,metadata:null,match:{status:'needs_review'},error:null};
      try{
@@ -163,9 +166,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
        }else toMatch.push(entry);
       }
      }catch(error){entry.error=error.message||'Could not inspect EPUB';}
-     items.push(entry);
-     lastPreviewCount++;
-     progress.value=lastPreviewCount;
+     pending.push(entry);
     }
     if(toMatch.length){
      const payload=await api('/api/epubs/preview',{
@@ -177,6 +178,11 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       throw Error('Incomplete EPUB matching response');
      toMatch.forEach((entry,i)=>{entry.match=payload.results[i];});
     }
+    // Commit each batch only after its D1 preview succeeds. On failure,
+    // no partially matched cards or hashes survive to poison a resume.
+    items.push(...pending);
+    lastPreviewCount=items.length;
+    progress.value=lastPreviewCount;
     inform('Inspected '+lastPreviewCount+' of '+files.length+
      ' EPUBs. Database previews are limited to '+PREVIEW_BATCH+' at a time.');
     // Release the event loop for rendering and other browser interactions.
@@ -188,7 +194,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   }catch(error){
    previewComplete=false;render();
    inform('Preview interrupted after '+lastPreviewCount+' files: '+
-    (error.message||'Request failed')+'. No EPUBs were uploaded. Preview again to resume.');
+    (error.message||'Request failed')+'. No EPUBs were uploaded. Click Preview again to resume from the last completed batch.');
   }finally{running=false;previewButton.disabled=false;render();}
  });
  uploadButton.addEventListener('click',async()=>{
