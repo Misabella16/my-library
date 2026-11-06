@@ -253,7 +253,7 @@ async function serveApi(request,env,path){
     const args=q?[search,search]:[];
     const count=await getOne(db,'SELECT COUNT(*) AS total'+where,args);
     const books=await getAll(db,
-      'SELECT b.id,b.title,b.author,b.reading_status,b.rating,b.synopsis,b.updated_at,'+
+      'SELECT b.id,b.title,b.author,b.goodreads_id,b.reading_status,b.rating,b.synopsis,b.updated_at,'+
       '(SELECT im.id FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=b.id AND im.display_cover=1 ORDER BY e.is_special DESC,e.created_at LIMIT 1) AS cover_id'+
       where+' ORDER BY b.title COLLATE NOCASE LIMIT ? OFFSET ?',[...args,limit,offset]);
     return json({books,total:count?.total||0,offset,limit});
