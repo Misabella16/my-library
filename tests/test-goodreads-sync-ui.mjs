@@ -76,6 +76,9 @@ test('No Goodreads existing-book writes until explicit preview and confirmation'
   await f.get('goodreads-sync-confirm').dispatch('click');
   await f.get('goodreads-sync-yes').dispatch('click');
   assert.equal(countCalls(f.requests,path),1);
+  const reviewed=f.requests.find(x=>x.path===path).args.data.rows[0].expected_plan;
+  assert.equal(reviewed.changes.rating,5);
+  assert.equal(reviewed.updated_at,'2026-01-01');
   assert.equal(f.counts().committed,1);
   assert.equal(f.counts().refreshed,1);
   assert.match(f.get('goodreads-sync-feedback').textContent,/1 books enriched/);
