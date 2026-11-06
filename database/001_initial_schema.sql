@@ -78,6 +78,17 @@ CREATE INDEX IF NOT EXISTS idx_editions_book ON editions(book_id);
 CREATE INDEX IF NOT EXISTS idx_editions_isbn ON editions(isbn);
 CREATE INDEX IF NOT EXISTS idx_editions_vendor ON editions(vendor);
 
+-- One record per distinct edition type, regardless of retailer for standard editions.
+-- Distinct special-edition releases must have distinct names or ISBNs.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_type
+  ON editions (book_id, format, is_special, lower(trim(edition_name)),
+    CASE WHEN is_special=1 THEN lower(trim(vendor)) ELSE '' END);
+-- ISBN formatting differences (hyphens and spaces) are not separate editions.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_editions_unique_isbn
+  ON editions (book_id, upper(replace(replace(trim(isbn),'-',''),' ','')))
+  WHERE isbn IS NOT NULL AND trim(isbn)<>'';
+
+
 -- A physical copy is not the same thing as an edition.
 CREATE TABLE IF NOT EXISTS copies (
   id TEXT PRIMARY KEY,
