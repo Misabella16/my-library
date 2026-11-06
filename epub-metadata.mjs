@@ -7,9 +7,10 @@ const junk = [
 export function cleanEpubTitle(value=''){
   let title=String(value??'').normalize('NFKC').trim();
   title=title.replace(/\.epub$/i,'').trim();
-  for(const expression of junk)title=title.replace(expression,' ').trim();
-  // Numeric download suffixes are not part of a bibliographic title.
+  // Remove a trailing download counter before trimming download-service
+  // markers, so "Babel (Z-Library) (2)" becomes "Babel".
   title=title.replace(/\s*\(\d{1,3}\)\s*$/,'').trim();
+  for(const expression of junk)title=title.replace(expression,' ').trim();
   // A duplicate download counter can hide a trailing source marker.
   for(const expression of junk)title=title.replace(expression,' ').trim();
   return title.replace(/\s+/g,' ').trim().slice(0,300);
