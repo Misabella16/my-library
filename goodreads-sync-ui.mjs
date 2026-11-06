@@ -198,7 +198,9 @@ export function initGoodreadsSync(api,{onImported=async()=>{}}={}){
    for(const chunk of chunks){
     tell('Syncing batch '+(done+1)+' of '+chunks.length+'…');
     const response=await api('/api/imports/goodreads/sync',
-      {method:'POST',data:{rows:chunk.map(x=>x.item)}});
+      {method:'POST',data:{rows:chunk.map(x=>({
+        ...x.item,expected_plan:{updated_at:x.plan.updated_at,changes:x.plan.changes}
+      }))}});
     applied+=response.updated||0;
     fields+=response.fields_added||0;
     shelves+=response.shelves_added||0;
