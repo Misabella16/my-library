@@ -21,10 +21,8 @@
   --garden-gold:#c7aa81;
 }
 body{
-  background:
-    radial-gradient(ellipse at 8% 11%,rgba(239,207,216,.32),transparent 34%),
-    radial-gradient(ellipse at 88% 49%,rgba(208,226,227,.32),transparent 37%),
-    #faf5ee;
+  /* Neutral parchment backdrop; pastel accents live in cards and illustrations. */
+  background:#faf8f4;
   color:var(--ink);
   font-family:Georgia,"Times New Roman",serif;
 }
@@ -52,12 +50,8 @@ body{
   isolation:isolate;
   overflow:hidden;
   color:#604858;
-  background:
-    radial-gradient(ellipse 250px 105px at 10% 17%,rgba(255,255,255,.80),transparent 98%),
-    radial-gradient(ellipse 230px 95px at 83% 18%,rgba(255,255,255,.65),transparent 98%),
-    radial-gradient(ellipse 280px 125px at 45% 5%,rgba(255,255,255,.53),transparent 96%),
-    linear-gradient(to top,rgba(190,210,181,.40),transparent 35%),
-    linear-gradient(115deg,#e9edf0 0%,#f3e9ed 42%,#f5e5e2 75%,#f2ebe2 100%);
+  /* Very quiet ivory gradient, with just a hint of rose. */
+  background:linear-gradient(112deg,#fbfaf6 0%,#f8f5ef 58%,#f7f1ee 100%);
   border-bottom:5px double #d5c5b4;
 }
 .hero:before{
@@ -66,7 +60,7 @@ body{
   z-index:-1;
   width:650px;height:410px;
   bottom:-280px;left:-120px;top:auto;right:auto;
-  background:radial-gradient(ellipse at center,#9ebda977,#9ebda900 70%);
+  background:radial-gradient(ellipse at center,rgba(181,190,165,.09),transparent 72%);
   border:none;
   border-radius:50%;
 }
@@ -76,7 +70,7 @@ body{
   z-index:-1;
   width:720px;height:460px;
   bottom:-330px;right:-70px;top:auto;left:auto;
-  background:radial-gradient(ellipse at center,#acc6bd88,#9ebda900 70%);
+  background:radial-gradient(ellipse at center,rgba(190,185,169,.08),transparent 72%);
   border:none;
   border-radius:50%;
 }
