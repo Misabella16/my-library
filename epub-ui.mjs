@@ -196,7 +196,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   if(!eligible.length)return;
   running=true;previewButton.disabled=true;uploadButton.disabled=true;
   progress.hidden=false;progress.max=eligible.length;progress.value=0;
-  let saved=0,skipped=0,failed=0;
+  let saved=0,skipped=0,failed=0,pausedReason='';
   for(const entry of eligible){
    if(!running)break;
    try{
@@ -229,8 +229,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     const code=error?.payload?.code;
     if(['database_read_quota','database_write_quota','database_storage_limit',
       'database_limit_reached'].includes(code)){
-     inform('Upload paused because Cloudflare reached a database limit. '+
-      saved+' files are safely saved. Retry remaining files after the quota resets.');
+     pausedReason='Upload paused because Cloudflare reached a database limit. '+
+      saved+' files are safely saved. Retry remaining files after the quota resets.';
+     inform(pausedReason);
      progress.value=saved+skipped+failed;
      render();break;
     }
@@ -241,7 +242,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   running=false;render();previewButton.disabled=false;
   try{if(saved)await onImported();}catch{}
   const remaining=items.filter(canImport).length;
-  inform('Batch update: '+saved+' uploaded, '+skipped+' skipped, '+
+  inform((pausedReason?pausedReason+' ':'')+'Batch update: '+saved+' uploaded, '+skipped+' skipped, '+
    failed+' failed or needing retry. '+remaining+' eligible files remain. '+
    'Your original EPUBs were not modified.');
  });
