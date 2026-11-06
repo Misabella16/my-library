@@ -51,7 +51,7 @@ test('Cloudflare D1 quota and temporary errors are classified without leaking SQ
   const category=classifyDatabaseError(nested);
   assert.equal(category.code,'database_read_quota');
   assert.equal(category.retryable,false);
-  assert.match(category.reset_utc,/T00:00:00\\.000Z$/);
+  assert.ok(category.reset_utc.endsWith('T00:00:00.000Z'));
   assert.equal(JSON.stringify(category).includes('D1_ERROR'),false);
   assert.equal(classifyDatabaseError(new Error(write)).code,'database_write_quota');
   assert.equal(classifyDatabaseError(new Error('D1 DB is overloaded. Requests queued for too long.')).code,
