@@ -45,7 +45,7 @@ function parseCsv(text, maxRows = MAX_GOODREADS_ROWS) {
 const clean = value => String(value ?? '').trim();
 const heading = value => clean(value).toLowerCase().replace(/\s+/g, ' ');
 const normalize = value => clean(value).normalize('NFKC').toLowerCase()
-  .replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
 const safeISBN = value => clean(value).replace(/^="(.*)"$/, '$1');
 const numericRating = value => {
   const raw = clean(value);
@@ -61,8 +61,9 @@ export function parseGoodreadsExport(text) {
   if (!all.length) throw Error('The CSV does not contain a header row.');
   const headers = all.shift().map(heading);
   if (new Set(headers).size !== headers.length) throw Error('The CSV has duplicate column headers.');
-  if (!headers.includes('title') || !headers.includes('author'))
-    throw Error('This does not look like a Goodreads export. The Title and Author columns are required.');
+  if (!headers.includes('title') || !headers.includes('author') ||
+      !['book id','exclusive shelf','bookshelves'].some(name => headers.includes(name)))
+    throw Error('Choose a Goodreads library CSV export with Title, Author, and Goodreads shelf or book ID columns.');
   const get = (cells, field) => clean(cells[headers.indexOf(field)] ?? '');
   const entries = [];
   const warnings = [];
@@ -113,10 +114,13 @@ export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {
     const identity = title + '\0' + author;
     const repeated = csvIdentities.has(identity);
     csvIdentities.set(identity, (csvIdentities.get(identity) || 0) + 1);
-    const exact = author ? (identities.get(identity) || []) : [];
+    const exact = author && title ? (identities.get(identity) || []) : [];
     const titleMatches = titles.get(title) || [];
     let matchStatus, existingBookId = null;
-    if (exact.length === 1) {
+    if (!title || !author || repeated) {
+      // Without both identity fields, or when CSV identities repeat, never promise a new record.
+      matchStatus = 'review';
+    } else if (exact.length === 1) {
       matchStatus = 'existing';
       existingBookId = exact[0].id;
     } else if (exact.length > 1 || titleMatches.length) {
