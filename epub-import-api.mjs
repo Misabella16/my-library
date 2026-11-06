@@ -87,6 +87,12 @@ export async function batchPreviewEpub(db,items){
     'SELECT id,sha256,book_id,edition_id,original_filename FROM epub_files WHERE sha256 IN ('+
     values(hashes)+')',hashes);
   const hashIndex=new Map(existing.map(row=>[row.sha256,row]));
+  // Entire batches of already-imported EPUBs need exactly one indexed
+  // hash lookup, not title, alias, ISBN and legacy catalogue reads.
+  if(inputs.every(item=>hashIndex.has(item.sha256)))
+    return inputs.map(item=>({
+      status:'already_uploaded',existing:hashIndex.get(item.sha256)
+    }));
   const titleKeys=[...new Set(inputs.map(i=>normalizeEpubTitle(i.title)).filter(Boolean))];
   const books=titleKeys.length?await many(db,
     'SELECT id,title,author,normalized_title FROM books WHERE archived_at IS NULL AND normalized_title IN ('+

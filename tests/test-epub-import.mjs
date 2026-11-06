@@ -345,3 +345,19 @@ test('Private EPUB list is bounded and never exposes R2 storage paths',async()=>
   assert.equal(JSON.stringify(data).includes('epubs/'),false);
  }finally{f.sqlite.close();}
 });
+
+test('Re-import preview of entirely known EPUB hashes uses only one indexed D1 query',async()=>{
+ const f=fixture();
+ try{
+  const meta=await validMeta();
+  const uploaded=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(uploaded.status,201);
+  const before=f.queries();
+  const results=await batchPreviewEpub(f.db,[meta,meta]);
+  assert.equal(f.queries()-before,1);
+  assert.equal(results.length,2);
+  assert.equal(results[0].status,'already_uploaded');
+  assert.equal(results[1].status,'already_uploaded');
+  assert.equal(results[0].existing.id,results[1].existing.id);
+ }finally{f.sqlite.close();}
+});
