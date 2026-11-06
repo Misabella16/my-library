@@ -43,6 +43,22 @@ test('valid Cloudflare Access signature and exact owner email work',async()=>{
   assert.equal(response.headers.get('cache-control'),'no-store');
 });
 
+test('Cloudflare signing-key fetch errors have a specific safe code',async()=>{
+  const originalFetch=globalThis.fetch;
+  try {
+    globalThis.fetch=async()=>{throw Error('network failure with private detail');};
+    const token=await jwt();
+    const badEnv={...env,ACCESS_TEAM_DOMAIN:'https://different-team.cloudflareaccess.com'};
+    // A token with a different issuer gets denied before attempting to fetch keys.
+    assert.equal((await verifyAccess(req('https://books.example.com/',token),badEnv)).reason,'team_domain_mismatch');
+    // A team-shaped test token advances to the key-fetch stage.
+    const signedForNewTeam=await jwt({iss:'https://different-team.cloudflareaccess.com'});
+    const failed=await verifyAccess(req('https://books.example.com/',signedForNewTeam),badEnv);
+    assert.deepEqual(failed,{ok:false,reason:'signing_keys_fetch_failed'});
+    assert.equal(JSON.stringify(failed).includes('private detail'),false);
+  } finally {globalThis.fetch=originalFetch;}
+});
+
 test('invalid Access configuration is diagnosed without exposing values',async()=>{
   const request=new Request('https://books.example.com/api/session');
   for(const [changes, reason] of [
