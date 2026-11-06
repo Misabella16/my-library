@@ -36,13 +36,12 @@ async function importChunk(request,db){
       "SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL AND "+
       "(normalized_title=? OR title=? COLLATE NOCASE OR (goodreads_id=? AND ?<>'')) LIMIT 30",
       [data.normalized_title,data.title,data.goodreadsId||'',data.goodreadsId||'']);
-    if(matches.some(book=>data.goodreadsId && book.goodreads_id===data.goodreadsId)){
-      skipped.goodreads_id_conflict++;continue;
-    }
-    if(matches.some(book=>importNormalize(book.title)===data.normalized_title &&
-      importNormalize(book.author)===data.normalized_author)){
-      skipped.already_present++;continue;
-    }
+    const same=matches.find(book=>importNormalize(book.title)===data.normalized_title &&
+      importNormalize(book.author)===data.normalized_author);
+    const conflictingGoodreadsId=matches.some(book=>data.goodreadsId &&
+      book.goodreads_id===data.goodreadsId && book.id!==same?.id);
+    if(conflictingGoodreadsId){skipped.goodreads_id_conflict++;continue;}
+    if(same){skipped.already_present++;continue;}
     if(matches.length){skipped.ambiguous_title++;continue;}
     // Goodreads IDs are unique even on archived legacy records.
     if(data.goodreadsId && await query(db,'SELECT id FROM books WHERE goodreads_id=? LIMIT 1',[data.goodreadsId])){
