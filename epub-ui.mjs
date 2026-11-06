@@ -99,6 +99,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       entry.metadata.author=updated.author;
       entry.match=result.results[0];
       entry.error=null;
+      flagPossibleEpubDuplicates(items);
      }catch(error){
       entry.error='Could not check corrected title: '+(error.message||'Request failed');
      }finally{running=false;render();}
@@ -146,6 +147,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
                 entry.metadata.author=book.author;
                 entry.match=result;
                 entry.error=null;
+                flagPossibleEpubDuplicates(items);
               }
             }catch(error){
               entry.error='Could not verify the catalogue match: '+(error.message||'Request failed');
