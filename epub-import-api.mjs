@@ -253,6 +253,15 @@ export async function handleEpubApi(request,db,env,path){
         ).bind(bookId,title,author,normalizeEpubText(title),normalizeEpubText(author),
           clean(metadata.description,3000),ts,ts));
       }
+      // Fill only truly missing synopsis text. The WHERE guard runs inside
+      // the same transaction as the EPUB record, so concurrent manual edits
+      // always win. This never replaces an existing Goodreads or user synopsis.
+      const epubSynopsis=clean(metadata.description,3000);
+      if(matched.status==='match'&&epubSynopsis){
+        statements.push(db.prepare(
+          "UPDATE books SET synopsis=?,updated_at=? WHERE id=? AND archived_at IS NULL AND trim(synopsis)=''"
+        ).bind(epubSynopsis,ts,bookId));
+      }
       // Only use explicit EPUB OPF subjects. Tags are added, never removed
       // or fabricated, and a successful import's book record remains intact.
       for(const subject of subjects){
