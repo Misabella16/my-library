@@ -1,7 +1,7 @@
 // Conservative EPUB/catalogue title cleanup. No fuzzy automatic merging.
 // Preserve Unicode, punctuation-bearing names and author data in originals.
 const junk = [
-  /^\s*(?:\[\s*)?(?:z[\s._-]?library|zlib|libgen)(?:\s*\])?\s*[-_:|]\s*/i,
+  /^\s*(?:\[\s*)?(?:z[\s._-]?library|zlib|libgen)(?:\s*\])?(?:\s*[-_:|]\s*|\s+)/i,
   /\s*(?:\[\s*(?:z[\s._-]?library|zlib|libgen)\s*\]|\(\s*(?:z[\s._-]?library|zlib|libgen)\s*\))\s*$/i
 ];
 export function cleanEpubTitle(value=''){
