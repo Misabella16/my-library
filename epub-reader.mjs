@@ -128,6 +128,10 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   const author=tagValue(packageXml,'creator',400);
   const description=tagValue(packageXml,'description',3000);
   const identifier=tagValue(packageXml,'identifier',250);
+  const subjects=[...packageXml.matchAll(/<(?:[\\w.-]+:)?subject\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w.-]+:)?subject\\s*>/gi)]
+    .map(match=>cleanText(match[1],90)).filter(Boolean)
+    .filter((subject,index,all)=>all.findIndex(x=>x.toLocaleLowerCase()===subject.toLocaleLowerCase())===index)
+    .slice(0,8);
   const manifest=new Map();
   for(const match of packageXml.matchAll(/<(?:[\w.-]+:)?item\b[^>]*>/gi)){
     const a=attrs(match[0]);
@@ -150,7 +154,7 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
     const path=coverItem.href.split(/[?#]/)[0];
     coverPath=joinPath(packagePath,decodeURIComponent(path));
   }
-  return {title,author,description,identifier,coverPath};
+  return {title,author,description,identifier,subjects,coverPath};
 }
 export async function inspectEpub(file){
   if(!file||!/\.epub$/i.test(file.name||''))throw Error('Choose an .epub file');
