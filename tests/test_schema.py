@@ -60,6 +60,40 @@ class SchemaTest(unittest.TestCase):
               (id,edition_id,origin,private_object_key,display_cover) VALUES (?,?,?,?,?)""",
               ("cover-2","ed","publisher","private/cover2",1))
 
+
+    def test_duplicate_books_blocked_with_unique_active_identity(self):
+        self.db.execute("""INSERT INTO books (id,title,author,normalized_title,normalized_author)
+            VALUES (?,?,?,?,?)""",("a","The Book","A. Author","the book","a author"))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO books (id,title,author,normalized_title,normalized_author)
+                VALUES (?,?,?,?,?)""",("b","The Book","A. Author","the book","a author"))
+
+    def test_duplicate_edition_blocked_and_distinct_special_editions_kept(self):
+        self.db.execute("INSERT INTO books (id,title,normalized_title) VALUES (?,?,?)",("book-a","Babel","babel"))
+        self.db.execute("""INSERT INTO editions (id,book_id,edition_name,vendor,format,is_special,isbn)
+            VALUES (?,?,?,?,?,?,?)""",("fl1","book-a","FairyLoot Exclusive","FairyLoot","hardcover",1,"978-1-234-56789-0"))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO editions (id,book_id,edition_name,vendor,format,is_special)
+                VALUES (?,?,?,?,?,?)""",("fl2","book-a","fairyloot-exclusive","Fairy Loot","hardcover",1))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO editions (id,book_id,edition_name,vendor,format,is_special,isbn)
+                VALUES (?,?,?,?,?,?,?)""",("fl3","book-a","Another exclusive","Bookstore","hardcover",1,"9781234567890"))
+        # Different collectors' releases can coexist.
+        self.db.execute("""INSERT INTO editions (id,book_id,edition_name,vendor,format,is_special)
+            VALUES (?,?,?,?,?,?)""",("ic1","book-a","Illumicrate Exclusive","Illumicrate","hardcover",1))
+        # Standard editions collapse retailer labels and spelling variations.
+        self.db.execute("""INSERT INTO editions (id,book_id,edition_name,vendor,format,is_special)
+            VALUES (?,?,?,?,?,?)""",("st1","book-a","Standard","Local bookstore","paperback",0))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO editions (id,book_id,edition_name,vendor,format,is_special)
+                VALUES (?,?,?,?,?,?)""",("st2","book-a","Standard Edition","Retailer B","paperback",0))
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM editions WHERE book_id='book-a'").fetchone()[0],3)
+
+    def test_uniqueness_migration_is_idempotent(self):
+        # Can run after creating editions manually, and rerun without changing rows.
+        for _ in range(2):
+            self.db.executescript((ROOT / "database" / "003_edition_identity_guards.sql").read_text())
+
     def test_photo_detection_and_multiple_books(self):
         self.db.execute("INSERT INTO shelf_photos (id,private_object_key) VALUES (?,?)",
                         ("photo","private/shelf.jpg"))

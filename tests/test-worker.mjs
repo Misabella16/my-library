@@ -1,7 +1,7 @@
 import test, {before} from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
-import worker,{verifyAccess} from '../_worker.js';
+import worker,{verifyAccess,findMatchingEdition} from '../_worker.js';
 
 if(!globalThis.crypto) globalThis.crypto=webcrypto;
 const team='https://book-tests.cloudflareaccess.com';
@@ -114,4 +114,39 @@ test('book notes can be updated only via an authenticated same-origin request',a
     {private_notes:'Stale note',expected_updated_at:'2020-01-01'},'https://books.example.com'),{...env,BOOK_DB:db});
   assert.equal(conflict.status,409);
   assert.equal(current.private_notes,'A private margin note');
+});
+
+test('edition identity matching reuses exact ISBNs and equivalent edition names',()=>{
+  const current=[
+    {id:'fairy',edition_name:'FairyLoot Exclusive',vendor:'FairyLoot',isbn:'978-1-234-56789-0',format:'hardcover',is_special:1},
+    {id:'standard',edition_name:'Standard',vendor:'Bookshop A',isbn:'',format:'paperback',is_special:0}
+  ];
+  assert.equal(findMatchingEdition(current,{edition_name:'Different text',vendor:'Other store',
+    isbn:'9781234567890',format:'hardcover',is_special:1})?.id,'fairy');
+  assert.equal(findMatchingEdition(current,{edition_name:'fairyloot-exclusive',vendor:'fairy loot',
+    isbn:'',format:'hardcover',is_special:1})?.id,'fairy');
+  assert.equal(findMatchingEdition(current,{edition_name:'Standard Edition',vendor:'Bookshop B',
+    isbn:'',format:'paperback',is_special:0})?.id,'standard');
+  assert.equal(findMatchingEdition(current,{edition_name:'Illumicrate Exclusive',vendor:'Illumicrate',
+    isbn:'',format:'hardcover',is_special:1}),null);
+  assert.equal(findMatchingEdition(current,{edition_name:'FairyLoot Exclusive',vendor:'FairyLoot',
+    isbn:'',format:'hardcover',is_special:1},'fairy'),null);
+});
+
+test('adding an existing edition returns a conflict without inserting',async()=>{
+  const bookId='11111111-2222-4333-8444-555555555555';
+  const existing={id:'22222222-3333-4444-8555-666666666666',edition_name:'FairyLoot Edition',
+    vendor:'FairyLoot',isbn:'978-1-234-56789-0',format:'hardcover',is_special:1};
+  let inserts=0;
+  const db={prepare(sql){return {bind(...values){return {
+    async first(){if(sql.startsWith('SELECT id FROM books WHERE id=?'))return {id:bookId};throw Error('Unexpected select '+sql);},
+    async all(){if(sql.startsWith('SELECT id,edition_name,vendor,isbn,format,is_special FROM editions'))return {results:[existing]};throw Error('Unexpected list '+sql);},
+    async run(){inserts++;throw Error('Must not insert duplicate');}
+  };}};}};
+  const response=await worker.fetch(req('https://books.example.com/api/books/'+bookId+'/editions',
+    await jwt(),'POST',{edition_name:'Fairyloot edition',vendor:'fairyloot',format:'hardcover',
+      is_special:true},'https://books.example.com'),{...env,BOOK_DB:db});
+  assert.equal(response.status,409,await response.clone().text());
+  assert.equal((await response.json()).existing_edition_id,existing.id);
+  assert.equal(inserts,0);
 });

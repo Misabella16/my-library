@@ -51,12 +51,14 @@ Once the dedicated D1 exists, apply the files in this order via the Cloudflare D
 
 1. `database/001_initial_schema.sql`
 2. `database/002_shelf_photo_scanning.sql`
+3. `database/003_edition_identity_guards.sql` (add to existing databases after creating `editions`)
 
 Alternatively, from a repo checkout with Wrangler authenticated to your Cloudflare account:
 
 ```sh
 npx wrangler d1 execute my-library-data --remote --file=database/001_initial_schema.sql
 npx wrangler d1 execute my-library-data --remote --file=database/002_shelf_photo_scanning.sql
+npx wrangler d1 execute my-library-data --remote --file=database/003_edition_identity_guards.sql
 ```
 
 Replace the example DB name with the **exact new My Library database name**. **Never execute these commands against the existing Novel Conservatory databases.**
@@ -97,3 +99,7 @@ Phase 3: Goodreads CSV import with duplicate-safe canonical book matching, origi
 Phase 4: EPUB bulk importer and embedded metadata/cover extraction.
 Phase 5: Exact special-edition cover enrichment and owner verification.
 Phase 6: Multi-book photo-to-shelf recognition, safe linking/updating of existing copies and manual correction of uncertain matches.
+
+## Duplicate edition protection
+
+Apply `database/003_edition_identity_guards.sql` to the independent My Library database (not Novel Conservatory). It creates uniqueness indexes for edition type and ISBN; it does not delete or merge rows. Run this only after the `editions` table exists. If the indexes reject pre-existing duplicates, review the rows before continuing. App endpoints also check case/punctuation-normalized edition identities and show an existing edition on duplicate attempts (HTTP 409). Standard retail vendors do not create new standard edition identities. Distinct publisher releases or special editions must have distinguishable labels or identifiers. Goodreads, EPUB and shelf-photo importers are not yet implemented and must reuse the matching policy when built.
