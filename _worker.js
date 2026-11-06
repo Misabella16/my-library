@@ -1,3 +1,4 @@
+import {handleGoodreadsApi} from './goodreads-import-api.mjs';
 // My Library Phase 2: private, independent Cloudflare Pages advanced-mode Worker.
 // All requests, including static assets, REQUIRE verified Cloudflare Access identity.
 // Never reuse Novel Conservatory databases, Access audience or R2 bindings.
@@ -240,6 +241,8 @@ async function serveApi(request,env,path){
   if(!db) return fail('My Library database is not configured',503);
   const method=request.method;
   if(path==='/api/session'&&method==='GET') return json({authenticated:true,owner:true});
+  const goodreadsResponse=await handleGoodreadsApi(request,db,path);
+  if(goodreadsResponse) return goodreadsResponse;
   if(path==='/api/books'&&method==='GET') {
     const url=new URL(request.url);
     const q=string(url.searchParams.get('q'),150);
