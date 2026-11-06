@@ -256,3 +256,45 @@ test('Conflicting author under alternate title needs review rather than duplicat
   assert.equal(count(f.sqlite,'epub_files'),0);
  }finally{f.sqlite.close();}
 });
+
+test('EPUB fills blank existing synopsis without changing Goodreads or private fields',async()=>{
+ const f=fixture();
+ try{
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis,private_notes,review,rating) VALUES(?,?,?,?,?,?,?,?,?)')
+   .run(id,'A Novel','Writer','a novel','writer','','My notes','My review',4);
+  const meta=await validMeta();
+  const response=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(response.status,201,await response.clone().text());
+  const book=f.sqlite.prepare('SELECT synopsis,private_notes,review,rating FROM books WHERE id=?').get(id);
+  assert.equal(book.synopsis,'My private synopsis');
+  assert.equal(book.private_notes,'My notes');
+  assert.equal(book.review,'My review');
+  assert.equal(book.rating,4);
+  assert.equal(count(f.sqlite,'books'),1);
+ }finally{f.sqlite.close();}
+});
+test('Existing synopsis always wins over different EPUB description',async()=>{
+ const f=fixture();
+ try{
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis) VALUES(?,?,?,?,?,?)')
+   .run(id,'A Novel','Writer','a novel','writer','Keep this personal synopsis');
+  const meta=await validMeta();
+  const response=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(response.status,201,await response.clone().text());
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(id).synopsis,'Keep this personal synopsis');
+ }finally{f.sqlite.close();}
+});
+test('Failed EPUB transaction does not leave a partial synopsis change',async()=>{
+ const f=fixture();
+ try{
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis) VALUES(?,?,?,?,?,?)')
+   .run(id,'A Novel','Writer','a novel','writer','');
+  f.setFail(true);
+  await assert.rejects(post(f.db,f.env,'/api/epubs/upload',form(await validMeta())),/Simulated D1/);
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(id).synopsis,'');
+  assert.equal(count(f.sqlite,'epub_files'),0);
+ }finally{f.sqlite.close();}
+});
