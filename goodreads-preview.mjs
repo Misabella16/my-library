@@ -92,6 +92,7 @@ export function parseGoodreadsExport(text) {
       shelves: [...shelves],
       review: get(cells, 'my review'),
       dateRead: get(cells, 'date read'),
+      dateStarted: get(cells, 'date started'),
       dateAdded: get(cells, 'date added')
     });
   }

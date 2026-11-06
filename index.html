@@ -99,7 +99,7 @@
         <button class="btn subtle" id="download-goodreads-report" type="button" disabled>Download full match report (CSV)</button>
       </div>
       <p class="small-status" id="goodreads-status" role="status">Choose your Goodreads export to begin.</p>
-      <p class="muted goodreads-report-note">Every CSV book will be accounted for, including books already in My Library, duplicates, missing metadata, and books requiring review. Existing books are not automatically updated.</p>
+      <p class="muted goodreads-report-note">Every CSV book will be accounted for, including books already in My Library, duplicates, missing metadata, and books requiring review. To fill missing fields on existing books, use the Phase 4 sync preview below.</p>
       <section class="goodreads-confirm" aria-label="Goodreads import controls">
         <div class="goodreads-primary-action">
           <button class="btn" id="import-goodreads" type="button" disabled>Import new Goodreads books</button>
@@ -115,6 +115,27 @@
         </div>
         <div class="goodreads-import-feedback" id="goodreads-import-feedback" role="status" aria-live="polite" aria-atomic="true">No import started.</div>
         <progress id="goodreads-progress" class="goodreads-progress" max="100" value="0" aria-label="Goodreads import progress" hidden></progress>
+      </section>
+      <section class="goodreads-sync-panel" aria-labelledby="goodreads-sync-heading">
+        <p class="section-kicker">✧ PHASE 4 · GOODREADS METADATA SYNC & UNDO</p>
+        <h3 id="goodreads-sync-heading">Complete your existing book records</h3>
+        <p>After previewing the Goodreads CSV above, check which of your existing books are missing ratings, reviews, reading dates, or shelf links. Existing values and personal notes are preserved. Repeated or uncertain matches are excluded.</p>
+        <div class="goodreads-actions">
+          <button class="btn subtle" id="goodreads-sync-preview" type="button" disabled>Preview missing Goodreads metadata</button>
+          <button class="btn" id="goodreads-sync-confirm" type="button" disabled>Sync missing information</button>
+        </div>
+        <div id="goodreads-sync-approval" class="goodreads-approval" hidden>
+          <p id="goodreads-sync-approval-text">Add missing information without overwriting your library?</p>
+          <div class="goodreads-approval-actions">
+            <button class="btn" id="goodreads-sync-yes" type="button">Yes, fill missing details</button>
+            <button class="btn subtle" id="goodreads-sync-no" type="button">Cancel</button>
+          </div>
+        </div>
+        <p id="goodreads-sync-feedback" class="small-status" role="status" aria-live="polite">Preview your Goodreads CSV first. No changes made.</p>
+        <progress id="goodreads-sync-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="Goodreads metadata sync progress"></progress>
+        <div id="goodreads-sync-results" class="goodreads-sync-results"></div>
+        <section id="goodreads-sync-history" class="goodreads-history" aria-label="Goodreads metadata sync Undo history"></section>
+        <p class="goodreads-private-note">Syncs are saved in small, reversible batches. Undo stops if you subsequently edit a synced book. No cover images, EPUBs, owned copies, or special editions will be changed.</p>
       </section>
       <div id="goodreads-preview-results" aria-live="polite"></div>
       <section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>

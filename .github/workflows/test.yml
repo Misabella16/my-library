@@ -26,6 +26,8 @@ jobs:
           node --check goodreads-ui.mjs
           node --check goodreads-import.mjs
           node --check goodreads-import-api.mjs
+          node --check goodreads-sync-api.mjs
+          node --check goodreads-sync-ui.mjs
           node --check epub-reader.mjs
           node --check epub-import-api.mjs
           node --check epub-ui.mjs

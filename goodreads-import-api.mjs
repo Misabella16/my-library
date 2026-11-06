@@ -208,7 +208,8 @@ async function linkGoodreadsEdition(request,db){
 }
 async function importHistory(db){
   const result=await rows(db,"SELECT id,status,report,created_at FROM import_batches "+
-    "WHERE source='goodreads' ORDER BY created_at DESC LIMIT 25");
+    "WHERE source='goodreads' AND report NOT LIKE '%goodreads_fill_missing%' "+
+    "ORDER BY created_at DESC LIMIT 25");
   return json({batches:result.map(b=>{
     let report={};try{report=JSON.parse(b.report||'{}');}catch{}
     return {id:b.id,status:b.status,created_at:b.created_at,
