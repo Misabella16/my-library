@@ -92,7 +92,61 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       entry.error='Could not check corrected title: '+(error.message||'Request failed');
      }finally{running=false;render();}
     });
-    form.append(title,author,check);card.append(form);
+    // Search the existing catalogue without fetching all private books.
+    // Candidate selection corrects the title/author and re-runs the trusted
+    // server preview. It never forces a book_id or bypasses identity rules.
+    const find=create('button','btn subtle mini','Find this book in My Library');
+    find.type='button';
+    const matches=create('div','epub-catalogue-candidates');
+    find.addEventListener('click',async()=>{
+      if(running)return;
+      const query=(title.value||author.value||'').trim().slice(0,150);
+      if(query.length<2){
+        matches.replaceChildren(create('p','muted','Enter at least two letters of a title or author.'));return;
+      }
+      running=true;find.disabled=true;matches.replaceChildren();
+      try{
+        const result=await api('/api/books?'+new URLSearchParams({q:query,limit:'20',include_total:'0'}));
+        const books=Array.isArray(result.books)?result.books:[];
+        if(!books.length)matches.append(create('p','muted','No matching book found. Try a different title.'));
+        for(const book of books){
+          if(!book?.title||!book?.author)continue;
+          const option=create('button','btn subtle mini',
+            'Use '+book.title+' · '+book.author);
+          option.type='button';
+          option.addEventListener('click',async()=>{
+            if(running)return;
+            running=true;option.disabled=true;
+            try{
+              const payload=await api('/api/epubs/preview',{
+                method:'POST',data:{items:[{
+                  title:book.title,author:book.author,
+                  sha256:entry.metadata.sha256,
+                  identifier:entry.metadata.identifier
+                }]}
+              });
+              const result=payload.results?.[0];
+              if(!result||payload.results.length!==1)throw Error('Incomplete match preview');
+              if(result.status!=='match'||result.book_id!==book.id){
+                entry.error='The selected catalogue book could not be matched safely. Its title or identifier may conflict. No EPUB was linked.';
+                entry.match={status:'needs_review',reason:result.reason||'Selected identity did not pass validation'};
+              }else{
+                entry.metadata.title=book.title;
+                entry.metadata.author=book.author;
+                entry.match=result;
+                entry.error=null;
+              }
+            }catch(error){
+              entry.error='Could not verify the catalogue match: '+(error.message||'Request failed');
+            }finally{running=false;render();}
+          });
+          matches.append(option);
+        }
+      }catch(error){
+        matches.append(create('p','muted','Book search unavailable: '+(error.message||'Request failed')));
+      }finally{running=false;find.disabled=false;}
+    });
+    form.append(title,author,check,find,matches);card.append(form);
    }
    if(entry.match?.status==='possible_duplicate'&&entry.duplicateMatch){
     const keep=create('button','btn subtle mini','Keep this distinct EPUB version');
