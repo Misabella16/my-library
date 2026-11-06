@@ -1,5 +1,6 @@
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
+import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
@@ -364,7 +365,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
   // reachable even if the database is temporarily out of daily allowance.
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
-    initEpubImport(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
+    initEpubImport(api,{onImported:async()=>{await listBooks();
+  initEpubBackfill(api);if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
     initShelfPhotoAssistant(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);
