@@ -30,9 +30,15 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  if(!fileInput||!previewButton||!uploadButton||!list||!status||!progress)return;
  let files=[],items=[],running=false,previewComplete=false,visible=PAGE_SIZE;
  let uploadActive=false,pauseRequested=false;
+ const localCoverUrls=new Set();
+ function clearCoverPreviews(){
+  for(const url of localCoverUrls)URL.revokeObjectURL(url);
+  localCoverUrls.clear();
+ }
  let lastPreviewCount=0;
  const inform=text=>{status.textContent=text;};
  function render(){
+  clearCoverPreviews();
   list.replaceChildren();
   let eligible=items.filter(canImport).length;
   if(summary){
@@ -70,6 +76,42 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    if(entry.match?.status==='possible_duplicate')notes.push('Excluded from automatic upload until you choose to keep this distinct file.');
    if(entry.error)notes.push(entry.error);
    if(notes.length)card.append(create('p','epub-preview-note',notes.join(' · ')));
+   if(meta.coverPath&&entry.file){
+    const preview=create('button','btn subtle mini','Preview embedded EPUB cover');
+    preview.type='button';
+    const imageArea=create('div','epub-cover-preview');
+    let previewUrl=null;
+    preview.addEventListener('click',async()=>{
+      if(previewUrl){
+        URL.revokeObjectURL(previewUrl);
+        localCoverUrls.delete(previewUrl);
+        previewUrl=null;
+        imageArea.replaceChildren();
+        preview.textContent='Preview embedded EPUB cover';
+        return;
+      }
+      preview.disabled=true;
+      try{
+        const inspected=await inspectEpub(entry.file,{includeCover:true});
+        if(!items.includes(entry))return;
+        if(!inspected.cover||inspected.sha256!==entry.metadata.sha256)
+          throw Error('No usable cover found in this EPUB');
+        previewUrl=URL.createObjectURL(inspected.cover);
+        localCoverUrls.add(previewUrl);
+        const img=create('img','epub-cover-thumbnail');
+        img.src=previewUrl;
+        img.alt='Embedded EPUB cover for '+(meta.title||entry.file.name);
+        img.width=150;
+        img.loading='lazy';
+        imageArea.replaceChildren(img);
+        preview.textContent='Hide cover preview';
+      }catch(error){
+        imageArea.replaceChildren(create('p','muted',
+          'Cover preview unavailable: '+(error.message||'Could not inspect cover')));
+      }finally{preview.disabled=false;}
+    });
+    card.append(preview,imageArea);
+   }
    if(entry.match?.status==='needs_review'&&entry.metadata){
     const form=create('div','epub-manual-match');
     const title=create('input');
@@ -198,6 +240,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   uploadButton.textContent='Save '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
  }
  function selectFiles(selection){
+  clearCoverPreviews();
   if(running){inform('A batch is in progress. Finish or resume it before selecting another folder.');return;}
   files=[...(selection||[])].filter(f=>/\.epub$/i.test(f.name));
   items=[];previewComplete=false;visible=PAGE_SIZE;lastPreviewCount=0;

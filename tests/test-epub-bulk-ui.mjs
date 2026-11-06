@@ -5,12 +5,15 @@ import {initEpubImport} from '../epub-ui.mjs';
 import {bulkEpubReport,flagPossibleEpubDuplicates} from '../epub-bulk.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 
-function zipFor(title,author='A Writer'){
+function zipFor(title,author='A Writer',withCover=false){
  const container='<container><rootfiles><rootfile full-path="O/content.opf"/></rootfiles></container>';
  const opf='<package><metadata><dc:title>'+title+'</dc:title><dc:creator>'+author+
-  '</dc:creator><dc:subject>Fantasy</dc:subject></metadata></package>';
+  '</dc:creator><dc:subject>Fantasy</dc:subject></metadata>'+
+  (withCover?'<manifest><item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/></manifest>':'')+
+  '</package>';
  const files={'mimetype':'application/epub+zip',
   'META-INF/container.xml':container,'O/content.opf':opf};
+ if(withCover)files['O/cover.png']=Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]);
  const parts=[],central=[];let offset=0;
  for(const [name,data] of Object.entries(files)){
   const key=Buffer.from(name),value=Buffer.from(data),local=Buffer.alloc(30);
@@ -412,4 +415,29 @@ test('Different authors never become the same EPUB duplicate group',()=>{
   {metadata:{title:'The Star Garden',author:'Writer Two',sha256:'b'.repeat(64)},match:{status:'new'}}
  ];
  assert.equal(flagPossibleEpubDuplicates(rows),0);
+});
+
+test('Embedded EPUB cover previews load locally only when clicked, with no extra D1 calls',async()=>{
+ const f=fixture(0);
+ try{
+  f.get('epub-files').files=[new File([zipFor('Cover Book','A Writer',true)],'cover-book.epub')];
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  const card=f.get('epub-preview-list').children[0];
+  const button=card.children.find(x=>x.textContent==='Preview embedded EPUB cover');
+  const area=card.children.find(x=>x.className==='epub-cover-preview');
+  assert.ok(button);
+  assert.ok(area);
+  assert.equal(area.children.length,0);
+  const before=f.calls.length;
+  await button.dispatch('click');
+  assert.equal(area.children.length,1);
+  assert.equal(area.children[0].tagName,'img');
+  assert.match(area.children[0].alt,/Cover Book/);
+  assert.match(area.children[0].src,/^blob:/);
+  assert.equal(f.calls.length,before,'Local cover preview must not query D1');
+  await button.dispatch('click');
+  assert.equal(area.children.length,0);
+  assert.equal(f.calls.length,before);
+ }finally{f.restore();}
 });
