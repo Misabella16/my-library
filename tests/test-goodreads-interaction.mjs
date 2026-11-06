@@ -180,7 +180,7 @@ test('daily D1 limit stops retries and gives a safe re-preview message',async()=
     assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads').length,1);
     assert.equal(ui.get('import-goodreads').disabled,true);
     assert.match(ui.get('goodreads-import-feedback').textContent,/Import paused/);
-    assert.match(ui.get('goodreads-import-hint').textContent,/database usage limit/i);
+    assert.match(ui.get('goodreads-import-hint').textContent,/database is at a usage limit/i);
     assert.equal(ui.get('goodreads-file').files.length,1);
   }finally{ui.restore();}
 });
