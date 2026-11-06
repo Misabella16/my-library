@@ -19,12 +19,12 @@ const id = () => crypto.randomUUID();
 const string = (value,max=500) => typeof value === 'string' ? value.trim().slice(0,max) : '';
 const rawString = (value,max=120_000) => typeof value === 'string' ? value.slice(0,max) : '';
 const normalize = value => String(value||'').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
-const normalizedIsbn = value => String(value||'').replace(/[\\s-]/g,'').toUpperCase();
+const normalizedIsbn = value => String(value||'').replace(/[\s-]/g,'').toUpperCase();
 const normalizedEditionName = value => {
   const key=normalize(value||'Standard');
-  return ['standard','standard edition','regular','regular edition'].includes(key)?'standard':key.replace(/\\s+/g,'');
+  return ['standard','standard edition','regular','regular edition'].includes(key)?'standard':key.replace(/\s+/g,'');
 };
-const normalizedEditionVendor = value => normalize(value).replace(/\\s+/g,'');
+const normalizedEditionVendor = value => normalize(value).replace(/\s+/g,'');
 /** Return an existing edition for a clearly equivalent ISBN or edition identity.
  * Different special-edition releases can coexist when their edition names/ISBNs differ.
  * Never use ambiguous title-only matches to silently overwrite a special edition.
