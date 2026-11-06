@@ -82,6 +82,8 @@ export async function verifyAccess(request,env){
   const team=validTeamDomain(env.ACCESS_TEAM_DOMAIN);
   const aud=string(env.ACCESS_AUD,512), owner=string(env.OWNER_EMAIL,320).toLowerCase();
   // Distinguish invalid settings without revealing any configured values.
+  // Cloudflare Pages production variables are read from the deployed environment.
+  // Keep owner identity enforcement strict after every configuration update.
   if(!team) return {ok:false,reason:'config_team_domain'};
   if(!aud) return {ok:false,reason:'config_audience'};
   if(!owner||!owner.includes('@')) return {ok:false,reason:'config_owner_email'};
