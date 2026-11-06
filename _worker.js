@@ -194,15 +194,14 @@ function ratingValue(r){
 async function bookDetail(db,bookId){
   const book=await getOne(db,'SELECT * FROM books WHERE id=? AND archived_at IS NULL',[bookId]);
   if(!book) return null;
-  const [tags,shelves,editions,copies,images,epubs]=await Promise.all([
+  const [tags,shelves,editions,copies,images]=await Promise.all([
     getAll(db,'SELECT t.id,t.label,t.kind FROM tags t JOIN book_tags bt ON bt.tag_id=t.id WHERE bt.book_id=? ORDER BY t.label',[bookId]),
     getAll(db,'SELECT s.id,s.name,s.origin FROM shelves s JOIN book_shelves bs ON bs.shelf_id=s.id WHERE bs.book_id=? ORDER BY s.name',[bookId]),
     getAll(db,'SELECT * FROM editions WHERE book_id=? ORDER BY is_special DESC,edition_name',[bookId]),
     getAll(db,'SELECT c.* FROM copies c JOIN editions e ON e.id=c.edition_id WHERE e.book_id=? ORDER BY c.created_at',[bookId]),
-    getAll(db,'SELECT im.id,im.edition_id,im.copy_id,im.role,im.origin,im.credit,im.match_status,im.display_cover FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=? ORDER BY im.created_at',[bookId]),
-    getAll(db,'SELECT id,edition_id,original_filename,created_at FROM epub_files WHERE book_id=? ORDER BY created_at LIMIT 100',[bookId])
+    getAll(db,'SELECT im.id,im.edition_id,im.copy_id,im.role,im.origin,im.credit,im.match_status,im.display_cover FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=? ORDER BY im.created_at',[bookId])
   ]);
-  return {...book,tags,shelves,epubs,editions:editions.map(e=>({...e,copies:copies.filter(c=>c.edition_id===e.id),images:images.filter(i=>i.edition_id===e.id)}))};
+  return {...book,tags,shelves,editions:editions.map(e=>({...e,copies:copies.filter(c=>c.edition_id===e.id),images:images.filter(i=>i.edition_id===e.id)}))};
 }
 async function addAudit(db,action,entityType,entityId,before,after){
   await run(db,'INSERT INTO change_log (id,action,entity_type,entity_id,before_json,after_json) VALUES (?,?,?,?,?,?)',
