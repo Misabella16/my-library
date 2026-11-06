@@ -75,7 +75,12 @@ async function importChunk(request,db){
       stmts.push(prep(db,"INSERT OR IGNORE INTO book_shelves(book_id,shelf_id) "+
         "SELECT ?,id FROM shelves WHERE name=? COLLATE NOCASE",[bookId,shelf]));
     }
-    const snapshot={updated_at:createdAt,shelves:book.shelves};
+    // Full imported-book snapshot prevents Undo from hiding records changed
+    // outside the regular UI, even when updated_at was not refreshed.
+    const snapshot={updated_at:createdAt,shelves:book.shelves,
+      title:book.title,author:book.author,rating:book.rating,review:book.review,
+      reading_status:book.status,private_notes:'',date_finished:book.finished,
+      goodreads_id:book.goodreadsId};
     stmts.push(prep(db,
       "INSERT INTO change_log(id,batch_id,action,entity_type,entity_id,before_json,after_json,created_at) "+
       "VALUES (?,?,'goodreads_import_create','books',?,NULL,?,?)",
@@ -113,8 +118,12 @@ async function undoChunk(db,batchId){
   const toArchive=[];
   for(const change of changes){
     let snapshot;try{snapshot=JSON.parse(change.after_json||'{}');}catch{}
-    const book=await query(db,'SELECT id,updated_at,archived_at FROM books WHERE id=?',[change.entity_id]);
-    if(!book||book.archived_at||book.updated_at!==snapshot.updated_at)
+    const book=await query(db,
+      'SELECT id,title,author,rating,review,reading_status,private_notes,date_finished,goodreads_id,updated_at,archived_at FROM books WHERE id=?',
+      [change.entity_id]);
+    const fields=['updated_at','title','author','rating','review','reading_status',
+      'private_notes','date_finished','goodreads_id'];
+    if(!book||book.archived_at||fields.some(key=>book[key]!==snapshot?.[key]))
       return fail('An imported book changed after import. Undo stopped to preserve your edits.',409);
     // Never hide an imported record with later editions, EPUBs, tags or aliases.
     const linked=await query(db,
