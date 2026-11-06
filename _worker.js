@@ -22,8 +22,9 @@ const normalize = value => String(value||'').normalize('NFKC').toLowerCase().rep
 const normalizedIsbn = value => String(value||'').replace(/[\\s-]/g,'').toUpperCase();
 const normalizedEditionName = value => {
   const key=normalize(value||'Standard');
-  return ['standard','standard edition','regular','regular edition'].includes(key)?'standard':key;
+  return ['standard','standard edition','regular','regular edition'].includes(key)?'standard':key.replace(/\\s+/g,'');
 };
+const normalizedEditionVendor = value => normalize(value).replace(/\\s+/g,'');
 /** Return an existing edition for a clearly equivalent ISBN or edition identity.
  * Different special-edition releases can coexist when their edition names/ISBNs differ.
  * Never use ambiguous title-only matches to silently overwrite a special edition.
@@ -32,14 +33,14 @@ export function findMatchingEdition(existing, wanted, excludedId='') {
   const isbn=normalizedIsbn(wanted.isbn);
   const name=normalizedEditionName(wanted.edition_name);
   const isSpecial=Boolean(wanted.is_special);
-  const vendor=isSpecial?normalize(wanted.vendor):'';
+  const vendor=isSpecial?normalizedEditionVendor(wanted.vendor):'';
   return existing.find(item => {
     if(item.id===excludedId) return false;
     if(isbn && normalizedIsbn(item.isbn)===isbn) return true;
     return item.format===wanted.format &&
       Boolean(item.is_special)===isSpecial &&
       normalizedEditionName(item.edition_name)===name &&
-      (!isSpecial || normalize(item.vendor)===vendor);
+      (!isSpecial || normalizedEditionVendor(item.vendor)===vendor);
   })||null;
 }
 async function matchingEdition(db,bookId,wanted,excludedId='') {
