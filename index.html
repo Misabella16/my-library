@@ -120,7 +120,23 @@
       <section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
       <p class="goodreads-private-note" id="goodreads-privacy"><strong>Private by design.</strong> Preview stays on your device. Only after you confirm an import are the newly selected book details sent to your protected My Library database. Undo archives unchanged books created by that batch. It never deletes EPUBs, owned copies, or special editions.</p>
     </section>
-    <div class="two-columns"><div class="tip"><strong>Goodreads</strong><p>Import new books with shelves, ratings, reviews and dates read. See each batch and Undo it safely.</p></div><div class="tip"><strong>EPUBs</strong><p>Bulk EPUB import, metadata extraction and private cover storage will follow.</p></div><div class="tip"><strong>Special editions</strong><p>Edition-specific FairyLoot, Illumicrate, OwlCrate and other covers.</p></div><div class="tip"><strong>Undo</strong><p>Undo completed Goodreads batches by archiving only unchanged imported books. Any subsequent edits stop reversal safely.</p></div></div>
+    <section class="epub-tool surface" aria-labelledby="epub-heading">
+      <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
+      <h3 id="epub-heading">Add your saved EPUBs</h3>
+      <p>Choose up to 50 EPUBs per batch. Preview their embedded titles, authors and covers locally. Only eligible files are saved after you confirm. Matching books keep their notes, shelves and special-edition covers.</p>
+      <div class="goodreads-actions">
+        <label class="goodreads-file-label" for="epub-files">Choose EPUBs
+          <input id="epub-files" type="file" accept=".epub,application/epub+zip" multiple>
+        </label>
+        <button class="btn subtle" id="preview-epubs" type="button" disabled>Preview EPUB metadata</button>
+        <button class="btn" id="upload-epubs" type="button" disabled>Save eligible EPUBs privately</button>
+      </div>
+      <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files to begin. Maximum 24 MB per EPUB.</p>
+      <progress id="epub-import-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="EPUB upload progress"></progress>
+      <div id="epub-preview-list" class="epub-preview-list" aria-live="polite"></div>
+      <p class="goodreads-private-note"><strong>Private storage.</strong> Original EPUBs and extracted covers are uploaded only to your owner-protected storage after you select Save. Existing records are never replaced. Already uploaded or ambiguous books remain visible for review. The upload does not automatically create a physical owned copy.</p>
+    </section>
+    <div class="two-columns"><div class="tip"><strong>Goodreads</strong><p>Import new books with shelves, ratings, reviews and dates read. See each batch and Undo it safely.</p></div><div class="tip"><strong>EPUBs</strong><p>Preview EPUB metadata and import private digital editions without overwriting existing book records.</p></div><div class="tip"><strong>Special editions</strong><p>Edition-specific FairyLoot, Illumicrate, OwlCrate and other covers.</p></div><div class="tip"><strong>Undo</strong><p>Undo completed Goodreads batches by archiving only unchanged imported books. Any subsequent edits stop reversal safely.</p></div></div>
   </div>
   </section>
 </main>
