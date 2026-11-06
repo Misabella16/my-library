@@ -100,8 +100,23 @@
       </div>
       <p class="small-status" id="goodreads-status" role="status">Choose your Goodreads export to begin.</p>
       <p class="muted goodreads-report-note">Every CSV book will be accounted for, including books already in My Library, duplicates, missing metadata, and books requiring review. Existing books are not automatically updated.</p>
+      <section class="goodreads-confirm" aria-label="Goodreads import controls">
+        <div class="goodreads-primary-action">
+          <button class="btn" id="import-goodreads" type="button" disabled>Import new Goodreads books</button>
+          <p class="small-status" id="goodreads-import-hint">Preview a Goodreads file to see how many new books can be imported.</p>
+        </div>
+        <div class="goodreads-approval" id="goodreads-approval" hidden>
+          <strong id="goodreads-approval-heading">Confirm your import</strong>
+          <p id="goodreads-approval-text">Only safely identified new books will be added.</p>
+          <div class="goodreads-approval-actions">
+            <button class="btn" id="goodreads-confirm-import" type="button">Yes, import these new books</button>
+            <button class="btn subtle" id="goodreads-cancel-import" type="button">Cancel</button>
+          </div>
+        </div>
+        <div class="goodreads-import-feedback" id="goodreads-import-feedback" role="status" aria-live="polite" aria-atomic="true">No import started.</div>
+        <progress id="goodreads-progress" class="goodreads-progress" max="100" value="0" aria-label="Goodreads import progress" hidden></progress>
+      </section>
       <div id="goodreads-preview-results" aria-live="polite"></div>
-      <div class="goodreads-confirm"><button class="btn" id="import-goodreads" type="button" disabled>Import new Goodreads books</button><p class="small-status" id="goodreads-import-hint">Import is available only after a complete, successful preview.</p></div>
       <section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
       <p class="goodreads-private-note" id="goodreads-privacy"><strong>Private by design.</strong> Preview stays on your device. Only after you confirm an import are the newly selected book details sent to your protected My Library database. Undo archives unchanged books created by that batch. It never deletes EPUBs, owned copies, or special editions.</p>
     </section>
