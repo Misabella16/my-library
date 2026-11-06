@@ -54,8 +54,16 @@ export function validateSyncRows(input,limit=MAX_PREVIEW){
   const started=String(r.dateStarted||'').trim(),finished=String(r.dateRead||'').trim();
   if(started&&!dateValue(started))throw Error('Invalid Goodreads start date.');
   if(finished&&!dateValue(finished))throw Error('Invalid Goodreads read date.');
+  const expected=r.expected_plan;
+  if(expected!==undefined && expected!==null &&
+    (typeof expected!=='object'||Array.isArray(expected)||
+     typeof expected.updated_at!=='string'||expected.updated_at.length>60||
+     !expected.changes||typeof expected.changes!=='object'||Array.isArray(expected.changes)||
+     Object.keys(expected.changes).some(key=>!fields.includes(key)&&key!=='shelves')))
+    throw Error('Invalid Goodreads sync preview token.');
   return {book_id:id,title,author,goodreadsId,rating,review,
-   date_started:dateValue(started),date_finished:dateValue(finished),shelves};
+   date_started:dateValue(started),date_finished:dateValue(finished),shelves,
+   expected_plan:expected||null};
  });
 }
 async function readInput(request,limit){
@@ -118,7 +126,13 @@ const affected=plan=>Object.keys(plan.changes||{}).filter(k=>k!=='shelves');
 const countChanges=plan=>affected(plan).length+(plan.changes?.shelves?.length||0);
 export async function commitGoodreadsSync(db,items){
  const planned=await planGoodreadsSync(db,items);
- const ready=planned.filter(x=>x.status==='ready');
+ // Require the exact approved preview, not just a client-side book selection.
+ // Recomputed changes or a changed updated_at mean the owner must re-preview.
+ const ready=planned.filter((p,i)=>{
+  const expected=items[i].expected_plan;
+  return p.status==='ready'&&expected&&p.updated_at===expected.updated_at&&
+   JSON.stringify(p.changes)===JSON.stringify(expected.changes);
+ });
  const skipped=planned.length-ready.length;
  if(!ready.length)return {status:'no_changes',updated:0,skipped,fields_added:0,shelves_added:0};
  const batchId=uuid(),when=stamp();
