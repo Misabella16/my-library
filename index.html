@@ -86,9 +86,23 @@
     </div>
   </section>
   <section class="tab-panel" id="imports" hidden>
-    <div class="surface"><h2>Imports & Undo</h2><p>The next stages will introduce Goodreads CSV, bulk EPUB imports, automatic cover extraction, duplicate cleanup, and reversible import batches.</p>
-      <div class="two-columns"><div class="tip"><strong>Goodreads</strong><p>Preserve shelves, ratings, reviews and dates read.</p></div><div class="tip"><strong>EPUBs</strong><p>Clean noisy filenames, match titles and authors, store private covers and preserve originals.</p></div><div class="tip"><strong>Special editions</strong><p>Edition-specific FairyLoot, Illumicrate, OwlCrate and other covers.</p></div><div class="tip"><strong>Undo</strong><p>Import and merge safety is a future stage. Do not delete copies to consolidate titles.</p></div></div>
-    </div>
+    <div class="surface"><h2>Imports & Undo</h2><p>Give every new book a careful introduction. Start by previewing your Goodreads export, without changing your collection.</p>
+    <section class="goodreads-tool" aria-labelledby="goodreads-heading">
+      <p class="section-kicker">✧ PHASE 3 · GOODREADS PREVIEW</p>
+      <h3 id="goodreads-heading">Bring your Goodreads shelves into view</h3>
+      <p>Choose a Goodreads <strong>Library Export CSV</strong>. We’ll read it on this device and compare titles and authors with your existing private library. Nothing from the CSV is uploaded or imported.</p>
+      <div class="goodreads-actions">
+        <label class="goodreads-file-label" for="goodreads-file">Choose a Goodreads CSV
+          <input id="goodreads-file" type="file" accept=".csv,text/csv" aria-describedby="goodreads-privacy">
+        </label>
+        <button class="btn" id="preview-goodreads" type="button" disabled>Preview my Goodreads books</button>
+      </div>
+      <p class="small-status" id="goodreads-status" role="status">Choose your Goodreads export to begin.</p>
+      <div id="goodreads-preview-results" aria-live="polite"></div>
+      <p class="goodreads-private-note" id="goodreads-privacy"><strong>Preview only.</strong> This does not import, merge, overwrite or delete any books. CSV-based imports and batch Undo will be added in a later step.</p>
+    </section>
+    <div class="two-columns"><div class="tip"><strong>Goodreads</strong><p>Preview shelves, ratings, reviews and possible title matches now. Saving imports comes next.</p></div><div class="tip"><strong>EPUBs</strong><p>Bulk EPUB import, metadata extraction and private cover storage will follow.</p></div><div class="tip"><strong>Special editions</strong><p>Edition-specific FairyLoot, Illumicrate, OwlCrate and other covers.</p></div><div class="tip"><strong>Undo</strong><p>Future imports will have an audited, reversible batch history. Never delete copies just to merge book titles.</p></div></div>
+  </div>
   </section>
 </main>
 <footer><span aria-hidden="true">❀</span> My Library · every beloved story deserves a place to bloom <span aria-hidden="true">❀</span></footer>

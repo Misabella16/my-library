@@ -22,6 +22,8 @@ jobs:
         run: |
           node --check _worker.js
           node --check library.js
+          node --check goodreads-preview.mjs
+          node --check goodreads-ui.mjs
           node --check shelf-photo-matcher.mjs
       - name: Node tests
         run: npm test
