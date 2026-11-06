@@ -28,8 +28,8 @@ async function importChunk(request,db){
     if(e instanceof SyntaxError)return fail('Invalid JSON');
     return fail(e instanceof Error?e.message:'Invalid Goodreads batch');
   }
-  const accepted=[],skipped={already_present:0,ambiguous_title:0,goodreads_id_conflict:0};
-  for(const data of selected){
+  const accepted=[],skippedRows=[],skipped={already_present:0,ambiguous_title:0,goodreads_id_conflict:0};
+  for(const [index,data] of selected.entries()){
     // Check both stored normalized title and raw Unicode title, since earlier
     // catalogue rows may have been created before Unicode-aware normalization.
     const matches=await rows(db,
@@ -40,24 +40,27 @@ async function importChunk(request,db){
       importNormalize(book.author)===data.normalized_author);
     const conflictingGoodreadsId=matches.some(book=>data.goodreadsId &&
       book.goodreads_id===data.goodreadsId && book.id!==same?.id);
-    if(conflictingGoodreadsId){skipped.goodreads_id_conflict++;continue;}
-    if(same){skipped.already_present++;continue;}
-    if(matches.length){skipped.ambiguous_title++;continue;}
+    if(conflictingGoodreadsId){
+      skipped.goodreads_id_conflict++;skippedRows.push({index,reason:'goodreads_id_conflict'});continue;
+    }
+    if(same){skipped.already_present++;skippedRows.push({index,reason:'already_present'});continue;}
+    if(matches.length){skipped.ambiguous_title++;skippedRows.push({index,reason:'ambiguous_title'});continue;}
     // Goodreads IDs are unique even on archived legacy records.
     if(data.goodreadsId && await query(db,'SELECT id FROM books WHERE goodreads_id=? LIMIT 1',[data.goodreadsId])){
-      skipped.goodreads_id_conflict++;continue;
+      skipped.goodreads_id_conflict++;skippedRows.push({index,reason:'goodreads_id_conflict'});continue;
     }
-    accepted.push(data);
+    accepted.push({data,index});
   }
   const skippedTotal=Object.values(skipped).reduce((a,b)=>a+b,0);
-  if(!accepted.length)return json({created:0,skipped,skippedTotal,batch_id:null,status:'no_changes'});
+  if(!accepted.length)return json({created:0,skipped,skippedRows,createdIndices:[],
+    skippedTotal,batch_id:null,status:'no_changes'});
   const batchId=uuid(),createdAt=now(),stmts=[];
   const report={created:accepted.length,skipped,skippedTotal};
   stmts.push(prep(db,
     "INSERT INTO import_batches(id,source,status,report,created_at) VALUES (?,'goodreads','complete',?,?)",
     [batchId,JSON.stringify(report),createdAt]));
   const seenShelves=new Map();
-  for(const book of accepted){
+  for(const {data:book} of accepted){
     const bookId=uuid();
     stmts.push(prep(db,
       "INSERT INTO books(id,title,author,normalized_title,normalized_author,reading_status,"+
@@ -91,7 +94,8 @@ async function importChunk(request,db){
       'A matching book or concurrent import was detected. Refresh and retry; the batch was not committed.',409);
     throw e;
   }
-  return json({created:accepted.length,skipped,skippedTotal,batch_id:batchId,status:'complete'},201);
+  return json({created:accepted.length,createdIndices:accepted.map(item=>item.index),skipped,
+    skippedRows,skippedTotal,batch_id:batchId,status:'complete'},201);
 }
 async function importHistory(db){
   const result=await rows(db,"SELECT id,status,report,created_at FROM import_batches "+

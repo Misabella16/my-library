@@ -64,6 +64,8 @@ test('import creates new books, ratings, reviews, read dates and shelf links ato
     assert.equal(res.status,201,await res.clone().text());
     const summary=await res.json();
     assert.equal(summary.created,2);
+    assert.deepEqual(summary.createdIndices,[0,1]);
+    assert.deepEqual(summary.skippedRows,[]);
     assert.equal(summary.skippedTotal,0);
     assert.ok(/^[0-9a-f-]{36}$/.test(summary.batch_id));
     assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,2);
@@ -98,6 +100,8 @@ test('reimport is idempotent and an existing book with editions, notes and copie
       .run(cid,eid,'owned','Bedroom','Favorite shelf');
     const a=await (await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:payloadRows()}})).json();
     assert.equal(a.created,1);assert.equal(a.skipped.already_present,1);
+    assert.deepEqual(a.createdIndices,[1]);
+    assert.deepEqual(a.skippedRows,[{index:0,reason:'already_present'}]);
     assert.equal(scalar(sqlite,'SELECT private_notes FROM books WHERE id=?',id).private_notes,'Do not touch private notes');
     assert.equal(scalar(sqlite,'SELECT review FROM books WHERE id=?',id).review,'Old review');
     assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM editions').n,1);
@@ -105,7 +109,33 @@ test('reimport is idempotent and an existing book with editions, notes and copie
     const second=await (await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:payloadRows()}})).json();
     assert.equal(second.created,0);
     assert.equal(second.skipped.already_present,2);
+    assert.deepEqual(second.createdIndices,[]);
+    assert.deepEqual(second.skippedRows,[
+      {index:0,reason:'already_present'},{index:1,reason:'already_present'}]);
     assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,2);
+  }finally{sqlite.close();}
+});
+
+test('Import explains title and Goodreads-ID conflicts by CSV row without modifying records',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    const id='11111111-2222-4333-8444-555555555555';
+    sqlite.prepare("INSERT INTO books(id,title,author,normalized_title,normalized_author,goodreads_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
+      .run(id,'A Familiar Title','Original Author','a familiar title','original author','5000',
+        '2026-01-01','2026-01-01');
+    const result=await (await call(db,'/api/imports/goodreads',{method:'POST',
+      data:{rows:[
+        {...payloadRows()[0],title:'A Familiar Title',author:'Different Author',goodreadsId:'1001'},
+        {...payloadRows()[1],title:'Entirely New Name',author:'Different Author',goodreadsId:'5000'}
+      ]}})).json();
+    assert.equal(result.created,0);
+    assert.deepEqual(result.createdIndices,[]);
+    assert.deepEqual(result.skippedRows,[
+      {index:0,reason:'ambiguous_title'},
+      {index:1,reason:'goodreads_id_conflict'}
+    ]);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,1);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM import_batches').n,0);
   }finally{sqlite.close();}
 });
 
