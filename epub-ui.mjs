@@ -1,5 +1,6 @@
 import {inspectEpub,MAX_EPUB_BYTES} from './epub-reader.mjs';
 import {suggestEpubMetadata} from './epub-metadata.mjs';
+import {bulkEpubReport} from './epub-bulk.mjs';
 
 const PREVIEW_BATCH=50;
 const MAX_SELECTION=3000;
@@ -22,7 +23,8 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  const fileInput=get('epub-files'),folderInput=get('epub-folder'),
    previewButton=get('preview-epubs'),uploadButton=get('upload-epubs'),
    list=get('epub-preview-list'),status=get('epub-preview-status'),
-   progress=get('epub-import-progress'),summary=get('epub-import-summary');
+   progress=get('epub-import-progress'),summary=get('epub-import-summary'),
+   exportButton=get('epub-download-report');
  if(!fileInput||!previewButton||!uploadButton||!list||!status||!progress)return;
  let files=[],items=[],running=false,previewComplete=false,visible=PAGE_SIZE;
  let lastPreviewCount=0;
@@ -99,6 +101,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    more.addEventListener('click',()=>{visible+=PAGE_SIZE;render();});
    list.append(more);
   }
+  if(exportButton)exportButton.disabled=!items.length||running;
   uploadButton.disabled=running||!previewComplete||eligible===0;
   uploadButton.textContent='Save '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
  }
@@ -109,6 +112,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   list.replaceChildren();progress.hidden=true;progress.value=0;
   previewButton.disabled=files.length===0||files.length>MAX_SELECTION;
   uploadButton.disabled=true;
+  if(exportButton)exportButton.disabled=true;
   if(files.length>MAX_SELECTION){
    inform('This folder has '+files.length+' EPUBs. Select up to '+MAX_SELECTION+
     ' at a time, or use smaller folders. Nothing was uploaded.');
@@ -118,6 +122,17 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   }
   if(summary)summary.textContent='No files have been uploaded.';
  }
+ if(exportButton)exportButton.addEventListener('click',()=>{
+  if(!items.length)return;
+  const text=bulkEpubReport(items);
+  const blob=new Blob([text],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const anchor=document.createElement('a');
+  anchor.href=url;anchor.download='my-library-epub-review.csv';
+  document.body.append(anchor);
+  anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
  fileInput.addEventListener('change',()=>selectFiles(fileInput.files));
  if(folderInput)folderInput.addEventListener('change',()=>selectFiles(folderInput.files));
  previewButton.addEventListener('click',async()=>{
