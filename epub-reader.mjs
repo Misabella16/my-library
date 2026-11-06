@@ -149,6 +149,19 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
       .map(match=>attrs(match[0])).find(a=>a.type==='cover' && /\.(png|jpe?g|webp)(?:$|[?#])/i.test(a.href||''));
     if(guide)coverItem=guide;
   }
+  // Some EPUB2 files omit both the cover meta tag and guide. Only use a
+  // clearly identified *single* manifest cover image, never an arbitrary
+  // illustration or the first image in the EPUB.
+  if(!coverItem){
+    const matches=[...manifest.values()].filter(a=>{
+      if(!/^image\\/(?:png|jpeg|webp)$/i.test(a['media-type']||''))return false;
+      const name=(a.href||'').split(/[?#]/)[0];
+      const coverName=/(?:^|\\/)(?:front[-_]?cover|cover(?:[-_]?image)?|coverimg)(?:[-_]?\\d+)?\\.(?:png|jpe?g|webp)$/i.test(name);
+      const coverId=/^(?:cover|frontcover|cover-image|coverimg)$/i.test(a.id||'');
+      return coverName||coverId;
+    });
+    if(matches.length===1)coverItem=matches[0];
+  }
   let coverPath='';
   if(coverItem?.href&&!/^[a-z]+:/i.test(coverItem.href)){
     const path=coverItem.href.split(/[?#]/)[0];
