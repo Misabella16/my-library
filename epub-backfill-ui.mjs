@@ -14,9 +14,11 @@ export function initEpubBackfill(api){
  const status=root.querySelector('#epub-backfill-status');
  const results=root.querySelector('#epub-backfill-results');
  const undo=root.querySelector('#epub-backfill-undo');
+ const bulk=root.querySelector('#epub-backfill-bulk');
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
  const update=()=>{
   preview.disabled=busy;
+  bulk.disabled=busy;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
   next.disabled=busy||!nextCursor;
   undo.disabled=busy||changes.length===0;
@@ -52,6 +54,48 @@ export function initEpubBackfill(api){
    status.textContent='Could not preview stored EPUBs: '+(error.message||'Request failed');
   }finally{busy=false;update();}
  }
+ bulk.addEventListener('click',async()=>{
+  if(busy)return;
+  busy=true;update();
+  let after='',checked=0,applied=0,unchanged=0,failed=0;
+  const target=50;
+  try{
+   while(checked<target){
+    const params=new URLSearchParams({limit:'10'});
+    if(after)params.set('after',after);
+    const page=await api('/api/epubs/backfill/preview?'+params);
+    if(!Array.isArray(page.files))throw Error('Incomplete EPUB metadata page');
+    for(const item of page.files){
+     checked++;
+     if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing){unchanged++;continue;}
+     try{
+      const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
+       file_id:item.file_id,expected_updated_at:item.expected_updated_at
+      }});
+      if(outcome.status==='applied'){
+       changes.push(outcome.change_id);applied++;
+      }else unchanged++;
+     }catch(error){
+      failed++;
+      const code=error?.payload?.code;
+      if(['database_read_quota','database_write_quota',
+       'database_storage_limit','database_limit_reached'].includes(code))throw error;
+     }
+    }
+    status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
+     failed+' need review. Changes are logged for Undo.';
+    if(!page.next_cursor||page.files.length===0)break;
+    after=page.next_cursor;
+   }
+   status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
+    unchanged+' unchanged · '+failed+' need refresh or review.';
+  }catch(error){
+   status.textContent='Repair stopped safely after '+checked+' files: '+
+    (error.message||'Request failed')+'. Completed changes remain saved.';
+  }finally{
+   busy=false;update();
+  }
+ });
  preview.addEventListener('click',()=>load(''));
  next.addEventListener('click',()=>{if(nextCursor)load(nextCursor);});
  apply.addEventListener('click',async()=>{
