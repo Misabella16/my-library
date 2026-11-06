@@ -41,7 +41,17 @@ async function perform(button,work,success='Saved'){
   if(button?.disabled) return;
   setBusy(button,true);
   try {await work();showMessage(success);}
-  catch(e){showMessage(e.message||'Save failed',true);if(e.status===409&&state.selectedId) await selectBook(state.selectedId);}
+  catch(e){
+    if(e.status===409&&e.payload?.existing_edition_id&&state.selectedId){
+      const dialog=$('#add-edition-dialog');
+      if(dialog?.open) dialog.close();
+      await selectBook(state.selectedId);
+      showMessage('This edition already exists under My Editions & Copies. No duplicate was created.');
+    } else {
+      showMessage(e.message||'Save failed',true);
+      if(e.status===409&&state.selectedId) await selectBook(state.selectedId);
+    }
+  }
   finally{setBusy(button,false);}
 }
 function currentCover(book) {
