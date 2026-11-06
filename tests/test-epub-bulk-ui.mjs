@@ -44,7 +44,7 @@ class FakeNode{
 }
 const ids=['epub-files','epub-folder','preview-epubs','upload-epubs',
  'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary','epub-review-filter','pause-epub-upload'];
-function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,previewAsExisting=false,pauseAfterFirst=false}={}){
+function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,previewAsExisting=false,pauseAfterFirst=false,verifiedExisting=false}={}){
  const nodes=new Map(ids.map(id=>[id,new FakeNode()]));
  nodes.get('epub-review-filter').value='all';
  const prior=globalThis.document;
@@ -65,6 +65,7 @@ function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,pr
    }
    return {results:opts.data.items.map(item=>
      previewAsExisting?{status:'already_uploaded',existing:{id:'stored-epub',book_id:'saved-book'}}:
+     verifiedExisting?{status:'match',book_id:'verified-id',matched_title:'Verified book',matched_author:'A Writer'}:
      reviewMatch?(item.title==='Corrected Book'
       ?{status:'match',book_id:'11111111-1111-4111-8111-111111111111'}
       :{status:'needs_review',reason:'Ambiguous title'}):{status:'new'})};
@@ -348,4 +349,27 @@ test('EPUB report includes the exact matched catalogue title',()=>{
   match:{status:'match',book_id:'book-id',matched_title:'Full Book Title',matched_author:'Writer'}
  }]);
  assert.match(csv,/Full Book Title/);
+});
+
+test('Filename-derived EPUB title can reuse a server-verified existing book',async()=>{
+ const f=fixture(0,{verifiedExisting:true});
+ try{
+  const raw=zipFor('');
+  f.get('epub-files').files=[new File([raw],'A Reliable Title.epub')];
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.match(f.get('epub-import-summary').textContent,/Matches existing book: 1/);
+  assert.equal(f.get('upload-epubs').disabled,false);
+  assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+test('Unverified claimed match cannot override a local review warning',async()=>{
+ const f=fixture(0,{reviewMatch:true});
+ try{
+  f.get('epub-files').files=[new File([zipFor('')],'A Reliable Title.epub')];
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.match(f.get('epub-import-summary').textContent,/Needs review: 1/);
+  assert.equal(f.get('upload-epubs').disabled,true);
+ }finally{f.restore();}
 });

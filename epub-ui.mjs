@@ -279,9 +279,16 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       throw Error('Incomplete EPUB matching response');
      toMatch.forEach((entry,i)=>{
        const checked=payload.results[i];
-       entry.match=entry.reviewReason&&checked.status!=='already_uploaded'
-        ?{status:'needs_review',reason:entry.reviewReason}
-        :checked;
+       // A filename-derived title is never enough to create a new book.
+       // However, the server can independently establish an exact existing
+       // catalogue match by ISBN or title + author. Link those safely without
+       // asking the owner to confirm each otherwise-ambiguous EPUB by hand.
+       const safeExisting=checked.status==='match'&&
+         checked.book_id&&checked.matched_title&&checked.matched_author;
+       entry.match=entry.reviewReason&&
+         checked.status!=='already_uploaded'&&!safeExisting
+         ?{status:'needs_review',reason:entry.reviewReason}
+         :checked;
      });
     }
     // Commit each batch only after its D1 preview succeeds. On failure,
