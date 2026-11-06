@@ -128,7 +128,7 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   const author=tagValue(packageXml,'creator',400);
   const description=tagValue(packageXml,'description',3000);
   const identifier=tagValue(packageXml,'identifier',250);
-  const subjects=[...packageXml.matchAll(/<(?:[\\w.-]+:)?subject\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w.-]+:)?subject\\s*>/gi)]
+  const subjects=[...packageXml.matchAll(/<(?:[\w.-]+:)?subject\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?subject\s*>/gi)]
     .map(match=>cleanText(match[1],90)).filter(Boolean)
     .filter((subject,index,all)=>all.findIndex(x=>x.toLocaleLowerCase()===subject.toLocaleLowerCase())===index)
     .slice(0,8);
