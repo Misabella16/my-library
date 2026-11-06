@@ -44,11 +44,11 @@ test('visual refresh has local, readable, mobile and reduced-motion styles', () 
 });
 
 test('Rococo page backgrounds stay mostly ivory without removing accents', () => {
-  assert.match(css, /body\\s*\\{[\\s\\S]*?background:#faf8f4;/);
-  assert.match(css, /background:linear-gradient\\(112deg,#fbfaf6 0%,#f8f5ef 58%,#f7f1ee 100%\\);/);
-  assert.doesNotMatch(css, /rgba\\(190,210,181,\\.40\\)/);
-  assert.match(css, /\\.ribbon-bow\\s*\\{/);
-  assert.match(css, /\\.rose-flower\\s*\\{/);
+  assert.match(css, /body\s*\{[\s\S]*?background:#faf8f4;/);
+  assert.match(css, /background:linear-gradient\(112deg,#fbfaf6 0%,#f8f5ef 58%,#f7f1ee 100%\);/);
+  assert.doesNotMatch(css, /rgba\(190,210,181,\.40\)/);
+  assert.match(css, /\.ribbon-bow\s*\{/);
+  assert.match(css, /\.rose-flower\s*\{/);
 });
 
 test('visual changes cannot introduce remote assets or third-party requests', () => {
