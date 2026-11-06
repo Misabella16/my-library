@@ -142,6 +142,70 @@ async function importChunk(request,db){
   return json({created:accepted.length,createdIndices:accepted.map(item=>item.index),skipped,
     skippedRows,skippedTotal,batch_id:batchId,status:'complete'},201);
 }
+async function linkGoodreadsEdition(request,db){
+  let data;
+  try{data=await readBody(request);}catch{return fail('Invalid Goodreads edition request');}
+  const title=typeof data.title==='string'?data.title.trim():'';
+  const author=typeof data.author==='string'?data.author.trim():'';
+  const goodreadsId=typeof data.goodreadsId==='string'?data.goodreadsId.trim():'';
+  const isbn13=typeof data.isbn13==='string'?data.isbn13.trim():'';
+  const isbn10=typeof data.isbn==='string'?data.isbn.trim():'';
+  if(!title||title.length>300||!author||author.length>400 ||
+     !/^\d{1,36}$/.test(goodreadsId))
+    return fail('A title, author, and valid Goodreads Book ID are required.');
+  const isbn=[isbn13,isbn10].map(x=>x.replace(/[\s-]/g,'').toUpperCase())
+    .find(x=>/^(?:\d{13}|\d{9}[\dX])$/.test(x))||'';
+  const ntitle=importNormalize(title),nauthor=importNormalize(author);
+  if(!ntitle||!nauthor)return fail('This Goodreads row cannot be linked safely.');
+  const candidates=await rows(db,
+    'SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL AND normalized_title=? LIMIT 101',
+    [ntitle]);
+  if(candidates.length>=101)return fail('This title has too many library matches. Review manually.',409);
+  const exact=candidates.filter(book=>importNormalize(book.title)===ntitle&&
+    importNormalize(book.author)===nauthor);
+  if(exact.length!==1)return fail(exact.length
+    ?'More than one matching book was found. Review manually.'
+    :'Import the main book first, then link its additional Goodreads editions.',409);
+  const book=exact[0];
+  const conflicting=await query(db,'SELECT id FROM books WHERE goodreads_id=? LIMIT 1',[goodreadsId]);
+  if(conflicting && conflicting.id!==book.id)
+    return fail('This Goodreads ID belongs to another library book. Nothing was changed.',409);
+  if(book.goodreads_id===goodreadsId)
+    return json({status:'edition_already_linked',book_id:book.id,
+      message:'This Goodreads entry is already the main book record.'});
+  const editions=await rows(db,
+    'SELECT id,isbn,source_product_url FROM editions WHERE book_id=? LIMIT 201',[book.id]);
+  if(editions.length>=201)return fail('This book has too many editions for safe automatic linking.',409);
+  const sourceUrl='https://www.goodreads.com/book/show/'+goodreadsId;
+  const existing=editions.find(e=>e.source_product_url===sourceUrl ||
+    (isbn&&e.isbn?.replace(/[\s-]/g,'').toUpperCase()===isbn));
+  if(existing)return json({status:'edition_already_linked',book_id:book.id,
+    edition_id:existing.id,message:'This edition is already represented under the book.'});
+  // A Goodreads reading entry is evidence of a possible edition, not evidence
+  // that the user owns a physical copy, or of its format or special status.
+  const editionId=uuid(),ts=now();
+  const editionName='Goodreads edition '+goodreadsId;
+  try{
+    await db.batch([
+      prep(db,
+        "INSERT INTO editions(id,book_id,edition_name,isbn,format,source_product_url,is_special,details,created_at,updated_at) "+
+        "VALUES (?,?,?,?,'other',?,0,?,?,?)",
+        [editionId,book.id,editionName,isbn||null,sourceUrl,
+          'Linked from Goodreads CSV. Edition format and ownership are unverified.',ts,ts]),
+      prep(db,
+        "INSERT INTO change_log(id,action,entity_type,entity_id,before_json,after_json,created_at) "+
+        "VALUES (?,'goodreads_edition_link','editions',?,NULL,?,?)",
+        [uuid(),editionId,JSON.stringify({book_id:book.id,goodreads_id:goodreadsId,
+          isbn:isbn||null}),ts])
+    ]);
+  }catch(error){
+    if(/unique|constraint/i.test(String(error)))
+      return fail('An edition with this ISBN or Goodreads identity already exists. Refresh to review it.',409);
+    throw error;
+  }
+  return json({status:'edition_added',book_id:book.id,edition_id:editionId,
+    message:'Unowned edition linked to the existing book. Existing covers and copies were not changed.'},201);
+}
 async function importHistory(db){
   const result=await rows(db,"SELECT id,status,report,created_at FROM import_batches "+
     "WHERE source='goodreads' ORDER BY created_at DESC LIMIT 25");
@@ -252,6 +316,10 @@ export async function handleGoodreadsApi(request,db,path){
       'SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL ORDER BY id LIMIT ? OFFSET ?',
       [limit,offset]);
     return json({books,...(includeTotal?{total:Number(total?.n)||0}:{}),offset,limit});
+  }
+  if(path==='/api/imports/goodreads/edition'&&request.method==='POST'){
+    try{return await linkGoodreadsEdition(request,db);}
+    catch(e){return importServiceFailure(e);}
   }
   if(path==='/api/imports'&&request.method==='GET')return importHistory(db);
   if(path==='/api/imports/goodreads'&&request.method==='POST'){

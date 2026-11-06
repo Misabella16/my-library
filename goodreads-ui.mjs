@@ -46,9 +46,9 @@ const labelStatus={
   unverified:['Not fully checked','unverified']
 };
 
-function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={}){
+function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),editionLinks=new Map(),onLinkEdition=async()=>{}}={}){
   container.replaceChildren();
-  const allRows=reconciliationRows(parsed,matches,{outcomes});
+  const allRows=reconciliationRows(parsed,matches,{outcomes,editionLinks});
   const totals=reconciliationCounts(allRows);
   const summary=node('section','goodreads-summary');
   const title=node('h3',null,'Your Goodreads reconciliation');
@@ -57,6 +57,9 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
       ? 'Import results are shown below for each CSV row. Existing books, editions and copies were not overwritten.'
       : 'Preview only. No changes made. Possible matches use Goodreads ID, title and author; special editions and copies are never overwritten.');
   const stats=node('div','goodreads-stats');
+  const linkedNumber=node('strong',null,String(totals.edition_linked||0));
+  const linkedCard=node('div','goodreads-stat');
+  linkedCard.append(linkedNumber,node('span',null,'Linked editions'));
   stats.append(
     stat('Total CSV rows',parsed.sourceCount),
     stat('Valid CSV books',parsed.entries.length),
@@ -67,7 +70,8 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
     stat('Rows sharing CSV identities',matches.counts.repeatedCsv),
     stat('New works from repeated titles',matches.counts.canonicalRepeatedWorks||0),
     stat('Possible edition rows',matches.counts.possibleEditionRows||0),
-    stat('Repeated/conflicting IDs',matches.counts.duplicateIdRows||0)
+    stat('Repeated/conflicting IDs',matches.counts.duplicateIdRows||0),
+    linkedCard
   );
   if(totals.imported||totals.skipped||totals.not_attempted){
     stats.append(stat('Successfully imported',totals.imported),
@@ -106,7 +110,7 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
   const listing=node('section','goodreads-list');
   listing.append(node('h3',null,'Every book in your CSV'));
   listing.append(node('p','muted',
-    'One work per repeated title/author group may be eligible for import. Other Goodreads entries remain listed as possible editions or duplicates. No edition or owned copy is created automatically.'));
+    'One work per repeated title/author group may be eligible for import. Other entries can be linked as unowned, unverified editions only after you review and confirm them. No copies or special-edition covers are created or changed automatically.'));
   const controls=node('div','goodreads-report-controls');
   const filter=node('select','goodreads-filter');
   filter.setAttribute('aria-label','Filter Goodreads rows by status');
@@ -114,10 +118,12 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
     ['all','All rows'],['already_present','Already in library'],['needs_review','Needs review'],
     ['ready','Ready to import'],['unverified','Not fully checked'],
     ['imported','Imported'],['skipped','Skipped by server'],['not_attempted','Not attempted'],
-    ['editions','Possible editions'],['duplicate_ids','Duplicate or conflicting Goodreads IDs']
+    ['editions','Possible editions'],['edition_linked','Linked editions'],
+    ['duplicate_ids','Duplicate or conflicting Goodreads IDs']
   ]){
     const option=node('option',null,label);option.value=key;filter.append(option);
   }
+  filter.value='all'; // Explicit initial selection also supports non-browser test fixtures.
   const search=node('input','goodreads-report-search');
   search.type='search';search.placeholder='Search CSV titles or authors…';
   search.setAttribute('aria-label','Search Goodreads rows');
@@ -152,8 +158,58 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
         identifiers.push(row.workGroupSize+' related CSV rows · work represented by row '+row.representativeRow);
       if(identifiers.length)main.append(node('span','goodreads-identifiers',identifiers.join(' · ')));
       const details=node('div','goodreads-row-meta');
-      details.append(node('span','goodreads-match '+row.status,row.status.replaceAll('_',' ')),
+      details.append(node('span','goodreads-match '+row.status,
+          row.status==='edition_linked'?'Edition linked':row.status.replaceAll('_',' ')),
         node('span','goodreads-row-number','CSV row '+row.csvRow));
+      const linked=editionLinks.get(row.csvRow);
+      const possible=['possible_edition_same_work','possible_edition_of_existing_work']
+        .includes(row.reason);
+      if(linked){
+        details.append(node('span','goodreads-linked-edition',
+          linked.status==='edition_added'?'Edition linked · no owned copy':'Already represented as an edition'));
+      }else if(possible&&catalogue.complete){
+        // Only link rows that had a confirmed match to a book in the existing
+        // catalogue. A first-time work must be imported and re-previewed first.
+        const csvWork=matches.results.find(e=>e.rowNumber===row.csvRow);
+        if(csvWork?.matchReason==='possible_edition_of_existing_work'){
+          const review=node('button','btn subtle mini','Review edition link');
+          review.type='button';
+          review.setAttribute('aria-label','Review edition for '+row.title);
+          details.append(review);
+          review.addEventListener('click',()=>{
+            review.hidden=true;
+            const confirm=node('div','goodreads-edition-confirm');
+            confirm.append(node('p',null,'Link this Goodreads entry as an unowned, unverified edition under the existing book? No physical copy, special-edition status or cover will be changed.'));
+            const approve=node('button','btn mini','Add unowned edition');
+            approve.type='button';
+            const cancel=node('button','btn subtle mini','Cancel');
+            cancel.type='button';
+            confirm.append(approve,cancel);
+            cancel.addEventListener('click',()=>{confirm.remove();review.hidden=false;});
+            approve.addEventListener('click',async()=>{
+              approve.disabled=true;cancel.disabled=true;
+              try{
+                const result=await onLinkEdition(row);
+                editionLinks.set(row.csvRow,{status:result.status,edition_id:result.edition_id});
+                row.status='edition_linked';
+                row.reason=result.status==='edition_added'?'edition_linked':'edition_already_linked';
+                row.explanation=result.status==='edition_added'
+                  ?'Linked as an unowned, unverified edition under the existing work.'
+                  :'This Goodreads entry was already represented. Nothing was changed.';
+                linkedNumber.textContent=String([...editionLinks.values()].filter(x=>
+                  x.status==='edition_added'||x.status==='edition_already_linked').length);
+                render();
+              }catch(error){
+                const issue=node('p','goodreads-error',
+                  'Edition not linked: '+(error instanceof Error?error.message:'Request failed'));
+                confirm.append(issue);
+                approve.disabled=false;cancel.disabled=false;
+              }
+            });
+            details.append(confirm);
+          });
+        }
+      }
       item.append(main,details);content.append(item);
     }
     counter.textContent='Showing '+Math.min(shown,filtered.length)+' of '+filtered.length+
@@ -303,14 +359,26 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
       await historyRefresh();
     });
   }
+  async function linkEdition(row){
+    const result=await api('/api/imports/goodreads/edition',{method:'POST',
+      data:{title:row.title,author:row.author,goodreadsId:row.goodreadsId,
+        isbn:row.isbn,isbn13:row.isbn13}});
+    if(result.status!=='edition_added'&&result.status!=='edition_already_linked')
+      throw Error('The edition link could not be confirmed.');
+    setFeedback(result.status==='edition_added'
+      ?'Edition linked under the existing book. No copy or cover was added.'
+      :'This edition was already represented. No changes were made.','success');
+    return result;
+  }
   function renderReport(){
     if(reportData)renderSummary(output,reportData.parsed,reportData.matches,
-      reportData.catalogue,{outcomes:reportData.outcomes});
+      reportData.catalogue,{outcomes:reportData.outcomes,
+        editionLinks:reportData.editionLinks,onLinkEdition:linkEdition});
   }
   download.addEventListener('click',()=>{
     if(!reportData||importing)return;
     const data=reconciliationCsv(reportData.parsed,reportData.matches,
-      {outcomes:reportData.outcomes});
+      {outcomes:reportData.outcomes,editionLinks:reportData.editionLinks});
     const url=URL.createObjectURL(new Blob([data],{type:'text/csv;charset=utf-8'}));
     const link=node('a');link.href=url;link.download='my-library-goodreads-reconciliation.csv';
     document.body.append(link);link.click();link.remove();
@@ -349,7 +417,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
       });
       const matches=matchGoodreadsRows(parsed.entries,catalogue.books,{complete:catalogue.complete});
       const candidates=matches.results.filter(eligible);
-      reportData={parsed,matches,catalogue,outcomes:new Map()};
+      reportData={parsed,matches,catalogue,outcomes:new Map(),editionLinks:new Map()};
       current={parsed,matches,catalogue,candidates};
       renderReport();
       download.disabled=false;

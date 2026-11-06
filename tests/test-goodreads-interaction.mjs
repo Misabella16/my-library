@@ -44,7 +44,7 @@ const csv=(title='A Tale of Lanterns',author='A Writer')=>[
 function file(text=csv()){
   return {name:'goodreads_library_export.csv',size:text.length,text:async()=>text};
 }
-async function ready({library=[],onImported=async()=>{},failImportTimes=0,failCode='import_batch_unavailable'}={}){
+async function ready({library=[],onImported=async()=>{},failImportTimes=0,failCode='import_batch_unavailable',csvText=null}={}){
   const ui=fixture();
   const priorDocument=globalThis.document;
   globalThis.document=ui.document;
@@ -65,6 +65,9 @@ async function ready({library=[],onImported=async()=>{},failImportTimes=0,failCo
     }
     if(path==='/api/imports')return {batches:created?[{id:'11111111-1111-4111-8111-111111111111',status:'complete',
       created_at:'2026-11-05T21:00:00.000Z',created,skippedTotal:0}]:[]};
+    if(path==='/api/imports/goodreads/edition'){
+      return {status:'edition_added',edition_id:'88888888-8888-4888-8888-888888888888'};
+    }
     if(path==='/api/imports/goodreads'){
       if(failImportTimes>0){
         failImportTimes--;
@@ -80,7 +83,7 @@ async function ready({library=[],onImported=async()=>{},failImportTimes=0,failCo
   };
   initGoodreadsPreview(api,{onImported});
   const input=ui.get('goodreads-file');
-  input.files=[file()];
+  input.files=[file(csvText??csv())];
   await input.dispatch('change');
   await ui.get('preview-goodreads').dispatch('click');
   return {...ui,requests,restore:()=>{globalThis.document=priorDocument;}};
@@ -219,4 +222,51 @@ test('If a CSV has no safely new books, the disabled action explains why',async(
     assert.match(ui.get('goodreads-import-feedback').textContent,/Import not started/);
     assert.equal(ui.requests.filter(r=>r.method==='POST').length,0);
   }finally{ui.restore();}
+});
+
+const descendants=(root,predicate)=>{
+  const matches=[];
+  const walk=node=>{
+    if(predicate(node))matches.push(node);
+    for(const child of node.children||[])walk(child);
+  };
+  walk(root);return matches;
+};
+const repeatedEditionCsv=()=>{
+ const heading='Book Id,Title,Author,My Rating,Exclusive Shelf,Bookshelves,My Review,Date Read,Date Added,ISBN,ISBN13';
+ const record=(id,isbn)=>[id,'A Tide of Treason','A.B. Daniels-Annachi','0','to-read','fantasy','','','','',isbn]
+   .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',');
+ return heading+'\r\n'+record('901','9781922936745')+'\r\n'+record('220639205','9781922936746')+'\r\n';
+};
+test('Edition review requires explicit inline confirmation and reports linked status, never copying ownership',async()=>{
+ const library=[{id:'11111111-2222-4333-8444-555555555555',
+  title:'A Tide of Treason',author:'A.B. Daniels-Annachi',goodreads_id:'901'}];
+ const ui=await ready({library,csvText:repeatedEditionCsv()});
+ try{
+  assert.equal(ui.requests.filter(r=>r.method==='POST').length,0);
+  const view=ui.get('goodreads-preview-results');
+  const links=descendants(view,node=>node.textContent==='Review edition link');
+  assert.equal(links.length,1,'Only the alternate edition gets a review control');
+  await links[0].dispatch('click');
+  const buttons=descendants(view,node=>node.textContent==='Add unowned edition');
+  assert.equal(buttons.length,1);
+  assert.equal(ui.requests.filter(r=>r.method==='POST').length,0,
+   'Opening an inline review must never write data');
+  const text=descendants(view,node=>typeof node.textContent==='string'&&
+    node.textContent.includes('No physical copy'));
+  assert.equal(text.length,1);
+  await buttons[0].dispatch('click');
+  assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads/edition').length,1);
+  assert.match(ui.get('goodreads-import-feedback').textContent,/Edition linked/);
+  const statuses=descendants(view,node=>node.textContent==='Edition linked');
+  assert.ok(statuses.length>=1,'Preview reflects the saved edition outcome');
+ }finally{ui.restore();}
+});
+test('Preview with no existing work does not offer linking before main book import',async()=>{
+ const ui=await ready({csvText:repeatedEditionCsv()});
+ try{
+  assert.equal(descendants(ui.get('goodreads-preview-results'),
+    node=>node.textContent==='Review edition link').length,0);
+  assert.equal(ui.requests.filter(r=>r.method==='POST').length,0);
+ }finally{ui.restore();}
 });
