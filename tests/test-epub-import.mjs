@@ -157,6 +157,8 @@ test('Batch preview matches 50 EPUBs using two indexed DB queries',async()=>{
   assert.equal(matches.length,50);
   assert.equal(matches[0].status,'match');
   assert.equal(matches[0].book_id,key);
+  assert.equal(matches[0].matched_title,'A Novel');
+  assert.equal(matches[0].matched_author,'Writer');
   assert.equal(matches[1].status,'new');
   const response=await post(f.db,f.env,'/api/epubs/preview',JSON.stringify({items:[meta]}));
   assert.equal(response.status,200);
@@ -196,6 +198,7 @@ test('EPUB ISBN-13 identifies an existing book even when EPUB title differs',asy
   const preview=await batchPreviewEpub(f.db,[meta]);
   assert.equal(preview[0].status,'match');
   assert.equal(preview[0].book_id,id);
+  assert.equal(preview[0].matched_title,'The Book: Collector Title');
   const response=await post(f.db,f.env,'/api/epubs/upload',form(meta));
   assert.equal(response.status,201,await response.clone().text());
   assert.equal((await response.json()).book_created,false);
