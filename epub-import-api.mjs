@@ -1,3 +1,4 @@
+import {cleanEpubTitle,cleanEpubAuthor,normalizeEpubTitle} from './epub-metadata.mjs';
 // Owner-only private EPUB intake. The enclosing Worker already verifies Access
 // and write origin. One file per request keeps D1/R2 usage predictable.
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store'};
@@ -23,9 +24,11 @@ export async function matchEpub(db,{title,author,sha256}){
       'SELECT id,book_id,edition_id,original_filename FROM epub_files WHERE sha256=?',[sha256]);
     if(duplicate)return {status:'already_uploaded',existing:duplicate};
   }
-  const normalizedTitle=normalizeEpubText(title),normalizedAuthor=normalizeEpubText(author);
+  const normalizedTitle=normalizeEpubTitle(title),normalizedAuthor=normalizeEpubText(author);
   if(!normalizedTitle||!normalizedAuthor)
     return {status:'needs_review',reason:'EPUB title or author is missing'};
+  // Only auto-match when original EPUB metadata confirms both title and
+  // author. Filename-only fallbacks remain in manual review.
   // Use indexed active identity, plus a conservative same-title check.
   const same=await many(db,
     'SELECT id,title,author FROM books WHERE archived_at IS NULL AND normalized_title=? LIMIT 101',
@@ -55,7 +58,7 @@ export async function batchPreviewEpub(db,items){
   if(!Array.isArray(items)||items.length<1||items.length>50)
     throw Error('Preview 1 to 50 EPUBs at a time');
   const inputs=items.map(item=>({
-    title:clean(item?.title,300),author:clean(item?.author,400),
+    title:cleanEpubTitle(item?.title),author:cleanEpubAuthor(item?.author),
     sha256:String(item?.sha256||'')
   }));
   if(inputs.some(x=>!/^[a-f0-9]{64}$/.test(x.sha256)))
@@ -66,7 +69,7 @@ export async function batchPreviewEpub(db,items){
     'SELECT id,sha256,book_id,edition_id,original_filename FROM epub_files WHERE sha256 IN ('+
     values(hashes)+')',hashes);
   const hashIndex=new Map(existing.map(row=>[row.sha256,row]));
-  const titleKeys=[...new Set(inputs.map(i=>normalizeEpubText(i.title)).filter(Boolean))];
+  const titleKeys=[...new Set(inputs.map(i=>normalizeEpubTitle(i.title)).filter(Boolean))];
   const books=titleKeys.length?await many(db,
     'SELECT id,title,author,normalized_title FROM books WHERE archived_at IS NULL AND normalized_title IN ('+
     values(titleKeys)+') LIMIT 5051',titleKeys):[];
@@ -79,12 +82,13 @@ export async function batchPreviewEpub(db,items){
   const outcomes=inputs.map(item=>{
     const hash=hashIndex.get(item.sha256);
     if(hash)return {status:'already_uploaded',existing:hash};
-    const title=normalizeEpubText(item.title),author=normalizeEpubText(item.author);
+    const title=normalizeEpubTitle(item.title),author=normalizeEpubText(item.author);
     if(!title||!author)return {status:'needs_review',reason:'EPUB title or author is missing'};
     if(truncated)return {status:'needs_review',reason:'Catalogue match requires individual review'};
     const group=groups.get(title)||[];
     if(group.length>=101)return {status:'needs_review',reason:'Too many existing books match this title'};
-    const exact=group.filter(b=>normalizeEpubText(b.author)===author);
+    const exact=group.filter(b=>normalizeEpubText(b.author)===author&&
+      normalizeEpubTitle(b.title)===title);
     if(exact.length===1)return {status:'match',book_id:exact[0].id};
     if(exact.length||group.length)return {status:'needs_review',reason:'Same title has a conflicting or ambiguous author'};
     // Rare legacy Unicode title matches use the targeted server fallback at
@@ -123,7 +127,7 @@ export async function handleEpubApi(request,db,env,path){
     let metadata;
     try{metadata=JSON.parse(form.get('metadata')||'{}');}
     catch{return bad('Invalid EPUB metadata');}
-    const title=clean(metadata.title,300),author=clean(metadata.author,400);
+    const title=cleanEpubTitle(metadata.title),author=cleanEpubAuthor(metadata.author);
     const expected=String(metadata.sha256||'');
     if(!/^[a-f0-9]{64}$/.test(expected))return bad('Invalid EPUB hash');
     const bytes=new Uint8Array(await file.arrayBuffer());
