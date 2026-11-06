@@ -163,3 +163,21 @@ test('Batch preview matches 50 EPUBs using two indexed DB queries',async()=>{
   assert.equal((await response.json()).results[0].status,'match');
  }finally{f.sqlite.close();}
 });
+
+test('EPUB preview supports Unicode exact titles and a bounded legacy fallback',async()=>{
+ const f=fixture();
+ try{
+  const id='88888888-8888-4888-8888-888888888888';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(id,'天官赐福','墨香铜臭','天官赐福','墨香铜臭');
+  const before=f.queries();
+  const results=await batchPreviewEpub(f.db,[
+   {title:'天官赐福',author:'墨香铜臭',sha256:'1'.repeat(64)},
+   {title:'平安喜乐',author:'Another Author',sha256:'2'.repeat(64)}
+  ]);
+  assert.equal(results[0].status,'match');
+  assert.equal(results[0].book_id,id);
+  assert.equal(results[1].status,'new');
+  assert.equal(f.queries()-before,3,'Two indexed queries plus one bounded legacy-key query');
+ }finally{f.sqlite.close();}
+});
