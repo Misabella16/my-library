@@ -11,7 +11,8 @@ class FakeNode {
 }
 function fixture(rows=55){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
- 'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk'];
+ 'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
+ 'epub-backfill-history','epub-backfill-history-list'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -38,6 +39,9 @@ function fixture(rows=55){
   if(path==='/api/epubs/backfill/apply'){
    applied.push(opts.data.file_id);
    return {status:'applied',change_id:opts.data.file_id};
+  }
+  if(path==='/api/epubs/backfill/history'){
+   return {changes:[{id:'recent-change',title:'A Novel',created_at:'2026-11-06',undone_at:null}]};
   }
   if(path==='/api/epubs/backfill/undo')return {status:'undone'};
   throw Error('Unexpected API call: '+path);
@@ -69,5 +73,19 @@ test('Preview of stored metadata never repairs anything until Apply is clicked',
   await f.get('epub-backfill-apply').click();
   assert.equal(f.applied.length,2);
   assert.equal(f.get('epub-backfill-undo').disabled,false);
+ }finally{f.restore();}
+});
+
+test('History can restore Undo controls after a new visit without leaking EPUB data',async()=>{
+ const f=fixture(0);
+ try{
+  await f.get('epub-backfill-history').click();
+  const rows=f.get('epub-backfill-history-list').children;
+  assert.equal(rows.length,1);
+  const undo=rows[0].children.find(x=>x.textContent==='Undo this repair');
+  assert.ok(undo);
+  await undo.click();
+  assert.ok(f.calls.includes('/api/epubs/backfill/undo'));
+  assert.equal(undo.textContent,'Undone');
  }finally{f.restore();}
 });
