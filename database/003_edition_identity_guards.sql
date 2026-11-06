@@ -1,3 +1,7 @@
+-- Stop concurrent imports creating the same active work twice.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_books_active_identity
+ON books(normalized_title,normalized_author) WHERE archived_at IS NULL;
+
 -- Only use against the standalone My Library D1 database.
 -- One record for each distinct edition type under a book.
 -- These constraints do not touch copies, cover files or notes.
