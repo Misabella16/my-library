@@ -52,7 +52,11 @@ async function ready({library=[],onImported=async()=>{}}={}){
   let created=0;
   const api=async(path,options={})=>{
     requests.push({path,method:options.method||'GET'});
-    if(path.startsWith('/api/books?'))return {books:library,total:library.length};
+    if(path.startsWith('/api/imports/catalogue?')){
+      const params=new URL('https://library.invalid'+path).searchParams;
+      const offset=Number(params.get('offset')||0),limit=Number(params.get('limit')||1000);
+      return {books:library.slice(offset,offset+limit),total:library.length,offset,limit};
+    }
     if(path==='/api/imports')return {batches:created?[{id:'11111111-1111-4111-8111-111111111111',status:'complete',
       created_at:'2026-11-05T21:00:00.000Z',created,skippedTotal:0}]:[]};
     if(path==='/api/imports/goodreads'){
@@ -115,6 +119,20 @@ test('A refresh error cannot falsely report that a completed import failed',asyn
     assert.equal(ui.requests.filter(r=>r.method==='POST').length,1);
     assert.match(ui.get('goodreads-import-feedback').textContent,/Import saved: 1 new books added/);
     assert.doesNotMatch(ui.get('goodreads-import-feedback').textContent,/Import stopped/);
+  }finally{ui.restore();}
+});
+
+test('A library larger than 5,000 books is fully checked before importing',async()=>{
+  const books=Array.from({length:5102},(_,i)=>({
+    id:'item-'+i,title:'Existing '+i,author:'Other Author',goodreads_id:String(i+10000)
+  }));
+  const ui=await ready({library:books});
+  try{
+    assert.equal(ui.get('import-goodreads').disabled,false);
+    assert.match(ui.get('goodreads-import-hint').textContent,/1 safely new book/);
+    const pages=ui.requests.filter(r=>r.path.startsWith('/api/imports/catalogue?'));
+    assert.equal(pages.length,6);
+    assert.equal(ui.requests.filter(r=>r.method==='POST').length,0);
   }finally{ui.restore();}
 });
 
