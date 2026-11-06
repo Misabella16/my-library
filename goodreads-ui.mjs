@@ -44,7 +44,9 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
   const summary=node('section','goodreads-summary');
   const title=node('h3',null,'Your Goodreads reconciliation');
   const explainer=node('p','muted',
-    'No changes made. Possible matches use title and author; special editions and individual copies are never overwritten.');
+    totals.imported||totals.skipped||totals.not_attempted
+      ? 'Import results are shown below for each CSV row. Existing books, editions and copies were not overwritten.'
+      : 'Preview only. No changes made. Possible matches use Goodreads ID, title and author; special editions and copies are never overwritten.');
   const stats=node('div','goodreads-stats');
   stats.append(
     stat('Total CSV rows',parsed.sourceCount),
