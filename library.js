@@ -250,7 +250,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#search').addEventListener('input',()=>{
     state.query=$('#search').value.trim();
     clearTimeout(window.bookQueryTimer);
-    window.bookQueryTimer=setTimeout(()=>listBooks().catch(e=>showMessage(e.message,true)),250);
+    // Delay rapid typing to avoid a new D1 LIKE search for every keystroke.
+    window.bookQueryTimer=setTimeout(()=>listBooks().catch(e=>showMessage(e.message,true)),650);
   });
   $('#book-grid').addEventListener('click',async e=>{
     const item=e.target.closest('[data-select-book]');
