@@ -50,7 +50,7 @@ test('Shelf-photo assistant only reads bounded title matches and never creates c
   assert.ok(results.length>0);
   const match=results.find(row=>row.children.some(x=>x.textContent==='Babel'));
   assert.ok(match);
-  const button=match.children.find(x=>x.listeners?.click);
+  const button=match.children.find(x=>x.listeners?.click && x.textContent==='Open book and manage editions/copies');
   assert.ok(button);
   await button.dispatch('click');
   assert.deepEqual(opened,['11111111-1111-4111-8111-111111111111']);
