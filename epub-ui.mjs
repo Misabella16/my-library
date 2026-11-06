@@ -25,9 +25,11 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    list=get('epub-preview-list'),status=get('epub-preview-status'),
    progress=get('epub-import-progress'),summary=get('epub-import-summary'),
    exportButton=get('epub-download-report'),
-   reviewFilter=get('epub-review-filter');
+   reviewFilter=get('epub-review-filter'),
+   pauseButton=get('pause-epub-upload');
  if(!fileInput||!previewButton||!uploadButton||!list||!status||!progress)return;
  let files=[],items=[],running=false,previewComplete=false,visible=PAGE_SIZE;
+ let uploadActive=false,pauseRequested=false;
  let lastPreviewCount=0;
  const inform=text=>{status.textContent=text;};
  function render(){
@@ -173,6 +175,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    list.append(more);
   }
   if(exportButton)exportButton.disabled=!items.length||running;
+  if(pauseButton)pauseButton.disabled=!uploadActive||pauseRequested;
   uploadButton.disabled=running||!previewComplete||eligible===0;
   uploadButton.textContent='Save '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
  }
@@ -206,6 +209,12 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  });
  if(reviewFilter)reviewFilter.addEventListener('change',()=>{
   visible=PAGE_SIZE;render();
+ });
+ if(pauseButton)pauseButton.addEventListener('click',()=>{
+  if(!uploadActive)return;
+  pauseRequested=true;
+  pauseButton.disabled=true;
+  inform('Pausing after the current EPUB finishes. Saved files are retained.');
  });
  fileInput.addEventListener('change',()=>selectFiles(fileInput.files));
  if(folderInput)folderInput.addEventListener('change',()=>selectFiles(folderInput.files));
@@ -283,11 +292,13 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   if(running||!previewComplete)return;
   const eligible=items.filter(canImport);
   if(!eligible.length)return;
-  running=true;previewButton.disabled=true;uploadButton.disabled=true;
+  running=true;uploadActive=true;pauseRequested=false;
+  previewButton.disabled=true;uploadButton.disabled=true;
+  if(pauseButton)pauseButton.disabled=false;
   progress.hidden=false;progress.max=eligible.length;progress.value=0;
   let saved=0,skipped=0,failed=0,pausedReason='';
   for(const entry of eligible){
-   if(!running)break;
+   if(!running||pauseRequested)break;
    try{
     inform('Saving '+(saved+skipped+failed+1)+' of '+eligible.length+
      '. Keep this tab open while uploading. Completed files are retained if interrupted.');
@@ -336,10 +347,13 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    progress.value=saved+skipped+failed;
    if((saved+skipped+failed)%10===0)render();
   }
-  running=false;render();previewButton.disabled=false;
+  running=false;uploadActive=false;
+  if(pauseButton)pauseButton.disabled=true;
+  render();previewButton.disabled=false;
   try{if(saved)await onImported();}catch{}
   const remaining=items.filter(canImport).length;
-  inform((pausedReason?pausedReason+' ':'')+'Batch update: '+saved+' uploaded, '+skipped+' skipped, '+
+  inform((pauseRequested?'Paused at your request. Click Save to resume remaining files. ':'' )+
+   (pausedReason?pausedReason+' ':'')+'Batch update: '+saved+' uploaded, '+skipped+' skipped, '+
    failed+' failed or needing retry. '+remaining+' eligible files remain. '+
    'Your original EPUBs were not modified.');
  });

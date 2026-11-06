@@ -43,8 +43,8 @@ class FakeNode{
  async dispatch(type){for(const fn of this.listeners[type]||[])await fn({target:this});}
 }
 const ids=['epub-files','epub-folder','preview-epubs','upload-epubs',
- 'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary','epub-review-filter'];
-function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,previewAsExisting=false}={}){
+ 'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary','epub-review-filter','pause-epub-upload'];
+function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,previewAsExisting=false,pauseAfterFirst=false}={}){
  const nodes=new Map(ids.map(id=>[id,new FakeNode()]));
  nodes.get('epub-review-filter').value='all';
  const prior=globalThis.document;
@@ -74,7 +74,9 @@ function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,pr
     failNext=false;const error=new Error('Daily database limit');
     error.payload={code:'database_read_quota'};throw error;
    }
-   uploads++;return {uploaded:true};
+   uploads++;
+   if(pauseAfterFirst&&uploads===1)await nodes.get('pause-epub-upload').dispatch('click');
+   return {uploaded:true};
   }
   throw Error('Unexpected API request');
  };
@@ -286,5 +288,24 @@ test('Unknown EPUB author is not auto-imported despite a server new-book result'
   assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,1);
   assert.match(f.get('epub-import-summary').textContent,/Needs review: 1/);
   assert.equal(f.get('upload-epubs').disabled,true);
+ }finally{f.restore();}
+});
+
+test('Pause an active import between EPUBs and resume without reuploading saved files',async()=>{
+ const f=fixture(3,{pauseAfterFirst:true});
+ try{
+  f.get('epub-files').files=f.files;
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.equal(f.get('pause-epub-upload').disabled,true);
+  await f.get('upload-epubs').dispatch('click');
+  assert.equal(f.stats().uploads,1);
+  assert.match(f.get('epub-preview-status').textContent,/Paused at your request/i);
+  assert.equal(f.get('upload-epubs').disabled,false);
+  assert.equal(f.get('pause-epub-upload').disabled,true);
+  await f.get('upload-epubs').dispatch('click');
+  assert.equal(f.stats().uploads,3);
+  assert.equal(f.get('upload-epubs').disabled,true);
+  assert.equal(f.stats().refresh,2);
  }finally{f.restore();}
 });
