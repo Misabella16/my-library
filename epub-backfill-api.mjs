@@ -30,6 +30,15 @@ async function linkedFile(db,fileId){
 }
 export async function handleEpubBackfillApi(request,db,path,env={}){
  const method=request.method;
+ if(path==='/api/epubs/backfill/history'&&method==='GET'){
+  // On demand only: do not scan the history on every visit.
+  const rows=await many(db,"SELECT l.id,l.created_at,l.undone_at,b.title "+
+   "FROM change_log l LEFT JOIN epub_files f ON f.id=l.entity_id "+
+   "LEFT JOIN books b ON b.id=f.book_id "+
+   "WHERE l.action='epub_backfill' AND l.entity_type='epub_files' "+
+   "ORDER BY l.created_at DESC LIMIT 20");
+  return json({changes:rows});
+ }
  if(path==='/api/epubs/backfill/preview'&&method==='GET'){
   const url=new URL(request.url);
   const after=url.searchParams.get('after')||'';
