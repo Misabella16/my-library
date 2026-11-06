@@ -120,6 +120,7 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
   ]){
     const option=node('option',null,label);option.value=key;filter.append(option);
   }
+  filter.value='all'; // Explicit initial selection also supports non-browser test fixtures.
   const search=node('input','goodreads-report-search');
   search.type='search';search.placeholder='Search CSV titles or authors…';
   search.setAttribute('aria-label','Search Goodreads rows');
