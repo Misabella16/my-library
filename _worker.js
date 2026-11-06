@@ -81,7 +81,10 @@ async function loadJwks(team,refresh=false) {
 export async function verifyAccess(request,env){
   const team=validTeamDomain(env.ACCESS_TEAM_DOMAIN);
   const aud=string(env.ACCESS_AUD,512), owner=string(env.OWNER_EMAIL,320).toLowerCase();
-  if(!team||!aud||!owner||!owner.includes('@')) return {ok:false,reason:'config'};
+  // Distinguish invalid settings without revealing any configured values.
+  if(!team) return {ok:false,reason:'config_team_domain'};
+  if(!aud) return {ok:false,reason:'config_audience'};
+  if(!owner||!owner.includes('@')) return {ok:false,reason:'config_owner_email'};
   const token=request.headers.get('Cf-Access-Jwt-Assertion');
   if(!token) return {ok:false,reason:'missing'};
   try {
