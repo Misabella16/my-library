@@ -3,18 +3,23 @@ import {reconciliationRows,reconciliationCounts,reconciliationCsv,isGoodreadsImp
 
 // Read-only cross-check: fetch existing private catalogue pages for matching.
 // Never sends the Goodreads CSV, reviews or shelves to a server.
-const MAX_CATALOG_CHECK=5000;
-async function existingCatalogue(api) {
+const MAX_CATALOG_CHECK=100000;
+async function existingCatalogue(api,onProgress=()=>{}) {
   const books=[];
   let total=Infinity,offset=0;
   while(offset<total && books.length<MAX_CATALOG_CHECK){
-    const payload=await api('/api/books?limit=100&offset='+offset);
-    if(!Array.isArray(payload.books) || !Number.isSafeInteger(Number(payload.total)))
+    // Owner-authenticated identity-only pages, not full book details.
+    // The former 5,000-book cap prevented large Goodreads reimports.
+    const limit=Math.min(1000,MAX_CATALOG_CHECK-books.length);
+    const payload=await api('/api/imports/catalogue?limit='+limit+'&offset='+offset);
+    if(!Array.isArray(payload.books) || !Number.isSafeInteger(Number(payload.total)) ||
+       Number(payload.total)<0 || payload.books.length>limit)
       throw Error('Could not verify the existing library count.');
     total=Number(payload.total);
     if(!payload.books.length)break;
     books.push(...payload.books);
     offset+=payload.books.length;
+    onProgress(books.length,total);
   }
   return {books,total,complete:books.length>=total};
 }
@@ -299,7 +304,9 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
       if(file.size>MAX_GOODREADS_BYTES)throw Error('This CSV is above the 15 MB preview limit.');
       const parsed=parseGoodreadsExport(await file.text());
       status.textContent='Checking title and author matches against your private library…';
-      const catalogue=await existingCatalogue(api);
+      const catalogue=await existingCatalogue(api,(checked,total)=>{
+        status.textContent='Checking existing library: '+checked+' of '+total+' book identities…';
+      });
       const matches=matchGoodreadsRows(parsed.entries,catalogue.books,{complete:catalogue.complete});
       const candidates=matches.results.filter(eligible);
       reportData={parsed,matches,catalogue,outcomes:new Map()};
