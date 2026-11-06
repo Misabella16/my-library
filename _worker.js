@@ -1,4 +1,5 @@
 import {handleGoodreadsApi} from './goodreads-import-api.mjs';
+import {handleGoodreadsSyncApi} from './goodreads-sync-api.mjs';
 import {handleEpubApi} from './epub-import-api.mjs';
 import {classifyDatabaseError} from './database-errors.mjs';
 export {classifyDatabaseError} from './database-errors.mjs';
@@ -249,6 +250,8 @@ async function serveApi(request,env,path){
     await getOne(db,'SELECT 1 AS ok');
     return json({database:'connected',authenticated:true});
   }
+  const goodreadsSyncResponse=await handleGoodreadsSyncApi(request,db,path);
+  if(goodreadsSyncResponse)return goodreadsSyncResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
   const epubResponse=await handleEpubApi(request,db,env,path);
