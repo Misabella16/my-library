@@ -12,6 +12,20 @@ const ROLES = new Set(['cover','dust_jacket','naked_cover','sprayed_edges','sign
 const MAX_JSON = 800_000;
 const MAX_COVER_BYTES = 8 * 1024 * 1024;
 const jwksCache = new Map();
+/** Categorize D1 failures without exposing query text, tokens or Cloudflare internals. */
+export function classifyDatabaseError(error){
+  const message=String(error?.message||error||'').toLowerCase();
+  const read=/exceeded.*(?:d1.*)?(?:daily|free tier).*row read limit|d1.*row read.*limit|daily row read limit/.test(message);
+  const write=/exceeded.*(?:d1.*)?(?:daily|free tier).*row write limit|d1.*row write.*limit|daily row write limit/.test(message);
+  if(!read&&!write)return null;
+  const reset=new Date();reset.setUTCHours(24,0,0,0);
+  return {
+    error:(read?'Cloudflare D1 daily row-read limit reached.':'Cloudflare D1 daily row-write limit reached.')+
+      ' Your saved books remain intact. Database operations can resume after the daily reset at midnight UTC.',
+    code:read?'database_read_quota':'database_write_quota',
+    reset_utc:reset.toISOString()
+  };
+}
 
 const json = (value,status=200) => new Response(JSON.stringify(value),{status,headers:HEADER});
 const fail = (message,status=400) => json({error:message},status);
@@ -486,8 +500,13 @@ export default {
       if(err instanceof SyntaxError) return secureHeaders(fail('Invalid JSON',400),true);
       if(err instanceof Error && (/required|Invalid|selection|Rating|Content-Type|large|Expected|price|No recognized/.test(err.message)))
         return secureHeaders(fail(err.message,400),true);
+      const quota=classifyDatabaseError(err);
+      if(quota)return secureHeaders(json(quota,503),true);
       console.error('My Library request failed:',err?.name||'Error');
-      return secureHeaders(fail('Request failed',500),true);
+      return secureHeaders(json({
+        error:'The private library could not complete this request. Your stored books have not been deleted. Please retry shortly.',
+        code:'database_or_server_unavailable'
+      },503),true);
     }
   }
 };
