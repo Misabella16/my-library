@@ -48,7 +48,7 @@ const labelStatus={
 
 function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),editionLinks=new Map(),onLinkEdition=async()=>{}}={}){
   container.replaceChildren();
-  const allRows=reconciliationRows(parsed,matches,{outcomes});
+  const allRows=reconciliationRows(parsed,matches,{outcomes,editionLinks});
   const totals=reconciliationCounts(allRows);
   const summary=node('section','goodreads-summary');
   const title=node('h3',null,'Your Goodreads reconciliation');
@@ -67,7 +67,8 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
     stat('Rows sharing CSV identities',matches.counts.repeatedCsv),
     stat('New works from repeated titles',matches.counts.canonicalRepeatedWorks||0),
     stat('Possible edition rows',matches.counts.possibleEditionRows||0),
-    stat('Repeated/conflicting IDs',matches.counts.duplicateIdRows||0)
+    stat('Repeated/conflicting IDs',matches.counts.duplicateIdRows||0),
+    stat('Linked editions',totals.edition_linked||0)
   );
   if(totals.imported||totals.skipped||totals.not_attempted){
     stats.append(stat('Successfully imported',totals.imported),
@@ -114,7 +115,8 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
     ['all','All rows'],['already_present','Already in library'],['needs_review','Needs review'],
     ['ready','Ready to import'],['unverified','Not fully checked'],
     ['imported','Imported'],['skipped','Skipped by server'],['not_attempted','Not attempted'],
-    ['editions','Possible editions'],['duplicate_ids','Duplicate or conflicting Goodreads IDs']
+    ['editions','Possible editions'],['edition_linked','Linked editions'],
+    ['duplicate_ids','Duplicate or conflicting Goodreads IDs']
   ]){
     const option=node('option',null,label);option.value=key;filter.append(option);
   }
@@ -152,7 +154,8 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
         identifiers.push(row.workGroupSize+' related CSV rows · work represented by row '+row.representativeRow);
       if(identifiers.length)main.append(node('span','goodreads-identifiers',identifiers.join(' · ')));
       const details=node('div','goodreads-row-meta');
-      details.append(node('span','goodreads-match '+row.status,row.status.replaceAll('_',' ')),
+      details.append(node('span','goodreads-match '+row.status,
+          row.status==='edition_linked'?'Edition linked':row.status.replaceAll('_',' ')),
         node('span','goodreads-row-number','CSV row '+row.csvRow));
       const linked=editionLinks.get(row.csvRow);
       const possible=['possible_edition_same_work','possible_edition_of_existing_work']
@@ -364,7 +367,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
   download.addEventListener('click',()=>{
     if(!reportData||importing)return;
     const data=reconciliationCsv(reportData.parsed,reportData.matches,
-      {outcomes:reportData.outcomes});
+      {outcomes:reportData.outcomes,editionLinks:reportData.editionLinks});
     const url=URL.createObjectURL(new Blob([data],{type:'text/csv;charset=utf-8'}));
     const link=node('a');link.href=url;link.download='my-library-goodreads-reconciliation.csv';
     document.body.append(link);link.click();link.remove();
