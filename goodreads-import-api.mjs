@@ -29,26 +29,32 @@ async function importChunk(request,db){
     return fail(e instanceof Error?e.message:'Invalid Goodreads batch');
   }
   const accepted=[],skippedRows=[],skipped={already_present:0,ambiguous_title:0,goodreads_id_conflict:0};
+  const legacyNormalize=value=>String(value||'').normalize('NFKC').toLowerCase()
+    .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
   for(const [index,data] of selected.entries()){
-    // Check both stored normalized title and raw Unicode title, since earlier
-    // catalogue rows may have been created before Unicode-aware normalization.
+    // Two indexed lookups replace the previous per-book OR + unindexed
+    // title COLLATE NOCASE table scan, which grew more expensive with each batch.
+    // The Goodreads ID unique index also catches archived records.
+    const byId=data.goodreadsId?await query(db,
+      'SELECT id,title,author,goodreads_id,archived_at FROM books WHERE goodreads_id=? LIMIT 1',
+      [data.goodreadsId]):null;
+    const oldTitle=legacyNormalize(data.title);
     const matches=await rows(db,
-      "SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL AND "+
-      "(normalized_title=? OR title=? COLLATE NOCASE OR (goodreads_id=? AND ?<>'')) LIMIT 30",
-      [data.normalized_title,data.title,data.goodreadsId||'',data.goodreadsId||'']);
+      'SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL AND '+
+      '(normalized_title=? OR (normalized_title=? AND title=? COLLATE NOCASE)) LIMIT 101',
+      [data.normalized_title,oldTitle,data.title]);
+    // LIMIT is deliberately conservative. In the unlikely event that >100
+    // active records share a normalized title, don't risk missing a collision.
+    if(matches.length>=101){
+      skipped.ambiguous_title++;skippedRows.push({index,reason:'ambiguous_title'});continue;
+    }
     const same=matches.find(book=>importNormalize(book.title)===data.normalized_title &&
       importNormalize(book.author)===data.normalized_author);
-    const conflictingGoodreadsId=matches.some(book=>data.goodreadsId &&
-      book.goodreads_id===data.goodreadsId && book.id!==same?.id);
-    if(conflictingGoodreadsId){
+    if(byId && (!same||byId.id!==same.id)){
       skipped.goodreads_id_conflict++;skippedRows.push({index,reason:'goodreads_id_conflict'});continue;
     }
     if(same){skipped.already_present++;skippedRows.push({index,reason:'already_present'});continue;}
     if(matches.length){skipped.ambiguous_title++;skippedRows.push({index,reason:'ambiguous_title'});continue;}
-    // Goodreads IDs are unique even on archived legacy records.
-    if(data.goodreadsId && await query(db,'SELECT id FROM books WHERE goodreads_id=? LIMIT 1',[data.goodreadsId])){
-      skipped.goodreads_id_conflict++;skippedRows.push({index,reason:'goodreads_id_conflict'});continue;
-    }
     accepted.push({data,index});
   }
   const skippedTotal=Object.values(skipped).reduce((a,b)=>a+b,0);
@@ -91,8 +97,15 @@ async function importChunk(request,db){
   }
   try{await db.batch(stmts);}catch(e){
     if(/UNIQUE|constraint/i.test(String(e)))return fail(
-      'A matching book or concurrent import was detected. Refresh and retry; the batch was not committed.',409);
-    throw e;
+      'A matching book or concurrent import was detected. Re-preview and resume; no partial batch was committed.',409);
+    // Return safe categories, not raw SQL, token details, or private book data.
+    if(/quota|daily.*limit|limit.*exceeded|rows (?:read|written).*limit|too many (?:rows|requests)/i.test(String(e))){
+      return json({error:'Database daily usage limit reached. Your completed import batches are saved. Resume with the same CSV after your Cloudflare database quota resets.',
+        code:'database_limit_reached'},503);
+    }
+    console.warn('Goodreads database batch failed:',e instanceof Error?e.name:'Error');
+    return json({error:'This import batch could not be completed. Previous batches are saved. Retry or resume the remaining books.',
+      code:'import_batch_unavailable'},503);
   }
   return json({created:accepted.length,createdIndices:accepted.map(item=>item.index),skipped,
     skippedRows,skippedTotal,batch_id:batchId,status:'complete'},201);
