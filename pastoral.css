@@ -570,3 +570,17 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-vi
   .book-card:hover{transform:none}
   *,*:before,*:after{transition:none!important;animation:none!important}
 }
+/* Private EPUB import preview. Muted Rococo styling, mobile-safe and readable. */
+.epub-tool{margin-top:22px}
+.epub-preview-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:11px;margin-top:16px}
+.epub-preview-card{display:flex;flex-direction:column;gap:5px;padding:13px;
+  border:1px solid #ddcdd0;border-radius:9px;background:#fffbf8;min-width:0}
+.epub-preview-card strong{font-family:Georgia,serif;font-size:16px;overflow-wrap:anywhere}
+.epub-preview-card .muted{font-size:12px;overflow-wrap:anywhere}
+.epub-preview-label{align-self:flex-start;color:#745265;border:1px solid #d8c1cf;
+  background:#f8eff2;border-radius:12px;padding:3px 9px;font-size:11px}
+.epub-preview-note{color:#756973;font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+.epub-preview-cover{display:block;max-width:90px;max-height:128px;object-fit:contain;
+  border-radius:3px;margin-top:5px;box-shadow:0 2px 8px #40201d24}
+@media(max-width:620px){.epub-preview-list{grid-template-columns:1fr}
+ .epub-tool .goodreads-actions{align-items:stretch}}
