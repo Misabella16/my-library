@@ -38,3 +38,7 @@ The `momoshelf` Pages project must receive a fresh production deployment after e
 After the owner updates the production `OWNER_EMAIL` variable in Cloudflare Pages, trigger a new deployment of `momoshelf` from `main` to apply it. Verify the authenticated owner can open the homepage and `/api/session`; anonymous and unauthorized requests must still be denied. This file contains no addresses, tokens, or secret values.
 
 Production deployment retry after confirming only the older project responded to the initial owner-email change.
+
+## Production deploy verification after restoring momoshelf automatic builds
+
+After confirming `momoshelf` has production branch `main` and automatic deployments enabled, check the GitHub Cloudflare Pages status for **momoshelf specifically** on this commit. Only after that check succeeds should we test the changed `OWNER_EMAIL` value. Do not modify or delete the independent private database or R2 bucket. The original `my-library` Pages site can be removed once `momoshelf` works.
