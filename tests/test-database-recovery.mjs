@@ -31,8 +31,8 @@ test('Library startup does not confuse a database failure with broken authentica
   const src=readFileSync(new URL('../library.js',import.meta.url),'utf8');
   assert.match(src,/Private login verified · Database temporarily unavailable/);
   assert.match(src,/Use Refresh to check again/);
-  assert.match(src,/\\['#add-book'\\]\\.disabled=true/);
+  assert.ok(src.includes("$('#add-book').disabled=true"));
   assert.doesNotMatch(src,/Setup required · Private library is not connected/);
   const worker=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
-  assert.match(worker,/ORDER BY b\\.normalized_title,b\\.normalized_author,b\\.id LIMIT/);
+  assert.ok(worker.includes('ORDER BY b.normalized_title,b.normalized_author,b.id LIMIT'));
 });
