@@ -45,12 +45,19 @@ const call=(db,path,{method='GET',data}={})=>{
 };
 const scalar=(sqlite,sql,...args)=>sqlite.prepare(sql).get(...args);
 
-test('Goodreads batch validator rejects duplicate rows, noninteger ratings and unsafe lengths',()=>{
+test('Goodreads batch validator rejects duplicates, invalid ratings and unsafe lengths',()=>{
   assert.equal(validateImportRows(payloadRows()).length,2);
   assert.throws(()=>validateImportRows([]),/1 to 20/);
   assert.throws(()=>validateImportRows([...payloadRows(),payloadRows()[0]]),/repeated title/);
   const bad={...payloadRows()[0],myRating:7};
   assert.throws(()=>validateImportRows([bad]),/rating/);
+  for(const invalidRating of [-1,5.1,'4.5',Infinity,NaN]){
+    assert.throws(()=>validateImportRows([{...payloadRows()[0],myRating:invalidRating}]),/rating/);
+  }
+  for(const validRating of [null,0,1,3.5,4.25,5]){
+    const parsed=validateImportRows([{...payloadRows()[0],myRating:validRating}]);
+    assert.equal(parsed[0].rating,validRating===null||validRating===0?null:validRating);
+  }
   const invalid={...payloadRows()[0],shelves:['a'.repeat(101)]};
   assert.throws(()=>validateImportRows([invalid]),/shelf/);
   const unicode={...payloadRows()[0],title:'天官赐福',author:'墨香铜臭'};
@@ -84,6 +91,19 @@ test('import creates new books, ratings, reviews, read dates and shelf links ato
     assert.equal(history.batches.length,1);
     assert.equal(history.batches[0].created,2);
   }finally{sqlite.close();}
+});
+
+test('fractional Goodreads rating imported from the CSV is stored without rounding',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    const row={...payloadRows()[0],myRating:4.5};
+    const res=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:[row]}});
+    assert.equal(res.status,201,await res.clone().text());
+    const report=await res.json();
+    assert.equal(report.created,1);
+    assert.equal(scalar(sqlite,'SELECT rating FROM books WHERE title=?',row.title).rating,4.5);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM import_batches').n,1);
+  } finally{sqlite.close();}
 });
 
 test('reimport is idempotent and an existing book with editions, notes and copies stays intact',async()=>{
