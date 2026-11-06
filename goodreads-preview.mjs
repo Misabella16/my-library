@@ -100,7 +100,8 @@ export function parseGoodreadsExport(text) {
 }
 
 export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {}) {
-  const identities = new Map(), titles = new Map(), csvIdentities = new Map(), csvGoodreadsIds = new Map();
+  const identities = new Map(), titles = new Map(), existingGoodreadsIds = new Map(),
+    csvIdentities = new Map(), csvGoodreadsIds = new Map();
   // Mark every conflicting CSV row for review, including the first occurrence.
   for (const entry of entries) {
     const identity = normalize(entry.title) + '\0' + normalize(entry.author);
@@ -111,6 +112,11 @@ export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {
   for (const book of existingBooks) {
     const title = normalize(book.title);
     const key = title + '\0' + normalize(book.author);
+    if(book.goodreads_id){
+      const id=String(book.goodreads_id).trim();
+      if(!existingGoodreadsIds.has(id))existingGoodreadsIds.set(id,[]);
+      existingGoodreadsIds.get(id).push(book);
+    }
     if (!identities.has(key)) identities.set(key, []);
     identities.get(key).push(book);
     if (!titles.has(title)) titles.set(title, []);
@@ -122,16 +128,23 @@ export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {
     const repeated = csvIdentities.get(identity) > 1 ||
       Boolean(entry.goodreadsId && csvGoodreadsIds.get(entry.goodreadsId) > 1);
     const exact = author && title ? (identities.get(identity) || []) : [];
+    const idMatches = entry.goodreadsId ? (existingGoodreadsIds.get(entry.goodreadsId) || []) : [];
     const titleMatches = titles.get(title) || [];
     let matchStatus, matchReason, existingBookId = null;
-    if (!title || !author) {
-      matchStatus = 'review';
-      matchReason = 'missing_author_or_title';
-    } else if (repeated) {
-      // Goodreads exports can include multiple editions with the same work title/author.
-      // Keep these rows distinct for review rather than silently losing shelf metadata.
+    if (repeated) {
+      // Goodreads exports can include different editions sharing the same identity.
       matchStatus = 'review';
       matchReason = 'repeated_csv_identity';
+    } else if (idMatches.length===1) {
+      matchStatus = 'existing';
+      matchReason = 'goodreads_id_match';
+      existingBookId = idMatches[0].id;
+    } else if(idMatches.length>1) {
+      matchStatus = 'review';
+      matchReason = 'ambiguous_library_identity';
+    } else if (!title || !author) {
+      matchStatus = 'review';
+      matchReason = 'missing_author_or_title';
     } else if (exact.length === 1) {
       matchStatus = 'existing';
       matchReason = 'already_in_library';
