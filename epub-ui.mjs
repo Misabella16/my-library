@@ -234,9 +234,12 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
        entry.match={status:'same_file'};
       }else{
        seen.add(raw.sha256);
-       if(suggested.reviewReason){
-        entry.match={status:'needs_review',reason:suggested.reviewReason};
-       }else toMatch.push(entry);
+       // Always check the SHA-256 against existing private EPUBs, even
+       // when the title/author is uncertain. A file with poor metadata
+       // may already be uploaded and should not demand needless review.
+       // The review warning still blocks any new upload.
+       entry.reviewReason=suggested.reviewReason||'';
+       toMatch.push(entry);
       }
      }catch(error){entry.error=error.message||'Could not inspect EPUB';}
      pending.push(entry);
@@ -249,7 +252,12 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       }))}});
      if(!Array.isArray(payload.results)||payload.results.length!==toMatch.length)
       throw Error('Incomplete EPUB matching response');
-     toMatch.forEach((entry,i)=>{entry.match=payload.results[i];});
+     toMatch.forEach((entry,i)=>{
+       const checked=payload.results[i];
+       entry.match=entry.reviewReason&&checked.status!=='already_uploaded'
+        ?{status:'needs_review',reason:entry.reviewReason}
+        :checked;
+     });
     }
     // Commit each batch only after its D1 preview succeeds. On failure,
     // no partially matched cards or hashes survive to poison a resume.

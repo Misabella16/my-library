@@ -44,7 +44,7 @@ class FakeNode{
 }
 const ids=['epub-files','epub-folder','preview-epubs','upload-epubs',
  'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary','epub-review-filter'];
-function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false}={}){
+function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,previewAsExisting=false}={}){
  const nodes=new Map(ids.map(id=>[id,new FakeNode()]));
  nodes.get('epub-review-filter').value='all';
  const prior=globalThis.document;
@@ -64,6 +64,7 @@ function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false}={
     previewFailed=true;throw new Error('Simulated database preview outage');
    }
    return {results:opts.data.items.map(item=>
+     previewAsExisting?{status:'already_uploaded',existing:{id:'stored-epub',book_id:'saved-book'}}:
      reviewMatch?(item.title==='Corrected Book'
       ?{status:'match',book_id:'11111111-1111-4111-8111-111111111111'}
       :{status:'needs_review',reason:'Ambiguous title'}):{status:'new'})};
@@ -255,5 +256,35 @@ test('EPUB review filters use existing preview data without another D1 query',as
   assert.equal(f.get('epub-preview-list').children.length,3);
   assert.equal(f.calls.length,before,'Filtering must not query D1');
   assert.equal(f.get('upload-epubs').disabled,false,'Filter must not change eligible imports');
+ }finally{f.restore();}
+});
+
+test('Poor EPUB author metadata still checks hash and recognizes already-uploaded file',async()=>{
+ const f=fixture(0,{previewAsExisting:true});
+ try{
+  f.get('epub-files').files=[
+   new File([zipFor('Uncertain Book','')],'uncertain.epub',{type:'application/epub+zip'})
+  ];
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  const checks=f.calls.filter(x=>x.path==='/api/epubs/preview');
+  assert.equal(checks.length,1);
+  assert.equal(checks[0].opts.data.items.length,1);
+  assert.match(f.get('epub-import-summary').textContent,/Already uploaded: 1/);
+  assert.equal(f.get('upload-epubs').disabled,true);
+  assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+test('Unknown EPUB author is not auto-imported despite a server new-book result',async()=>{
+ const f=fixture(0);
+ try{
+  f.get('epub-files').files=[
+   new File([zipFor('Uncertain Book','')],'uncertain.epub',{type:'application/epub+zip'})
+  ];
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,1);
+  assert.match(f.get('epub-import-summary').textContent,/Needs review: 1/);
+  assert.equal(f.get('upload-epubs').disabled,true);
  }finally{f.restore();}
 });
