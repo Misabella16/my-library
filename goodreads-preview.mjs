@@ -123,19 +123,30 @@ export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {
       Boolean(entry.goodreadsId && csvGoodreadsIds.get(entry.goodreadsId) > 1);
     const exact = author && title ? (identities.get(identity) || []) : [];
     const titleMatches = titles.get(title) || [];
-    let matchStatus, existingBookId = null;
-    if (!title || !author || repeated) {
-      // Without both identity fields, or when CSV identities repeat, never promise a new record.
+    let matchStatus, matchReason, existingBookId = null;
+    if (!title || !author) {
       matchStatus = 'review';
+      matchReason = 'missing_author_or_title';
+    } else if (repeated) {
+      // Goodreads exports can include multiple editions with the same work title/author.
+      // Keep these rows distinct for review rather than silently losing shelf metadata.
+      matchStatus = 'review';
+      matchReason = 'repeated_csv_identity';
     } else if (exact.length === 1) {
       matchStatus = 'existing';
+      matchReason = 'already_in_library';
       existingBookId = exact[0].id;
-    } else if (exact.length > 1 || titleMatches.length) {
+    } else if (exact.length > 1) {
       matchStatus = 'review';
+      matchReason = 'ambiguous_library_identity';
+    } else if (titleMatches.length) {
+      matchStatus = 'review';
+      matchReason = 'title_author_conflict';
     } else {
       matchStatus = complete ? 'new' : 'unverified';
+      matchReason = complete ? 'safe_to_import' : 'incomplete_catalogue_scan';
     }
-    return {...entry, matchStatus, existingBookId, repeatedCsvIdentity: repeated};
+    return {...entry, matchStatus, matchReason, existingBookId, repeatedCsvIdentity: repeated};
   });
   const counts = {existing:0, review:0, new:0, unverified:0, repeatedCsv:0};
   for (const entry of results) {
