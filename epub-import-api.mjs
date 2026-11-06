@@ -49,6 +49,13 @@ export async function matchEpub(db,{title,author,sha256,identifier}){
   if(exact.length===1)return {status:'match',book_id:exact[0].id};
   if(exact.length>1)return {status:'needs_review',reason:'Multiple books match this title and author'};
   if(same.length)return {status:'needs_review',reason:'Title exists with a different author'};
+  const aliases=await many(db,
+    'SELECT b.id,b.title,b.author FROM book_aliases a JOIN books b ON b.id=a.book_id '+
+    'WHERE b.archived_at IS NULL AND a.normalized_alias=? LIMIT 101',[normalizedTitle]);
+  if(aliases.length>=101)return {status:'needs_review',reason:'Too many alternate titles match'};
+  const aliasExact=aliases.filter(b=>normalizeEpubText(b.author)===normalizedAuthor);
+  if(aliasExact.length===1)return {status:'match',book_id:aliasExact[0].id,reason:'Existing alternate title and author'};
+  if(aliases.length)return {status:'needs_review',reason:'Alternate title matches require review'};
   // Old books occasionally used ASCII-only normalization. An indexed fallback
   // checks only the old title key, never scans the entire catalogue.
   const legacy=String(title).normalize('NFKC').toLowerCase()
@@ -89,6 +96,16 @@ export async function batchPreviewEpub(db,items){
     if(!groups.has(b.normalized_title))groups.set(b.normalized_title,[]);
     groups.get(b.normalized_title).push(b);
   }
+  const aliasBooks=titleKeys.length?await many(db,
+    'SELECT a.normalized_alias,b.id,b.title,b.author FROM book_aliases a '+
+    'JOIN books b ON b.id=a.book_id WHERE b.archived_at IS NULL AND a.normalized_alias IN ('+
+    values(titleKeys)+') LIMIT 5051',titleKeys):[];
+  const aliasIndex=new Map();
+  for(const b of aliasBooks){
+    if(!aliasIndex.has(b.normalized_alias))aliasIndex.set(b.normalized_alias,[]);
+    aliasIndex.get(b.normalized_alias).push(b);
+  }
+  const aliasTruncated=aliasBooks.length>=5051;
   const truncated=books.length>=5051;
   const isbns=[...new Set(inputs.map(i=>extractIsbn13(i.identifier)).filter(Boolean))];
   const isbnMatches=isbns.length?await many(db,
@@ -137,6 +154,11 @@ export async function batchPreviewEpub(db,items){
       normalizeEpubTitle(b.title)===title);
     if(exact.length===1)return {status:'match',book_id:exact[0].id};
     if(exact.length||group.length)return {status:'needs_review',reason:'Same title has a conflicting or ambiguous author'};
+    if(aliasTruncated)return {status:'needs_review',reason:'Alternate title matching needs individual review'};
+    const aliasGroup=aliasIndex.get(title)||[];
+    const aliasExact=aliasGroup.filter(b=>normalizeEpubText(b.author)===author);
+    if(aliasExact.length===1)return {status:'match',book_id:aliasExact[0].id,reason:'Existing alternate title and author'};
+    if(aliasGroup.length)return {status:'needs_review',reason:'Alternate title has ambiguous or conflicting authors'};
     // Unicode entries can be confidently previewed after the second
     // indexed check; a true old-title collision still needs manual review.
     const legacy=legacyNormalize(item.title);
