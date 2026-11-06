@@ -1,3 +1,4 @@
+import {normalizeEpubTitle,normalizeEpubAuthor} from './epub-metadata.mjs';
 // Pure, browser-and-Node-friendly helpers for large personal EPUB collections.
 // Never infer ownership, a special edition, or a trustworthy author from a filename.
 export const MAX_BULK_FILES=3000;
@@ -83,8 +84,10 @@ export function flagPossibleEpubDuplicates(entries){
  const groups=new Map();
  for(const entry of entries||[]){
   const meta=entry.metadata||{};
-  const title=squash(meta.title).toLocaleLowerCase();
-  const author=squash(meta.author).toLocaleLowerCase();
+  // Match the same Unicode-aware punctuation-insensitive identity that
+  // the canonical EPUB catalogue uses. Do not conflate different authors.
+  const title=normalizeEpubTitle(meta.title);
+  const author=normalizeEpubAuthor(meta.author);
   const hash=meta.sha256;
   if(!title||!author||!hash)continue;
   const key=title+'\\0'+author;
