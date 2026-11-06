@@ -30,7 +30,7 @@ function fixture(){
  const env={BOOK_FILES:{
   async put(key,body){objects.set(key,body);},
   async delete(key){deleted.push(key);objects.delete(key);},
-  async get(key){return objects.get(key)}
+  async get(key){return objects.has(key)?{body:objects.get(key)}:null}
  }};
  return {sqlite,db,env,objects,deleted,queries:()=>queries,setFail:x=>{failTransaction=x;}};
 }
