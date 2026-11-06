@@ -38,10 +38,17 @@ const sample=(o={})=>({
  myRating:4.5,review:'A thoughtful reading journal.',dateStarted:'2026/01/04',
  dateRead:'2026/01/21',shelves:['favorites','read'],...o
 });
-async function call(db,path,rows){
- const method='POST';
+async function call(db,path,rows,{skipPreview=false}={}){
+ let data=rows;
+ if(path==='/api/imports/goodreads/sync'&&!skipPreview){
+  const plans=await planGoodreadsSync(db,validateSyncRows(rows));
+  data=rows.map((row,i)=>({
+   ...row,expected_plan:plans[i].status==='ready'
+    ?{updated_at:plans[i].updated_at,changes:plans[i].changes}:null
+  }));
+ }
  const request=new Request('https://books.example.com'+path,
-  {method,headers:{'content-type':'application/json'},body:JSON.stringify({rows})});
+  {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rows:data})});
  return handleGoodreadsSyncApi(request,db,path);
 }
 const count=(sqlite,table)=>sqlite.prepare('SELECT COUNT(*) AS n FROM '+table).get().n;
@@ -175,6 +182,25 @@ test('Reject duplicate book IDs, invalid dates, wrong identity, and protect unre
   assert.equal((await mismatch.json()).updated,0);
   assert.equal(count(f.sqlite,'import_batches'),0);
   assert.equal(count(f.sqlite,'book_shelves'),0);
+ }finally{f.sqlite.close();}
+});
+
+test('A stale approved preview never applies newly calculated Goodreads changes',async()=>{
+ const f=fixture();
+ try{
+  const entry=sample({shelves:[]});
+  const preview=(await (await call(f.db,'/api/imports/goodreads/sync/preview',[entry])).json()).results[0];
+  f.sqlite.prepare("UPDATE books SET updated_at=?,rating=5 WHERE id=?")
+   .run('2026-11-07T01:00:00.000Z',BOOK);
+  const response=await call(f.db,'/api/imports/goodreads/sync',
+   [{...entry,expected_plan:{updated_at:preview.updated_at,changes:preview.changes}}],
+   {skipPreview:true});
+  const result=await response.json();
+  assert.equal(result.updated,0);
+  assert.equal(result.status,'no_changes');
+  assert.equal(fetchBook(f.sqlite).rating,5);
+  assert.equal(fetchBook(f.sqlite).review,'');
+  assert.equal(count(f.sqlite,'change_log'),0);
  }finally{f.sqlite.close();}
 });
 
