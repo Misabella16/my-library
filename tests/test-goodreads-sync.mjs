@@ -50,7 +50,7 @@ const fetchBook=sqlite=>sqlite.prepare('SELECT * FROM books WHERE id=?').get(BOO
 test('Phase 4 preview is read-only, bounded to three D1 queries, and shows missing values',async()=>{
  const f=fixture();
  try{
-  const input=validateSyncRows([sample()]);
+  const input=[sample()];
   const before=f.stats();
   const preview=await call(f.db,'/api/imports/goodreads/sync/preview',input);
   assert.equal(preview.status,200);
@@ -170,7 +170,8 @@ test('Reject duplicate book IDs, invalid dates, wrong identity, and protect unre
   assert.throws(()=>validateSyncRows([sample(),sample()]),/Only one Goodreads entry/);
   assert.throws(()=>validateSyncRows([sample({dateRead:'2026/02/30'})]),/read date/);
   assert.throws(()=>validateSyncRows([sample({myRating:6})]),/rating/);
-  const mismatch=await call(f.db,'/api/imports/goodreads/sync',[sample({author:'A Different Writer'})]);
+  const mismatch=await call(f.db,'/api/imports/goodreads/sync',
+   [sample({author:'A Different Writer',goodreadsId:'99999999'})]);
   assert.equal((await mismatch.json()).updated,0);
   assert.equal(count(f.sqlite,'import_batches'),0);
   assert.equal(count(f.sqlite,'book_shelves'),0);
