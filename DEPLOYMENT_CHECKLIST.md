@@ -28,3 +28,7 @@ This repository serves the standalone owner-only Cloudflare Pages project **momo
 The advanced-mode `_worker.js` must authenticate **every** route before responding with static files or API results. Never bypass this check or expose `BOOK_FILES` via a public R2 URL. Do not commit private books, photos, credentials or environment variable values to Git.
 
 Updating this documentation triggers a fresh production build through the connected GitHub integration, subject to Cloudflare branch deployment settings.
+
+## After changing Cloudflare Access team domain
+
+The `momoshelf` Pages project must receive a fresh production deployment after edits to `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, or `OWNER_EMAIL`. Verify `https://momoshelf.pages.dev/_logout` redirects to the Cloudflare Access logout endpoint, rather than responding with a JSON configuration error. This check does not confirm successful owner login: after logout, sign in as the configured owner, verify `/api/session` succeeds, and confirm private browsing without an authorized account cannot read any library content. Do not enter or commit environment-variable values or session tokens here.
