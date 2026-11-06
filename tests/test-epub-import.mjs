@@ -59,7 +59,7 @@ async function validMeta(title='A Novel',author='Writer'){
 test('New EPUB creates exactly one book, ebook edition, R2 file and optional digital cover',async()=>{
  const f=fixture();
  try{
-  const metadata=await validMeta();
+  const metadata={...(await validMeta()),subjects:['Fantasy','Romance','fantasy']};
   const resp=await post(f.db,f.env,'/api/epubs/upload',form(metadata,{cover:true}));
   assert.equal(resp.status,201,await resp.clone().text());
   const result=await resp.json();
@@ -67,6 +67,9 @@ test('New EPUB creates exactly one book, ebook edition, R2 file and optional dig
   assert.equal(result.cover_extracted,true);
   assert.equal(count(f.sqlite,'books'),1);
   assert.equal(count(f.sqlite,'editions'),1);
+  assert.equal(count(f.sqlite,'tags'),2);
+  assert.equal(count(f.sqlite,'book_tags'),2);
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books').get().synopsis,'My private synopsis');
   assert.equal(count(f.sqlite,'epub_files'),1);
   assert.equal(count(f.sqlite,'edition_images'),1);
   assert.equal(count(f.sqlite,'copies'),0,'Do not invent physical or digital ownership');
@@ -95,13 +98,14 @@ test('EPUB attaches to an existing Goodreads book but never overwrites notes or 
   const special='55555555-5555-4555-8555-555555555555';
   f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special,vendor) VALUES(?,?,?,?,?,?)")
    .run(special,id,'FairyLoot Exclusive','hardcover',1,'FairyLoot');
-  const metadata={...(await validMeta()),book_id:id};
+  const metadata={...(await validMeta()),book_id:id,subjects:['Fantasy']};
   const response=await post(f.db,f.env,'/api/epubs/upload',form(metadata,{cover:true}));
   assert.equal(response.status,201,await response.clone().text());
   assert.equal((await response.json()).book_created,false);
   assert.equal(count(f.sqlite,'books'),1);
   assert.equal(count(f.sqlite,'editions'),2);
   assert.equal(count(f.sqlite,'copies'),0);
+  assert.equal(count(f.sqlite,'book_tags'),1);
   const current=f.sqlite.prepare('SELECT private_notes,review,rating FROM books').get();
   assert.equal(current.private_notes,'private reading notes');
   assert.equal(current.review,'Loved it');assert.equal(current.rating,4.5);
