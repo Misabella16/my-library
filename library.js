@@ -1,4 +1,5 @@
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
+import {initEpubImport} from './epub-ui.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
 'use strict';
@@ -19,9 +20,10 @@ function showMessage(msg,isError=false){
   const n=$('#notice');n.hidden=false;n.textContent=msg;n.classList.toggle('error',isError);
   n.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
-async function api(path,{method='GET',data,raw,contentType}={}){
+async function api(path,{method='GET',data,raw,contentType,formData}={}){
   const opts={method,credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}};
-  if(raw){opts.headers['content-type']=contentType;opts.body=raw;}
+  if(formData){opts.body=formData;} // Browser sets multipart boundary automatically.
+  else if(raw){opts.headers['content-type']=contentType;opts.body=raw;}
   else if(data!==undefined){opts.headers['content-type']='application/json';opts.body=JSON.stringify(data);}
   const response=await fetch(path,opts);
   let payload;
@@ -344,6 +346,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   // reachable even if the database is temporarily out of daily allowance.
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
+    initEpubImport(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
   }catch(err){
     showMessage('Goodreads controls could not initialize: '+(err.message||'Please refresh.'),true);
   }
