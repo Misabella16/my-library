@@ -19,6 +19,39 @@ const id = () => crypto.randomUUID();
 const string = (value,max=500) => typeof value === 'string' ? value.trim().slice(0,max) : '';
 const rawString = (value,max=120_000) => typeof value === 'string' ? value.slice(0,max) : '';
 const normalize = value => String(value||'').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+const normalizedIsbn = value => String(value||'').replace(/[\\s-]/g,'').toUpperCase();
+const normalizedEditionName = value => {
+  const key=normalize(value||'Standard');
+  return ['standard','standard edition','regular','regular edition'].includes(key)?'standard':key;
+};
+/** Return an existing edition for a clearly equivalent ISBN or edition identity.
+ * Different special-edition releases can coexist when their edition names/ISBNs differ.
+ * Never use ambiguous title-only matches to silently overwrite a special edition.
+ */
+export function findMatchingEdition(existing, wanted, excludedId='') {
+  const isbn=normalizedIsbn(wanted.isbn);
+  const name=normalizedEditionName(wanted.edition_name);
+  const isSpecial=Boolean(wanted.is_special);
+  const vendor=isSpecial?normalize(wanted.vendor):'';
+  return existing.find(item => {
+    if(item.id===excludedId) return false;
+    if(isbn && normalizedIsbn(item.isbn)===isbn) return true;
+    return item.format===wanted.format &&
+      Boolean(item.is_special)===isSpecial &&
+      normalizedEditionName(item.edition_name)===name &&
+      (!isSpecial || normalize(item.vendor)===vendor);
+  })||null;
+}
+async function matchingEdition(db,bookId,wanted,excludedId='') {
+  const existing=await getAll(db,
+    'SELECT id,edition_name,vendor,isbn,format,is_special FROM editions WHERE book_id=?',[bookId]);
+  return findMatchingEdition(existing,wanted,excludedId);
+}
+const duplicateEditionResponse = matching => json({
+  error:'This edition is already in your library. Open the existing edition rather than creating another.',
+  existing_edition_id:matching.id
+},409);
+
 const truth = x => x===true||x===1;
 function decodeBase64url(s){
   if(!/^[A-Za-z0-9_-]+$/.test(s)) throw Error('bad base64url');
@@ -147,6 +180,10 @@ async function patchRecord(db,table,key,payload,fields,{audit=true}={}){
   }
   if(Object.hasOwn(next,'title')) next.normalized_title=normalize(next.title);
   if(Object.hasOwn(next,'author')) next.normalized_author=normalize(next.author);
+  if(table==='editions' && ['edition_name','vendor','isbn','format','is_special'].some(f=>Object.hasOwn(next,f))){
+    const match=await matchingEdition(db,prior.book_id,{...prior,...next},key);
+    if(match) return duplicateEditionResponse(match);
+  }
   if(table==='books' && (Object.hasOwn(next,'title') || Object.hasOwn(next,'author'))){
     const other=await getOne(db,
       'SELECT id FROM books WHERE normalized_title=? AND normalized_author=? AND id<>? AND archived_at IS NULL LIMIT 1',
@@ -248,9 +285,24 @@ async function serveApi(request,env,path){
   if(newEdition&&method==='POST'){
     if(!await exists(db,'books',newEdition[1])) return fail('Book not found',404);
     const b=await body(request), edId=id(), now=stamp();
-    const fields=[edId,newEdition[1],string(b.edition_name,240)||'Standard',string(b.publisher,200),string(b.vendor,120),string(b.isbn,32),
-      requireEnum(b.format,FORMATS,'hardcover'),string(b.source_product_url,1500),truth(b.is_special)?1:0,rawString(b.details,15000),now,now];
-    await run(db,'INSERT INTO editions (id,book_id,edition_name,publisher,vendor,isbn,format,source_product_url,is_special,details,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',fields);
+    const edition={edition_name:string(b.edition_name,240)||'Standard',publisher:string(b.publisher,200),
+      vendor:string(b.vendor,120),isbn:string(b.isbn,32),format:requireEnum(b.format,FORMATS,'hardcover'),
+      source_product_url:string(b.source_product_url,1500),is_special:truth(b.is_special)?1:0,
+      details:rawString(b.details,15000)};
+    const duplicate=await matchingEdition(db,newEdition[1],edition);
+    if(duplicate) return duplicateEditionResponse(duplicate);
+    const fields=[edId,newEdition[1],edition.edition_name,edition.publisher,edition.vendor,edition.isbn,
+      edition.format,edition.source_product_url,edition.is_special,edition.details,now,now];
+    try {
+      await run(db,'INSERT INTO editions (id,book_id,edition_name,publisher,vendor,isbn,format,source_product_url,is_special,details,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',fields);
+    } catch (error) {
+      // Unique indexes also guard concurrent inserts after the application check.
+      if(/UNIQUE constraint failed/i.test(String(error))) {
+        const concurrent=await matchingEdition(db,newEdition[1],edition);
+        if(concurrent) return duplicateEditionResponse(concurrent);
+      }
+      throw error;
+    }
     await addAudit(db,'create','editions',edId,null,{id:edId,book_id:newEdition[1]});
     return json({edition:await getOne(db,'SELECT * FROM editions WHERE id=?',[edId])},201);
   }
