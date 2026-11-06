@@ -51,12 +51,61 @@ export async function matchEpub(db,{title,author,sha256}){
   }
   return {status:'new'};
 }
+export async function batchPreviewEpub(db,items){
+  if(!Array.isArray(items)||items.length<1||items.length>50)
+    throw Error('Preview 1 to 50 EPUBs at a time');
+  const inputs=items.map(item=>({
+    title:clean(item?.title,300),author:clean(item?.author,400),
+    sha256:String(item?.sha256||'')
+  }));
+  if(inputs.some(x=>!/^[a-f0-9]{64}$/.test(x.sha256)))
+    throw Error('One or more EPUB hashes are invalid');
+  const values=a=>a.map(()=>'?').join(',');
+  const hashes=[...new Set(inputs.map(i=>i.sha256))];
+  const existing=await many(db,
+    'SELECT id,sha256,book_id,edition_id,original_filename FROM epub_files WHERE sha256 IN ('+
+    values(hashes)+')',hashes);
+  const hashIndex=new Map(existing.map(row=>[row.sha256,row]));
+  const titleKeys=[...new Set(inputs.map(i=>normalizeEpubText(i.title)).filter(Boolean))];
+  const books=titleKeys.length?await many(db,
+    'SELECT id,title,author,normalized_title FROM books WHERE archived_at IS NULL AND normalized_title IN ('+
+    values(titleKeys)+') LIMIT 5051',titleKeys):[];
+  const groups=new Map();
+  for(const b of books){
+    if(!groups.has(b.normalized_title))groups.set(b.normalized_title,[]);
+    groups.get(b.normalized_title).push(b);
+  }
+  const truncated=books.length>=5051;
+  const outcomes=inputs.map(item=>{
+    const hash=hashIndex.get(item.sha256);
+    if(hash)return {status:'already_uploaded',existing:hash};
+    const title=normalizeEpubText(item.title),author=normalizeEpubText(item.author);
+    if(!title||!author)return {status:'needs_review',reason:'EPUB title or author is missing'};
+    if(truncated)return {status:'needs_review',reason:'Catalogue match requires individual review'};
+    const group=groups.get(title)||[];
+    if(group.length>=101)return {status:'needs_review',reason:'Too many existing books match this title'};
+    const exact=group.filter(b=>normalizeEpubText(b.author)===author);
+    if(exact.length===1)return {status:'match',book_id:exact[0].id};
+    if(exact.length||group.length)return {status:'needs_review',reason:'Same title has a conflicting or ambiguous author'};
+    // Rare legacy Unicode title matches use the targeted server fallback at
+    // upload time. Flag those rather than pretending the preview is certain.
+    const legacy=String(item.title).normalize('NFKC').toLowerCase()
+      .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+    if(legacy!==title)return {status:'needs_review',reason:'Non-Latin title needs an individual match review'};
+    return {status:'new'};
+  });
+  return outcomes;
+}
 export async function handleEpubApi(request,db,env,path){
   const method=request.method;
   if(path==='/api/epubs/preview'&&method==='POST'){
     let body;
     try{body=await request.json();}catch{return bad('EPUB preview requires valid JSON');}
     if(!body||Array.isArray(body)||typeof body!=='object')return bad('Invalid EPUB metadata');
+    if(Array.isArray(body.items)){
+      try{return json({results:await batchPreviewEpub(db,body.items)});}
+      catch(e){return bad(e.message||'Invalid EPUB preview items');}
+    }
     const title=clean(body.title,300),author=clean(body.author,400);
     const sha=String(body.sha256||'');
     if(!/^[a-f0-9]{64}$/.test(sha))return bad('Invalid EPUB file hash');
