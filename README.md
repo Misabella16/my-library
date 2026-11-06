@@ -70,3 +70,7 @@ Only after backups, owner auth, access-control checks, and the Worker are implem
 5. Test in a private preview environment before any manually initiated production publish.
 
 **Never use Novel Conservatory's existing D1 databases, existing R2 buckets, existing Cloudflare Pages project, or automatic deploy credentials to publish this site.**
+
+## Mac-local version (no Cloudflare D1 daily quota)
+
+You can run a separate copy of My Library on your Mac with local SQLite and local R2 storage. The production website and its owner authentication remain unchanged. Follow the first-time setup, backup and optional online database export instructions in [local-mac/README.md](local-mac/README.md). The local installation starts with an empty library until you import a Goodreads CSV or a backed-up D1 export. Local binary covers and EPUBs do not sync automatically.
