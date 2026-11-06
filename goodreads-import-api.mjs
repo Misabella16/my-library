@@ -168,6 +168,22 @@ async function undoChunk(db,batchId){
   return json({undone:true,archived:toArchive.length,batch_id:batchId});
 }
 export async function handleGoodreadsApi(request,db,path){
+  if(path==='/api/imports/catalogue'&&request.method==='GET'){
+    // Return only the identity fields needed for an owner-authenticated
+    // Goodreads duplicate preview. No reviews, private notes or edition data.
+    const url=new URL(request.url);
+    const offsetRaw=url.searchParams.get('offset')||'0';
+    const limitRaw=url.searchParams.get('limit')||'1000';
+    if(!/^\d{1,8}$/.test(offsetRaw)||!/^\d{1,4}$/.test(limitRaw))
+      return fail('Invalid catalogue pagination parameters.');
+    const offset=Number(offsetRaw),limit=Number(limitRaw);
+    if(limit<1||limit>1000)return fail('Catalogue page size must be between 1 and 1000.');
+    const total=await query(db,'SELECT COUNT(*) AS n FROM books WHERE archived_at IS NULL');
+    const books=await rows(db,
+      'SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL ORDER BY id LIMIT ? OFFSET ?',
+      [limit,offset]);
+    return json({books,total:Number(total?.n)||0,offset,limit});
+  }
   if(path==='/api/imports'&&request.method==='GET')return importHistory(db);
   if(path==='/api/imports/goodreads'&&request.method==='POST')return importChunk(request,db);
   const undo=/^\/api\/imports\/([0-9a-f-]{36})\/undo$/.exec(path);
