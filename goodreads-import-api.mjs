@@ -180,6 +180,15 @@ async function undoChunk(db,batchId){
   await db.batch(stmts);
   return json({undone:true,archived:toArchive.length,batch_id:batchId});
 }
+function importServiceFailure(e){
+  if(/quota|daily.*limit|limit.*exceeded|rows (?:read|written).*limit|too many (?:rows|requests)/i.test(String(e))){
+    return json({error:'Cloudflare database usage limit may have been reached. Completed imports remain saved. Re-preview the CSV after your database allowance resets.',
+      code:'database_limit_reached'},503);
+  }
+  console.warn('Goodreads database operation failed:',e instanceof Error?e.name:'Error');
+  return json({error:'The database could not finish this import request. Earlier batches remain saved. Please resume the remaining books.',
+    code:'import_batch_unavailable'},503);
+}
 export async function handleGoodreadsApi(request,db,path){
   if(path==='/api/imports/catalogue'&&request.method==='GET'){
     // Return only the identity fields needed for an owner-authenticated
@@ -198,7 +207,10 @@ export async function handleGoodreadsApi(request,db,path){
     return json({books,total:Number(total?.n)||0,offset,limit});
   }
   if(path==='/api/imports'&&request.method==='GET')return importHistory(db);
-  if(path==='/api/imports/goodreads'&&request.method==='POST')return importChunk(request,db);
+  if(path==='/api/imports/goodreads'&&request.method==='POST'){
+    try{return await importChunk(request,db);}
+    catch(e){return importServiceFailure(e);}
+  }
   const undo=/^\/api\/imports\/([0-9a-f-]{36})\/undo$/.exec(path);
   if(undo&&request.method==='POST')return undoChunk(db,undo[1]);
   return null;
