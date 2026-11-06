@@ -10,6 +10,8 @@ export function cleanEpubTitle(value=''){
   for(const expression of junk)title=title.replace(expression,' ').trim();
   // Numeric download suffixes are not part of a bibliographic title.
   title=title.replace(/\s*\(\d{1,3}\)\s*$/,'').trim();
+  // A duplicate download counter can hide a trailing source marker.
+  for(const expression of junk)title=title.replace(expression,' ').trim();
   return title.replace(/\s+/g,' ').trim().slice(0,300);
 }
 export function cleanEpubAuthor(value=''){
