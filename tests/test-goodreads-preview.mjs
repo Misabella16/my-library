@@ -92,16 +92,19 @@ test('Unicode book and author names match correctly and incomplete scans stay co
   assert.deepEqual(incomplete.results.map(x=>x.matchStatus),['existing','unverified']);
 });
 
-test('Goodreads preview UI is intentionally read-only, and site controls remain intact',()=>{
+test('Goodreads CSV preview stays local; imports require an explicit owner confirmation',()=>{
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const frontend=readFileSync(new URL('../library.js',import.meta.url),'utf8');
   const ui=readFileSync(new URL('../goodreads-ui.mjs',import.meta.url),'utf8');
-  for(const id of ['goodreads-file','preview-goodreads','goodreads-status','goodreads-preview-results'])
+  for(const id of ['goodreads-file','preview-goodreads','goodreads-status','goodreads-preview-results',
+    'import-goodreads','goodreads-import-hint','goodreads-import-history'])
     assert.match(html,new RegExp('id="'+id+'"'));
-  assert.match(frontend,/initGoodreadsPreview\(api\)/);
+  assert.match(frontend,/initGoodreadsPreview\(api,/);
   assert.match(ui,/\.textContent=/);
   assert.doesNotMatch(ui,/\.innerHTML|localStorage|sessionStorage|indexedDB/);
-  assert.doesNotMatch(ui,/\bmethod\s*:\s*['"](?:POST|PATCH|DELETE)['"]/);
-  assert.doesNotMatch(ui,/fetch\(/);
-  assert.match(html, /Preview only/);
+  assert.match(ui,/confirm\('Import /);
+  assert.match(ui,/method:'POST',data:\{rows:chunk\.map\(uploadRow\)\}/);
+  assert.match(ui,/\/api\/imports\/goodreads/);
+  assert.doesNotMatch(ui,/\/api\/books[^'"]*['"][^;]*method:'POST'/);
+  assert.match(html, /Preview stays on your device/);
 });
