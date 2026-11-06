@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {webcrypto} from 'node:crypto';
 import {handleEpubApi,batchPreviewEpub} from '../epub-import-api.mjs';
+import {handleEpubBackfillApi} from '../epub-backfill-api.mjs';
 
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 function fixture(){
@@ -359,5 +360,76 @@ test('Re-import preview of entirely known EPUB hashes uses only one indexed D1 q
   assert.equal(results[0].status,'already_uploaded');
   assert.equal(results[1].status,'already_uploaded');
   assert.equal(results[0].existing.id,results[1].existing.id);
+ }finally{f.sqlite.close();}
+});
+
+test('Stored EPUB backfill previews and adds missing synopsis and subjects without reuploading files',async()=>{
+ const f=fixture();
+ try{
+  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,private_notes,review,rating) VALUES(?,?,?,?,?,?,?,?)')
+   .run(id,'A Novel','Writer','a novel','writer','Private notes','Personal review',4.5);
+  const meta={...(await validMeta()),subjects:['Fantasy','Magic'],book_id:id};
+  const upload=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(upload.status,201);
+  const uploaded=await upload.json();
+  const row=f.sqlite.prepare('SELECT metadata_json FROM epub_files WHERE id=?').get(uploaded.file_id);
+  assert.equal(JSON.parse(row.metadata_json).subjects.length,2);
+  // Mimic an old upload whose metadata was saved but never applied.
+  f.sqlite.prepare('UPDATE books SET synopsis=? WHERE id=?').run('',id);
+  f.sqlite.prepare('DELETE FROM book_tags WHERE book_id=?').run(id);
+  const url='https://books.example.com/api/epubs/backfill/preview?limit=10';
+  const previewResponse=await handleEpubBackfillApi(new Request(url),f.db,'/api/epubs/backfill/preview');
+  assert.equal(previewResponse.status,200);
+  const preview=await previewResponse.json();
+  assert.equal(preview.files.length,1);
+  assert.equal(preview.files[0].synopsis,'My private synopsis');
+  assert.deepEqual(preview.files[0].subjects,['Fantasy','Magic']);
+  assert.equal(preview.next_cursor,null);
+  const applied=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/apply',{method:'POST',body:JSON.stringify({
+    file_id:uploaded.file_id,expected_updated_at:preview.files[0].expected_updated_at
+   })}),f.db,'/api/epubs/backfill/apply');
+  assert.equal(applied.status,200,await applied.clone().text());
+  const data=await applied.json();
+  assert.equal(data.synopsis_filled,true);
+  assert.equal(data.tags_added,2);
+  assert.equal(count(f.sqlite,'book_tags'),2);
+  const book=f.sqlite.prepare('SELECT synopsis,private_notes,review,rating FROM books WHERE id=?').get(id);
+  assert.equal(book.synopsis,'My private synopsis');
+  assert.equal(book.private_notes,'Private notes');
+  assert.equal(book.review,'Personal review');
+  assert.equal(book.rating,4.5);
+  assert.equal(f.objects.size,1,'No additional R2 upload');
+  const replay=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/apply',{method:'POST',body:JSON.stringify({
+    file_id:uploaded.file_id,expected_updated_at:preview.files[0].expected_updated_at
+   })}),f.db,'/api/epubs/backfill/apply');
+  assert.equal(replay.status,409);
+  const undone=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/undo',{method:'POST',body:JSON.stringify({
+    change_id:data.change_id
+   })}),f.db,'/api/epubs/backfill/undo');
+  assert.equal(undone.status,200,await undone.clone().text());
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(id).synopsis,'');
+  assert.equal(count(f.sqlite,'book_tags'),0);
+  assert.equal(count(f.sqlite,'epub_files'),1,'Undo does not delete the EPUB');
+ }finally{f.sqlite.close();}
+});
+test('Stored EPUB repairs cannot overwrite edited synopses and reject stale previews',async()=>{
+ const f=fixture();
+ try{
+  const meta=await validMeta();
+  const uploaded=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  const item=await uploaded.json();
+  const book=f.sqlite.prepare('SELECT updated_at FROM books WHERE id=?').get(item.book_id);
+  f.sqlite.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=?')
+    .run('My edited text','2035-01-01',item.book_id);
+  const applied=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/apply',{method:'POST',body:JSON.stringify({
+    file_id:item.file_id,expected_updated_at:book.updated_at
+   })}),f.db,'/api/epubs/backfill/apply');
+  assert.equal(applied.status,409);
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(item.book_id).synopsis,'My edited text');
  }finally{f.sqlite.close();}
 });
