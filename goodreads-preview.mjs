@@ -100,7 +100,14 @@ export function parseGoodreadsExport(text) {
 }
 
 export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {}) {
-  const identities = new Map(), titles = new Map(), csvIdentities = new Map();
+  const identities = new Map(), titles = new Map(), csvIdentities = new Map(), csvGoodreadsIds = new Map();
+  // Mark every conflicting CSV row for review, including the first occurrence.
+  for (const entry of entries) {
+    const identity = normalize(entry.title) + '\0' + normalize(entry.author);
+    csvIdentities.set(identity, (csvIdentities.get(identity) || 0) + 1);
+    if (entry.goodreadsId)
+      csvGoodreadsIds.set(entry.goodreadsId, (csvGoodreadsIds.get(entry.goodreadsId) || 0) + 1);
+  }
   for (const book of existingBooks) {
     const title = normalize(book.title);
     const key = title + '\0' + normalize(book.author);
@@ -112,8 +119,8 @@ export function matchGoodreadsRows(entries, existingBooks, {complete = true} = {
   const results = entries.map(entry => {
     const title = normalize(entry.title), author = normalize(entry.author);
     const identity = title + '\0' + author;
-    const repeated = csvIdentities.has(identity);
-    csvIdentities.set(identity, (csvIdentities.get(identity) || 0) + 1);
+    const repeated = csvIdentities.get(identity) > 1 ||
+      Boolean(entry.goodreadsId && csvGoodreadsIds.get(entry.goodreadsId) > 1);
     const exact = author && title ? (identities.get(identity) || []) : [];
     const titleMatches = titles.get(title) || [];
     let matchStatus, existingBookId = null;
