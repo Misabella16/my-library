@@ -30,7 +30,7 @@ function fixture(){
  const env={BOOK_FILES:{
   async put(key,body){objects.set(key,body);},
   async delete(key){deleted.push(key);objects.delete(key);},
-  async get(key){return objects.get(key)}
+  async get(key){return objects.has(key)?{body:objects.get(key)}:null}
  }};
  return {sqlite,db,env,objects,deleted,queries:()=>queries,setFail:x=>{failTransaction=x;}};
 }
@@ -296,5 +296,48 @@ test('Failed EPUB transaction does not leave a partial synopsis change',async()=
   await assert.rejects(post(f.db,f.env,'/api/epubs/upload',form(await validMeta())),/Simulated D1/);
   assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(id).synopsis,'');
   assert.equal(count(f.sqlite,'epub_files'),0);
+ }finally{f.sqlite.close();}
+});
+
+test('Private EPUB download streams the original R2 object with safe headers',async()=>{
+ const f=fixture();
+ try{
+  const upload=await post(f.db,f.env,'/api/epubs/upload',form(await validMeta()));
+  assert.equal(upload.status,201);
+  const {file_id}=await upload.json();
+  const response=await handleEpubApi(
+   new Request('https://books.example.com/api/epubs/file/'+file_id),
+   f.db,f.env,'/api/epubs/file/'+file_id);
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('content-type'),'application/epub+zip');
+  assert.match(response.headers.get('content-disposition'),/attachment/);
+  assert.equal(response.headers.get('cache-control'),'private, no-store');
+  assert.equal(response.headers.get('x-content-type-options'),'nosniff');
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())],[80,75,3,4,0,0,0,0]);
+  assert.ok(!response.headers.get('content-disposition').includes('epubs/'));
+  const missing=await handleEpubApi(
+   new Request('https://books.example.com/api/epubs/file/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+   f.db,f.env,'/api/epubs/file/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  assert.equal(missing.status,404);
+ }finally{f.sqlite.close();}
+});
+
+test('Private EPUB list is bounded and never exposes R2 storage paths',async()=>{
+ const f=fixture();
+ try{
+  const upload=await post(f.db,f.env,'/api/epubs/upload',form(await validMeta()));
+  assert.equal(upload.status,201);
+  const item=await upload.json();
+  const response=await handleEpubApi(
+   new Request('https://books.example.com/api/epubs/book/'+item.book_id),
+   f.db,f.env,'/api/epubs/book/'+item.book_id);
+  assert.equal(response.status,200);
+  const data=await response.json();
+  assert.equal(data.files.length,1);
+  assert.equal(data.files[0].id,item.file_id);
+  assert.equal(data.files[0].edition_id,item.edition_id);
+  assert.equal(data.truncated,false);
+  assert.equal(JSON.stringify(data).includes('private_object_key'),false);
+  assert.equal(JSON.stringify(data).includes('epubs/'),false);
  }finally{f.sqlite.close();}
 });

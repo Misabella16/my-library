@@ -175,6 +175,33 @@ export async function batchPreviewEpub(db,items){
 }
 export async function handleEpubApi(request,db,env,path){
   const method=request.method;
+  // List files only when the owner explicitly opens the EPUB section.
+  // Do not add a scan to every ordinary book detail page on D1 free tier.
+  const bookFiles=new RegExp('^/api/epubs/book/([0-9a-f-]{36})$').exec(path);
+  if(bookFiles&&method==='GET'){
+    const files=await many(db,
+      'SELECT id,edition_id,original_filename,created_at FROM epub_files WHERE book_id=? ORDER BY created_at LIMIT 100',
+      [bookFiles[1]]);
+    return json({files,truncated:files.length===100});
+  }
+  // Only the outer owner-authenticated Worker can reach this route.
+  // Never reveal R2 keys or create public signed URLs.
+  const privateDownload=new RegExp('^/api/epubs/file/([0-9a-f-]{36})$').exec(path);
+  if(privateDownload&&method==='GET'){
+    if(!env.BOOK_FILES)return bad('Private EPUB storage is not configured',503);
+    const file=await one(db,
+      'SELECT private_object_key FROM epub_files WHERE id=?',[privateDownload[1]]);
+    if(!file)return bad('EPUB not found',404);
+    const object=await env.BOOK_FILES.get(file.private_object_key);
+    if(!object)return bad('EPUB not found',404);
+    return new Response(object.body,{headers:{
+      'content-type':'application/epub+zip',
+      'content-disposition':'attachment; filename="book.epub"',
+      'cache-control':'private, no-store',
+      'x-content-type-options':'nosniff',
+      'content-security-policy':"default-src 'none'; sandbox"
+    }});
+  }
   if(path==='/api/epubs/preview'&&method==='POST'){
     let body;
     try{body=await request.json();}catch{return bad('EPUB preview requires valid JSON');}
