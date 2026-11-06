@@ -1,0 +1,73 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {initEpubBackfill} from '../epub-backfill-ui.mjs';
+class FakeNode {
+ constructor(id=''){this.id=id;this.listeners={};this.disabled=false;this.children=[];
+ this.textContent='';this.className='';this.value='';}
+ addEventListener(type,callback){(this.listeners[type]??=[]).push(callback);}
+ async click(){for(const callback of this.listeners.click||[])await callback();}
+ append(...nodes){this.children.push(...nodes);}
+ replaceChildren(...nodes){this.children=[...nodes];}
+}
+function fixture(rows=55){
+ const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
+ 'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk'];
+ const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
+ const root=new FakeNode('epub-backfill');
+ root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
+ const old=globalThis.document;
+ globalThis.document={
+  getElementById:id=>id==='epub-backfill'?root:null,
+  createElement:tag=>new FakeNode(tag)
+ };
+ const records=Array.from({length:rows},(_,i)=>({
+  file_id:String(i).padStart(36,'0'),
+  expected_updated_at:'2026-11-01',
+  title:'Novel '+i,synopsis:'',subjects:['Fantasy'],cover_missing:false
+ }));
+ const calls=[],applied=[];
+ const api=async(path,opts)=>{
+  calls.push(path);
+  if(path.startsWith('/api/epubs/backfill/preview?')){
+   const url=new URL(path,'https://books.example.com');
+   const after=url.searchParams.get('after')||'';
+   const start=after?records.findIndex(x=>x.file_id===after)+1:0;
+   const page=records.slice(start,start+10);
+   return {files:page,next_cursor:start+10<records.length?page.at(-1).file_id:null};
+  }
+  if(path==='/api/epubs/backfill/apply'){
+   applied.push(opts.data.file_id);
+   return {status:'applied',change_id:opts.data.file_id};
+  }
+  if(path==='/api/epubs/backfill/undo')return {status:'undone'};
+  throw Error('Unexpected API call: '+path);
+ };
+ initEpubBackfill(api);
+ return {refs,calls,applied,get:key=>refs.get(key),restore(){globalThis.document=old;}};
+}
+test('One click repairs up to 50 stored EPUBs and the next click continues from cursor',async()=>{
+ const f=fixture(55);
+ try{
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,50);
+  assert.match(f.get('epub-backfill-status').textContent,/Repair next 50/);
+  assert.equal(f.get('epub-backfill-bulk').disabled,false);
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,55);
+  assert.equal(new Set(f.applied).size,55);
+  assert.equal(f.get('epub-backfill-bulk').disabled,true);
+  assert.match(f.get('epub-backfill-status').textContent,/Entire saved EPUB catalogue scanned/);
+  assert.equal(f.calls.filter(path=>path.startsWith('/api/epubs/backfill/preview?')).length,6);
+ }finally{f.restore();}
+});
+test('Preview of stored metadata never repairs anything until Apply is clicked',async()=>{
+ const f=fixture(2);
+ try{
+  await f.get('epub-backfill-preview').click();
+  assert.equal(f.applied.length,0);
+  assert.equal(f.get('epub-backfill-apply').disabled,false);
+  await f.get('epub-backfill-apply').click();
+  assert.equal(f.applied.length,2);
+  assert.equal(f.get('epub-backfill-undo').disabled,false);
+ }finally{f.restore();}
+});
