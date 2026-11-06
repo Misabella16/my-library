@@ -16,9 +16,10 @@ export function initEpubBackfill(api){
  const undo=root.querySelector('#epub-backfill-undo');
  const bulk=root.querySelector('#epub-backfill-bulk');
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
+ let bulkCursor='',bulkFinished=false;
  const update=()=>{
   preview.disabled=busy;
-  bulk.disabled=busy;
+  bulk.disabled=busy||bulkFinished;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
   next.disabled=busy||!nextCursor;
   undo.disabled=busy||changes.length===0;
@@ -57,7 +58,7 @@ export function initEpubBackfill(api){
  bulk.addEventListener('click',async()=>{
   if(busy)return;
   busy=true;update();
-  let after='',checked=0,applied=0,unchanged=0,failed=0;
+  let after=bulkCursor,checked=0,applied=0,unchanged=0,failed=0;
   const target=50;
   try{
    while(checked<target){
@@ -84,11 +85,16 @@ export function initEpubBackfill(api){
     }
     status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
      failed+' need review. Changes are logged for Undo.';
-    if(!page.next_cursor||page.files.length===0)break;
+    if(!page.next_cursor||page.files.length===0){
+     bulkFinished=true;
+     break;
+    }
     after=page.next_cursor;
+    bulkCursor=after;
    }
    status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
-    unchanged+' unchanged · '+failed+' need refresh or review.';
+    unchanged+' unchanged · '+failed+' need refresh or review.'+
+    (bulkFinished?' Entire saved EPUB catalogue scanned.':' Use Repair next 50 to continue.');
   }catch(error){
    status.textContent='Repair stopped safely after '+checked+' files: '+
     (error.message||'Request failed')+'. Completed changes remain saved.';
