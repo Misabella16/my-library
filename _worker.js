@@ -416,10 +416,11 @@ export default {
     // No library content or authentication data is exposed by this endpoint.
     if(path==='/_logout') {
       if(request.method!=='GET') return secureHeaders(fail('Method not allowed',405),true);
-      const team=validTeamDomain(env.ACCESS_TEAM_DOMAIN);
-      if(!team) return secureHeaders(fail('Access logout is not configured',503),true);
+      // Cloudflare Access provides a logout endpoint on the protected app
+      // hostname. Avoid depending on ACCESS_TEAM_DOMAIN, which could itself
+      // be misconfigured while the owner is trying to sign out.
       const response=new Response(null,{status:303,headers:{
-        location:team+'/cdn-cgi/access/logout',
+        location:'/cdn-cgi/access/logout',
         'set-cookie':'CF_Authorization=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax',
         'cache-control':'no-store'
       }});
