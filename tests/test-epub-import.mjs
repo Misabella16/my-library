@@ -321,3 +321,23 @@ test('Private EPUB download streams the original R2 object with safe headers',as
   assert.equal(missing.status,404);
  }finally{f.sqlite.close();}
 });
+
+test('Private EPUB list is bounded and never exposes R2 storage paths',async()=>{
+ const f=fixture();
+ try{
+  const upload=await post(f.db,f.env,'/api/epubs/upload',form(await validMeta()));
+  assert.equal(upload.status,201);
+  const item=await upload.json();
+  const response=await handleEpubApi(
+   new Request('https://books.example.com/api/epubs/book/'+item.book_id),
+   f.db,f.env,'/api/epubs/book/'+item.book_id);
+  assert.equal(response.status,200);
+  const data=await response.json();
+  assert.equal(data.files.length,1);
+  assert.equal(data.files[0].id,item.file_id);
+  assert.equal(data.files[0].edition_id,item.edition_id);
+  assert.equal(data.truncated,false);
+  assert.equal(JSON.stringify(data).includes('private_object_key'),false);
+  assert.equal(JSON.stringify(data).includes('epubs/'),false);
+ }finally{f.sqlite.close();}
+});
