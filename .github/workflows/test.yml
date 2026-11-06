@@ -26,6 +26,7 @@ jobs:
           node --check goodreads-ui.mjs
           node --check goodreads-import.mjs
           node --check goodreads-import-api.mjs
+          node --check database-errors.mjs
           node --check goodreads-reconciliation.mjs
           node --check shelf-photo-matcher.mjs
       - name: Node tests
