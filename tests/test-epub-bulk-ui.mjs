@@ -309,3 +309,33 @@ test('Pause an active import between EPUBs and resume without reuploading saved 
   assert.equal(f.stats().refresh,2);
  }finally{f.restore();}
 });
+
+test('Owner can skip and restore a single EPUB without another database request',async()=>{
+ const f=fixture(3);
+ try{
+  f.get('epub-files').files=f.files;
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  const before=f.calls.length;
+  const card=f.get('epub-preview-list').children[0];
+  const skip=card.children.find(x=>x.textContent==='Skip this EPUB');
+  assert.ok(skip);
+  await skip.dispatch('click');
+  assert.match(f.get('upload-epubs').textContent,/Save 2 eligible/);
+  const nextCard=f.get('epub-preview-list').children[0];
+  const include=nextCard.children.find(x=>x.textContent==='Include this EPUB');
+  assert.ok(include);
+  await include.dispatch('click');
+  assert.match(f.get('upload-epubs').textContent,/Save 3 eligible/);
+  assert.equal(f.calls.length,before);
+  assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+test('EPUB match report shows manually excluded items',()=>{
+ const csv=bulkEpubReport([{
+  file:{name:'ignore.epub'},metadata:{title:'Not now'},
+  match:{status:'new'},excluded:true
+ }]);
+ assert.match(csv,/Manually excluded/);
+ assert.match(csv,/"true"/);
+});

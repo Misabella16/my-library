@@ -11,7 +11,7 @@ const labels={
  same_file:'Duplicate in this selection',uploaded:'Saved',
  upload_failed:'Upload failed',possible_duplicate:'Possible duplicate EPUB'
 };
-const canImport=x=>['new','match','upload_failed'].includes(x?.match?.status);
+const canImport=x=>!x?.excluded&&['new','match','upload_failed'].includes(x?.match?.status);
 const create=(tag,className,text)=>{
  const el=document.createElement(tag);
  if(className)el.className=className;
@@ -164,6 +164,17 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       render();
     });
     card.append(keep);
+   }
+   if(['new','match','upload_failed'].includes(entry.match?.status)){
+    const toggle=create('button','btn subtle mini',
+      entry.excluded?'Include this EPUB':'Skip this EPUB');
+    toggle.type='button';
+    toggle.addEventListener('click',()=>{
+      if(running)return;
+      entry.excluded=!entry.excluded;
+      render();
+    });
+    card.append(toggle);
    }
    list.append(card);
   }
