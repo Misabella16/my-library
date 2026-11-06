@@ -477,6 +477,23 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-vi
   .goodreads-approval-actions{display:block}
   .goodreads-approval-actions .btn{margin-top:9px}
 }
+/* Edition-aware Goodreads CSV reconciliation */
+.goodreads-identifiers{
+  display:block;
+  color:#655e5b;
+  margin-top:5px;
+  padding:5px 8px;
+  border-left:2px solid #c7b8a8;
+  background:#fbf7f2;
+  border-radius:2px 5px 5px 2px;
+  font:11px/1.6 system-ui,-apple-system,sans-serif;
+  overflow-wrap:anywhere;
+}
+.goodreads-match.ready{background:#f6e9f0;border-color:#e2cbd7;color:#84576a}
+.goodreads-report-controls select:focus-visible{
+  outline:3px solid #8a6c45;
+  outline-offset:2px;
+}
 /* Goodreads full reconciliation: understated, compact, readable on mobile */
 .goodreads-report-note{
   margin-top:8px;
