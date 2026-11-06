@@ -162,12 +162,10 @@ function renderDetail(){
       '<textarea id="book-notes" class="note-editor" name="private_notes" rows="6" maxlength="120000" placeholder="Thoughts, favorite moments, quotes, reminders, reading journal…">'+safe(b.private_notes)+'</textarea>'+
       '<div class="actions"><span class="small-status" id="notes-state">Only you can see these notes.</span><button class="btn mini" type="submit">Save notes</button></div></form></section>'+
     '<div class="divider"></div>'+
-    '<details class="collapse"><summary>My Private EPUB Files ('+(b.epubs?.length||0)+')</summary>'+
+    '<details class="collapse"><summary>My Private EPUB Files</summary>'+
       '<p class="muted">Original files are kept in private storage. Downloads require your library login.</p>'+
-      ((b.epubs||[]).filter(e=>safeId(e.id)).map(e=>'<p class="epub-file-entry">'+
-        '<a class="btn mini subtle" href="/api/epubs/file/'+safe(e.id)+'" download>Download EPUB</a> '+
-        '<span>'+safe(e.original_filename||'Book EPUB')+'</span></p>').join('')||
-        '<p class="muted">No EPUB uploaded for this book yet.</p>')+'</details>'+
+      '<button class="btn mini subtle" type="button" id="load-private-epubs">Show EPUB files</button>'+
+      '<div id="private-epub-list" aria-live="polite"></div></details>'+
     '<details class="collapse"><summary>My Editions & Copies ('+(b.editions?.length||0)+' editions)</summary>'+
       '<div class="edition-actions"><button class="btn mini" type="button" id="add-edition">+ Add edition</button></div>'+
       (editionContent||'<p class="muted">Add a standard, digital, ARC or collector’s edition.</p>')+'</details>'+
@@ -181,6 +179,25 @@ function renderDetail(){
       '<label>Synopsis<textarea name="synopsis" rows="5" maxlength="25000">'+safe(b.synopsis)+'</textarea></label>'+
       '<label>Reading status<select name="reading_status">'+options(Object.entries(statuses),b.reading_status)+'</select></label>'+
       '<div class="actions"><button class="btn mini" type="submit">Save book</button></div></form></details>';
+  const load=target.querySelector('#load-private-epubs');
+  load?.addEventListener('click',async()=>{
+    const dest=target.querySelector('#private-epub-list');
+    if(!dest||load.disabled)return;
+    load.disabled=true;
+    dest.textContent='Looking up your private files…';
+    try{
+      const response=await api('/api/epubs/book/'+safeId(b.id));
+      if(state.selectedId!==b.id)return;
+      const files=(response.files||[]).filter(file=>safeId(file.id));
+      dest.innerHTML=files.length?files.map(file=>
+       '<p class="epub-file-entry"><a class="btn mini subtle" href="/api/epubs/file/'+
+       safe(file.id)+'" download>Download EPUB</a> <span>'+
+       safe(file.original_filename||'Book EPUB')+'</span></p>').join(''):
+       '<p class="muted">No EPUB uploaded for this book yet.</p>';
+      if(response.truncated)dest.insertAdjacentText('beforeend',' Showing the first 100 files.');
+    }catch(error){dest.textContent='Could not load EPUBs: '+(error.message||'Request failed');}
+    finally{load.disabled=false;}
+  });
 }
 async function refreshCurrent({list=true}={}){
   if(list) await listBooks();
