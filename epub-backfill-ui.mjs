@@ -17,7 +17,7 @@ export function initEpubBackfill(api){
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
  const update=()=>{
   preview.disabled=busy;
-  apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length);
+  apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
   next.disabled=busy||!nextCursor;
   undo.disabled=busy||changes.length===0;
  };
@@ -27,7 +27,8 @@ export function initEpubBackfill(api){
    const section=el('article',undefined,'epub-preview-card');
    section.append(el('strong',item.title||'Untitled'));
    section.append(el('p',(item.synopsis?'Missing synopsis · ':'')+
-    (item.subjects?.length||0)+' EPUB subjects available','muted'));
+    (item.subjects?.length||0)+' EPUB subjects available · '+
+    (item.cover_missing?'Ebook cover check available':'Ebook cover already present'),'muted'));
    if(item.synopsis)section.append(el('p',item.synopsis.slice(0,240),'muted'));
    if(item.subjects?.length)section.append(el('p',item.subjects.join(' · '),'muted'));
    results.append(section);
@@ -58,7 +59,7 @@ export function initEpubBackfill(api){
   busy=true;update();
   let applied=0,unchanged=0,errors=0;
   for(const item of items){
-   if(!item.synopsis&&!item.subjects?.length)continue;
+   if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing)continue;
    try{
     const output=await api('/api/epubs/backfill/apply',{method:'POST',data:{
       file_id:item.file_id,expected_updated_at:item.expected_updated_at
