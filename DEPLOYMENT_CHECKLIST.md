@@ -36,3 +36,5 @@ The `momoshelf` Pages project must receive a fresh production deployment after e
 ## Owner email adjustment: deployment note
 
 After the owner updates the production `OWNER_EMAIL` variable in Cloudflare Pages, trigger a new deployment of `momoshelf` from `main` to apply it. Verify the authenticated owner can open the homepage and `/api/session`; anonymous and unauthorized requests must still be denied. This file contains no addresses, tokens, or secret values.
+
+Production deployment retry after confirming only the older project responded to the initial owner-email change.
