@@ -433,3 +433,68 @@ test('Stored EPUB repairs cannot overwrite edited synopses and reject stale prev
   assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(item.book_id).synopsis,'My edited text');
  }finally{f.sqlite.close();}
 });
+
+function epubArchiveWithCover(){
+ const container='<container><rootfiles><rootfile full-path="OPS/content.opf"/></rootfiles></container>';
+ const opf='<package><metadata><dc:title>A Novel</dc:title><dc:creator>Writer</dc:creator></metadata>'+
+  '<manifest><item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/></manifest></package>';
+ const files={'mimetype':'application/epub+zip','META-INF/container.xml':container,
+  'OPS/content.opf':opf,'OPS/cover.png':Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0])};
+ const chunks=[],directory=[];let offset=0;
+ for(const [name,data] of Object.entries(files)){
+  const path=Buffer.from(name),bytes=Buffer.from(data),local=Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);
+  local.writeUInt32LE(bytes.length,18);local.writeUInt32LE(bytes.length,22);
+  local.writeUInt16LE(path.length,26);
+  chunks.push(local,path,bytes);
+  const central=Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);
+  central.writeUInt16LE(20,6);central.writeUInt32LE(bytes.length,20);
+  central.writeUInt32LE(bytes.length,24);central.writeUInt16LE(path.length,28);
+  central.writeUInt32LE(offset,42);
+  directory.push(central,path);offset+=local.length+path.length+bytes.length;
+ }
+ const dir=Buffer.concat(directory),eocd=Buffer.alloc(22);
+ eocd.writeUInt32LE(0x06054b50,0);eocd.writeUInt16LE(Object.keys(files).length,8);
+ eocd.writeUInt16LE(Object.keys(files).length,10);
+ eocd.writeUInt32LE(dir.length,12);eocd.writeUInt32LE(offset,16);
+ return Buffer.concat([...chunks,dir,eocd]);
+}
+test('Missing embedded ebook cover can be recovered from stored private EPUB without reuploading book',async()=>{
+ const f=fixture();
+ try{
+  const bytes=epubArchiveWithCover();
+  const hash=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const epubId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis) VALUES(?,?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer','My synopsis stays');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(editionId,bookId,'Standard');
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(epubId,hash,'novel.epub','epubs/private/test.epub','{}',bookId,editionId);
+  await f.env.BOOK_FILES.put('epubs/private/test.epub',bytes);
+  const preview=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/preview'),
+   f.db,'/api/epubs/backfill/preview',f.env);
+  assert.equal(preview.status,200);
+  const data=await preview.json();
+  assert.equal(data.files[0].cover_missing,true);
+  const response=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/apply',{
+   method:'POST',body:JSON.stringify({file_id:epubId,expected_updated_at:data.files[0].expected_updated_at})
+  }),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(response.status,200,await response.clone().text());
+  const result=await response.json();
+  assert.equal(result.cover_added,true);
+  assert.equal(result.synopsis_filled,false);
+  assert.equal(count(f.sqlite,'edition_images'),1);
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(bookId).synopsis,'My synopsis stays');
+  assert.equal(f.objects.size,2,'Original EPUB plus recovered image');
+  const undo=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/undo',{
+   method:'POST',body:JSON.stringify({change_id:result.change_id})
+  }),f.db,'/api/epubs/backfill/undo',f.env);
+  assert.equal(undo.status,200,await undo.clone().text());
+  assert.equal(count(f.sqlite,'edition_images'),0);
+  assert.equal(f.objects.size,1,'Never delete original EPUB');
+ }finally{f.sqlite.close();}
+});
