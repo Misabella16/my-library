@@ -1,3 +1,4 @@
+import {extractIsbn13} from './epub-isbn.mjs';
 // Local EPUB (ZIP + OPF) inspection for private My Library imports.
 // Does not contact a server, fetch external XML, or execute book contents.
 export const MAX_EPUB_BYTES=24*1024*1024;
@@ -127,7 +128,11 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   const title=tagValue(packageXml,'title',300);
   const author=tagValue(packageXml,'creator',400);
   const description=tagValue(packageXml,'description',3000);
-  const identifier=tagValue(packageXml,'identifier',250);
+  // OPF packages often list a UUID as the primary identifier, followed
+  // by a real ISBN. Prefer any validated ISBN-13 for safe edition matching.
+  const identifiers=[...packageXml.matchAll(/<(?:[\w.-]+:)?identifier\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?identifier\s*>/gi)]
+    .map(match=>cleanText(match[1],250)).filter(Boolean);
+  const identifier=identifiers.find(value=>extractIsbn13(value))||identifiers[0]||'';
   const subjects=[...packageXml.matchAll(/<(?:[\w.-]+:)?subject\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?subject\s*>/gi)]
     .map(match=>cleanText(match[1],90)).filter(Boolean)
     .filter((subject,index,all)=>all.findIndex(x=>x.toLocaleLowerCase()===subject.toLocaleLowerCase())===index)

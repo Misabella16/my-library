@@ -104,3 +104,19 @@ test('Unrelated image in manifest is not mistaken for cover',()=>{
  const value=parsePackageXml(container,noncover,'OPS/content.opf');
  assert.equal(value.coverPath,'');
 });
+
+test('EPUB chooses a valid ISBN from multiple identifiers after a UUID',async()=>{
+ const multi=opf.replace(
+  '<dc:identifier>urn:isbn:9781234567897</dc:identifier>',
+  '<dc:identifier id="uuid">urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</dc:identifier>'+
+  '<dc:identifier id="isbn">urn:isbn:9780306406157</dc:identifier>'
+ );
+ const book=await inspectEpub(new File([fixtureZip({...content(),'OPS/content.opf':multi})],'identifiers.epub'));
+ assert.equal(book.identifier,'urn:isbn:9780306406157');
+ assert.equal(book.coverType,'image/png');
+});
+test('Unlabeled UUID stays available when no valid ISBN exists',()=>{
+ const onlyUuid=opf.replace('urn:isbn:9781234567897','urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+ const details=parsePackageXml(container,onlyUuid,'OPS/content.opf');
+ assert.equal(details.identifier,'urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+});
