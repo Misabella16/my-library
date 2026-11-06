@@ -7,3 +7,8 @@ node_modules/
 .wrangler/
 .DS_Store
 *.log
+.my-library-local/
+*.sqlite
+*.sqlite3
+*.db
+*.sql.backup
