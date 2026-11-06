@@ -156,7 +156,7 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   }
   return {title,author,description,identifier,subjects,coverPath};
 }
-export async function inspectEpub(file){
+export async function inspectEpub(file,{includeCover=true}={}){
   if(!file||!/\.epub$/i.test(file.name||''))throw Error('Choose an .epub file');
   if(file.size===0||file.size>MAX_EPUB_BYTES)throw Error('EPUB must be smaller than 24 MB');
   const bytes=new Uint8Array(await file.arrayBuffer());
@@ -171,7 +171,7 @@ export async function inspectEpub(file){
   if(!packageBytes)throw Error('EPUB package manifest could not be found');
   const metadata=parsePackageXml(containerText,decoder.decode(packageBytes),packagePath);
   let cover=null,coverType=null;
-  if(metadata.coverPath&&archive.entries.has(metadata.coverPath)){
+  if(includeCover&&metadata.coverPath&&archive.entries.has(metadata.coverPath)){
     try{
       const image=await readZipEntry(archive,metadata.coverPath,MAX_COVER_BYTES);
       coverType=zipType(image);
