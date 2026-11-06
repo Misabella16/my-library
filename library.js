@@ -1,3 +1,4 @@
+import {initGoodreadsPreview} from './goodreads-ui.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
 'use strict';
@@ -320,6 +321,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   });
   try {
     await api('/api/session');
+    initGoodreadsPreview(api);
     $('#connection-status').textContent='Owner session verified · Private library connected';
     await listBooks();
     if(state.books.length) await selectBook(state.books[0].id);
