@@ -27,7 +27,7 @@ async function api(path,{method='GET',data,raw,contentType}={}){
   let payload;
   try {payload=await response.json();}catch {payload={error:'The private server sent an unexpected response.'};}
   if(!response.ok) {
-    const err=new Error(payload.error||'Request failed');
+    const err=new Error(payload.error||('Private server request failed (HTTP '+response.status+').'));
     err.status=response.status;err.payload=payload;throw err;
   }
   return payload;
@@ -234,7 +234,16 @@ document.addEventListener('DOMContentLoaded',async()=>{
     document.querySelectorAll('.tab-panel').forEach(p=>{p.hidden=p.id!==tab.dataset.tab;p.classList.toggle('active',p.id===tab.dataset.tab);});
   }));
   $('#add-book').addEventListener('click',()=>showDialog('add-book-dialog'));
-  $('#refresh').addEventListener('click',async()=>{try{await refreshCurrent();showMessage('Library refreshed')}catch(e){showMessage(e.message,true)}});
+  $('#refresh').addEventListener('click',async()=>{
+    try{
+      await refreshCurrent();
+      $('#add-book').disabled=false;
+      $('#connection-status').textContent='Owner session verified · Private library connected';
+      showMessage('Library refreshed');
+    }catch(e){
+      showMessage('The library is still unavailable: '+(e.message||'Please try again.'),true);
+    }
+  });
   $('#load-more').addEventListener('click',async()=>{try{await listBooks({append:true})}catch(e){showMessage(e.message,true)}});
   $('#search').addEventListener('input',()=>{
     state.query=$('#search').value.trim();
@@ -319,16 +328,35 @@ document.addEventListener('DOMContentLoaded',async()=>{
       return '<figure><img src="'+safe(url)+'" alt="Local shelf photo preview"><figcaption>'+safe(file.name)+'</figcaption></figure>';
     }).join('');
   });
-  try {
+  try{
     await api('/api/session');
-    initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
-    $('#connection-status').textContent='Owner session verified · Private library connected';
-    await listBooks();
-    if(state.books.length) await selectBook(state.books[0].id);
   }catch(err){
-    $('#connection-status').textContent='Setup required · Private library is not connected';
-    $('#book-grid').innerHTML='<div class="empty"><h3>Private setup required</h3><p>Configure a separate Cloudflare Access application and My Library D1 database before editing your library.</p></div>';
-    showMessage('Private library is unavailable: '+err.message,true);
-    $('#add-book').disabled=true;$('#refresh').disabled=true;
+    $('#connection-status').textContent='Private owner session unavailable';
+    $('#book-grid').innerHTML='<div class="empty"><h3>Library sign-in unavailable</h3><p>Check your private Cloudflare Access session. No books were deleted.</p></div>';
+    showMessage('Could not verify your private login: '+(err.message||'Please sign in again.'),true);
+    $('#add-book').disabled=true;
+    return;
+  }
+  // Authentication is independent of D1 health. Keep import history and Refresh
+  // reachable even if the database is temporarily out of daily allowance.
+  try{
+    initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
+  }catch(err){
+    showMessage('Goodreads controls could not initialize: '+(err.message||'Please refresh.'),true);
+  }
+  try{
+    await listBooks();
+    $('#connection-status').textContent='Owner session verified · Private library connected';
+    $('#add-book').disabled=false;
+    if(state.books.length){
+      try{await selectBook(state.books[0].id);}
+      catch(error){showMessage('Books loaded, but one book detail is temporarily unavailable: '+error.message,true);}
+    }
+  }catch(err){
+    $('#connection-status').textContent='Private login verified · Database temporarily unavailable';
+    $('#book-grid').innerHTML='<div class="empty"><h3>Your books are still saved</h3><p>The private database could not load right now. Use Refresh to check again. Do not delete your library or undo completed imports.</p></div>';
+    showMessage('Library temporarily unavailable: '+(err.message||'Please try again later.'),true);
+    $('#add-book').disabled=true;
+    // Refresh intentionally remains enabled for recovery.
   }
 });

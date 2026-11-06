@@ -205,7 +205,7 @@ test('large-library duplicate lookup preserves existing imported works and does 
 
 test('a failed Goodreads transaction reports quota or transient errors without changing books',async()=>{
   for(const [message,code] of [
-    ['D1 quota limit exceeded','database_limit_reached'],
+    ["Your account has exceeded D1's free tier daily row read limit.",'database_read_quota'],
     ['D1 temporary backend error','import_batch_unavailable']
   ]){
     const {sqlite,db}=makeDb();
@@ -221,13 +221,31 @@ test('a failed Goodreads transaction reports quota or transient errors without c
   }
 });
 
+test('D1 quota errors nested under cause preserve a safe code and midnight UTC reset',async()=>{
+  const {sqlite,db}=makeDb();
+  try{
+    db.batch=async()=>{
+      const failure=new Error('D1 batch failure');
+      failure.cause=new Error("Your account has exceeded D1's free tier daily row write limit.");
+      throw failure;
+    };
+    const res=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:[payloadRows()[0]]}});
+    assert.equal(res.status,503);
+    const body=await res.json();
+    assert.equal(body.code,'database_write_quota');
+    assert.match(body.reset_utc,/T00:00:00\.000Z$/);
+    assert.equal(body.retryable,false);
+    assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,0);
+  }finally{sqlite.close();}
+});
+
 test('a failed Goodreads identity lookup provides a resumable error without committing a batch',async()=>{
   const {sqlite,db}=makeDb();
   try{
-    db.prepare=()=>{throw new Error('D1 quota exceeded');};
+    db.prepare=()=>{throw new Error("Your account has exceeded D1's free tier daily row write limit.");};
     const res=await call(db,'/api/imports/goodreads',{method:'POST',data:{rows:[payloadRows()[0]]}});
     assert.equal(res.status,503);
-    assert.equal((await res.json()).code,'database_limit_reached');
+    assert.equal((await res.json()).code,'database_write_quota');
     assert.equal(scalar(sqlite,'SELECT COUNT(*) AS n FROM books').n,0);
   }finally{sqlite.close();}
 });

@@ -180,9 +180,23 @@ test('daily D1 limit stops retries and gives a safe re-preview message',async()=
     assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads').length,1);
     assert.equal(ui.get('import-goodreads').disabled,true);
     assert.match(ui.get('goodreads-import-feedback').textContent,/Import paused/);
-    assert.match(ui.get('goodreads-import-hint').textContent,/database usage limit/i);
+    assert.match(ui.get('goodreads-import-hint').textContent,/database is at a usage limit/i);
     assert.equal(ui.get('goodreads-file').files.length,1);
   }finally{ui.restore();}
+});
+
+test('Cloudflare read and write daily limits pause immediately, without retrying all batches',async()=>{
+  for(const code of ['database_read_quota','database_write_quota']){
+    const ui=await ready({failImportTimes:1,failCode:code});
+    try{
+      await ui.get('import-goodreads').dispatch('click');
+      await ui.get('goodreads-confirm-import').dispatch('click');
+      assert.equal(ui.requests.filter(r=>r.path==='/api/imports/goodreads').length,1);
+      assert.equal(ui.get('import-goodreads').disabled,true);
+      assert.match(ui.get('goodreads-import-feedback').textContent,/Import paused/);
+      assert.match(ui.get('goodreads-import-hint').textContent,/usage limit/);
+    }finally{ui.restore();}
+  }
 });
 
 test('If a CSV has no safely new books, the disabled action explains why',async()=>{

@@ -1,3 +1,4 @@
+import {classifyDatabaseError} from './database-errors.mjs';
 import {validateImportRows,importNormalize} from './goodreads-import.mjs';
 
 // Owner-only route: _worker.js verifies Access JWT and same-origin writes first.
@@ -98,14 +99,11 @@ async function importChunk(request,db){
   try{await db.batch(stmts);}catch(e){
     if(/UNIQUE|constraint/i.test(String(e)))return fail(
       'A matching book or concurrent import was detected. Re-preview and resume; no partial batch was committed.',409);
-    // Return safe categories, not raw SQL, token details, or private book data.
-    if(/quota|daily.*limit|limit.*exceeded|rows (?:read|written).*limit|too many (?:rows|requests)/i.test(String(e))){
-      return json({error:'Database daily usage limit reached. Your completed import batches are saved. Resume with the same CSV after your Cloudflare database quota resets.',
-        code:'database_limit_reached'},503);
-    }
+    const category=classifyDatabaseError(e);
+    if(category)return json(category,503);
     console.warn('Goodreads database batch failed:',e instanceof Error?e.name:'Error');
-    return json({error:'This import batch could not be completed. Previous batches are saved. Retry or resume the remaining books.',
-      code:'import_batch_unavailable'},503);
+    return json({error:'This import batch could not be completed. Earlier batches remain saved. Retry or resume the remaining books.',
+      code:'import_batch_unavailable',retryable:true},503);
   }
   return json({created:accepted.length,createdIndices:accepted.map(item=>item.index),skipped,
     skippedRows,skippedTotal,batch_id:batchId,status:'complete'},201);
@@ -181,13 +179,11 @@ async function undoChunk(db,batchId){
   return json({undone:true,archived:toArchive.length,batch_id:batchId});
 }
 function importServiceFailure(e){
-  if(/quota|daily.*limit|limit.*exceeded|rows (?:read|written).*limit|too many (?:rows|requests)/i.test(String(e))){
-    return json({error:'Cloudflare database usage limit may have been reached. Completed imports remain saved. Re-preview the CSV after your database allowance resets.',
-      code:'database_limit_reached'},503);
-  }
+  const category=classifyDatabaseError(e);
+  if(category)return json(category,503);
   console.warn('Goodreads database operation failed:',e instanceof Error?e.name:'Error');
-  return json({error:'The database could not finish this import request. Earlier batches remain saved. Please resume the remaining books.',
-    code:'import_batch_unavailable'},503);
+  return json({error:'The database could not finish this import request. Earlier batches remain saved. Resume the remaining books when service is available.',
+    code:'import_batch_unavailable',retryable:true},503);
 }
 export async function handleGoodreadsApi(request,db,path){
   if(path==='/api/imports/catalogue'&&request.method==='GET'){

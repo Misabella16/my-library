@@ -4,6 +4,6 @@
   "type": "module",
   "description": "Standalone private sister site; no production deployment configured",
   "scripts": {
-    "test": "node --test tests/test-worker.mjs && node tests/test-shelf-match.mjs && node --test tests/test-theme.mjs && node --test tests/test-goodreads-preview.mjs && node --test tests/test-goodreads-import.mjs && node --test tests/test-goodreads-reconciliation.mjs && node --test tests/test-goodreads-interaction.mjs"
+    "test": "node --test tests/test-worker.mjs && node tests/test-shelf-match.mjs && node --test tests/test-theme.mjs && node --test tests/test-goodreads-preview.mjs && node --test tests/test-goodreads-import.mjs && node --test tests/test-goodreads-reconciliation.mjs && node --test tests/test-goodreads-interaction.mjs && node --test tests/test-database-recovery.mjs"
   }
 }

@@ -179,8 +179,11 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map()}={
 const MAX_BATCH_SUBMIT=20;
 const MAX_BATCH_STATEMENTS=85;
 const MAX_TRANSIENT_RETRIES=2;
+const databaseBlockCodes=new Set([
+  'database_limit_reached','database_read_quota','database_write_quota','database_storage_limit'
+]);
 const retryableImportError=error=>
-  error?.payload?.code!=='database_limit_reached' &&
+  !databaseBlockCodes.has(error?.payload?.code) &&
   (!error?.status || [429,500,502,503,504].includes(error.status));
 async function sendGoodreadsBatch(api,rows,onRetry=()=>{}){
   for(let retry=0;;retry++){
@@ -452,7 +455,11 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
       // Keep that chunk plus all later chunks eligible for a safe retry.
       // Every retry is checked against the live DB so no existing work is overwritten.
       const remaining=chunks.slice(finished).flat();
-      const quota=error?.payload?.code==='database_limit_reached';
+      const quota=databaseBlockCodes.has(error?.payload?.code);
+      const resetDate=error?.payload?.reset_utc?new Date(error.payload.reset_utc):null;
+      const resetInfo=resetDate&&Number.isFinite(resetDate.getTime())
+        ?' Expected reset: '+resetDate.toLocaleString()+' ('+resetDate.toISOString()+').'
+        :'';
       if(remaining.length && !quota){
         current={...current,candidates:remaining};
         importButton.disabled=false;
@@ -463,7 +470,8 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
         current=null;
         importButton.disabled=true;
         importHint.textContent=quota
-          ? 'The database usage limit may have been reached. Your completed books are safe. Re-preview this CSV after your quota resets to continue.'
+          ? 'The database is at a usage limit. Your completed books are safe.'+resetInfo+
+            ' Re-preview the same CSV once Cloudflare restores access.'
           : 'No remaining candidates. Re-preview the CSV to reconcile the saved library.';
       }
       closeApproval();
@@ -471,7 +479,7 @@ export function initGoodreadsPreview(api,{onImported=async()=>{}}={}){
         ' batches. Completed batches: '+created+' added, '+skipped+' skipped.';
       setFeedback('Import paused. '+created+' books saved in confirmed batches, '+
         skipped+' skipped. '+(error instanceof Error?error.message:'A request failed.')+
-        (quota?' Do not retry until your database allowance resets.':
+        (quota?' Do not retry until the limit resets.'+resetInfo:
           ' Use Resume remaining books to continue without starting over.')+
         ' Check import history if you need to verify saved batches.','error');
     }finally{

@@ -1,7 +1,7 @@
 import test, {before} from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
-import worker,{verifyAccess,findMatchingEdition} from '../_worker.js';
+import worker,{verifyAccess,findMatchingEdition,classifyDatabaseError} from '../_worker.js';
 
 if(!globalThis.crypto) globalThis.crypto=webcrypto;
 const team='https://book-tests.cloudflareaccess.com';
@@ -41,6 +41,43 @@ test('valid Cloudflare Access signature and exact owner email work',async()=>{
   assert.equal(response.status,200);
   assert.equal((await response.json()).owner,true);
   assert.equal(response.headers.get('cache-control'),'no-store');
+});
+
+test('Cloudflare D1 quota and temporary errors are classified without leaking SQL',async()=>{
+  const read="Your account has exceeded D1's free tier daily row read limit.";
+  const write="Your account has exceeded D1's free tier daily row write limit.";
+  const nested=new Error('D1_ERROR: request failed');
+  nested.cause=new Error(read);
+  const category=classifyDatabaseError(nested);
+  assert.equal(category.code,'database_read_quota');
+  assert.equal(category.retryable,false);
+  assert.ok(category.reset_utc.endsWith('T00:00:00.000Z'));
+  assert.equal(JSON.stringify(category).includes('D1_ERROR'),false);
+  assert.equal(classifyDatabaseError(new Error(write)).code,'database_write_quota');
+  assert.equal(classifyDatabaseError(new Error('D1 DB is overloaded. Requests queued for too long.')).code,
+    'database_temporarily_unavailable');
+  assert.equal(classifyDatabaseError(new Error('Secret SQL error: SELECT private_notes')),null);
+});
+
+test('Authenticated database-health request returns clear daily quota or transient error',async()=>{
+  const token=await jwt();
+  const readings=[
+    ["Your account has exceeded D1's free tier daily row read limit.",'database_read_quota'],
+    ["Your account has exceeded D1's free tier daily row write limit.",'database_write_quota'],
+    ['D1 DB is overloaded. Requests queued for too long.','database_temporarily_unavailable']
+  ];
+  for(const [message,expected] of readings){
+    const db={prepare(){throw Error(message);}};
+    const response=await worker.fetch(req('https://books.example.com/api/health',token),{...env,BOOK_DB:db});
+    assert.equal(response.status,503);
+    const result=await response.json();
+    assert.equal(result.code,expected);
+    assert.ok(!JSON.stringify(result).includes('D1 DB'));
+  }
+  const okDb={prepare:()=>({bind:()=>({first:async()=>({ok:1})})})};
+  const success=await worker.fetch(req('https://books.example.com/api/health',token),{...env,BOOK_DB:okDb});
+  assert.equal(success.status,200);
+  assert.equal((await success.json()).database,'connected');
 });
 
 test('Cloudflare signing-key fetch errors have a specific safe code',async()=>{
