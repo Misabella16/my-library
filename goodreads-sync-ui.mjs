@@ -172,7 +172,11 @@ export function initGoodreadsSync(api,{onImported=async()=>{}}={}){
    plans=[];selected=[];remaining=[];render();
    tell('Preview stopped: '+(e.message||'Request unavailable')+
     '. No existing records were changed.');
-  }finally{running=false;preview.disabled=!input.length;}
+  }finally{
+   running=false;
+   preview.disabled=!input.length;
+   button.disabled=!remaining.length;
+  }
  });
  button.addEventListener('click',()=>{
   if(running||!remaining.length)return;
