@@ -96,8 +96,10 @@
           <input id="goodreads-file" type="file" accept=".csv,text/csv" aria-describedby="goodreads-privacy">
         </label>
         <button class="btn" id="preview-goodreads" type="button" disabled>Preview my Goodreads books</button>
+        <button class="btn subtle" id="download-goodreads-report" type="button" disabled>Download full match report (CSV)</button>
       </div>
       <p class="small-status" id="goodreads-status" role="status">Choose your Goodreads export to begin.</p>
+      <p class="muted goodreads-report-note">Every CSV book will be accounted for, including books already in My Library, duplicates, missing metadata, and books requiring review. Existing books are not automatically updated.</p>
       <div id="goodreads-preview-results" aria-live="polite"></div>
       <div class="goodreads-confirm"><button class="btn" id="import-goodreads" type="button" disabled>Import new Goodreads books</button><p class="small-status" id="goodreads-import-hint">Import is available only after a complete, successful preview.</p></div>
       <section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
