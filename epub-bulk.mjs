@@ -71,6 +71,15 @@ export function bulkEpubReport(items){
 }
 
 export function flagPossibleEpubDuplicates(entries){
+ // A reviewer can correct an EPUB's title or author after the initial
+ // preview. Rebuild the duplicate holds from current metadata every time.
+ // Preserve explicit "keep both versions" choices and saved upload results.
+ for(const entry of entries||[]){
+  if(entry.match?.status==='possible_duplicate'&&entry.duplicateMatch){
+   entry.match={...entry.duplicateMatch};
+   entry.duplicateMatch=null;
+  }
+ }
  const groups=new Map();
  for(const entry of entries||[]){
   const meta=entry.metadata||{};

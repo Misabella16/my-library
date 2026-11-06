@@ -373,3 +373,27 @@ test('Unverified claimed match cannot override a local review warning',async()=>
   assert.equal(f.get('upload-epubs').disabled,true);
  }finally{f.restore();}
 });
+
+test('Corrected EPUB titles recalculate duplicate holds without repeating D1 searches',()=>{
+ const row=(title,hash)=>({
+  metadata:{title,author:'Writer',sha256:hash},match:{status:'new'}
+ });
+ const items=[row('First', 'a'.repeat(64)),row('Second','b'.repeat(64))];
+ assert.equal(flagPossibleEpubDuplicates(items),0);
+ items[1].metadata.title='First';
+ assert.equal(flagPossibleEpubDuplicates(items),1);
+ assert.equal(items[1].match.status,'possible_duplicate');
+ items[1].metadata.title='Distinct';
+ assert.equal(flagPossibleEpubDuplicates(items),0);
+ assert.equal(items[1].match.status,'new');
+});
+test('Repeated duplicate checks do not re-hold files the owner explicitly kept',()=>{
+ const row=(hash)=>({
+  metadata:{title:'Same title',author:'Writer',sha256:hash},match:{status:'new'}
+ });
+ const items=[row('a'.repeat(64)),row('b'.repeat(64))];
+ assert.equal(flagPossibleEpubDuplicates(items),1);
+ items[1].duplicateApproved=true;
+ assert.equal(flagPossibleEpubDuplicates(items),0);
+ assert.equal(items[1].match.status,'new');
+});
