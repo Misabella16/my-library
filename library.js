@@ -75,9 +75,11 @@ async function listBooks({append=false}={}){
   const token=++state.refreshToken;
   const offset=append?state.books.length:0;
   const q=new URLSearchParams({q:state.query,offset:String(offset),limit:'60'});
+  // Reuse first-page count for Load more; no extra D1 COUNT scan.
+  if(append)q.set('include_total','0');
   const result=await api('/api/books?'+q);
   if(token!==state.refreshToken) return;
-  state.total=result.total ?? result.books?.length ?? 0;
+  if(!append)state.total=result.total ?? result.books?.length ?? 0;
   state.books=append?[...state.books,...(result.books||[])]:result.books||[];
   renderGrid();
   // Keep an open book's detail page visible even when a search or pagination
