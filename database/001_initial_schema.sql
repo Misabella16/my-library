@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS books (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_books_identity ON books(normalized_title,normalized_author);
+-- Stop concurrent imports creating the same active work twice.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_books_active_identity
+ON books(normalized_title,normalized_author) WHERE archived_at IS NULL;
+
 
 CREATE TABLE IF NOT EXISTS book_aliases (
   id TEXT PRIMARY KEY,
