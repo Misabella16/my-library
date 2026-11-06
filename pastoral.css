@@ -1,0 +1,360 @@
+/* My Library | Pastoral Rococo Reading Garden
+   Romantic powder blues, faded roses, sugared ivory, pale sage and antique gold.
+   Visual layer only; no network assets, trackers, scripts, or changes to private data. */
+:root{
+  --forest:#705265;
+  --deep:#503c50;
+  --olive:#687866;
+  --cream:#f8f3ed;
+  --paper:#fffdfa;
+  --ink:#503e4b;
+  --muted:#70626b;
+  --gold:#b69a75;
+  --line:#e8d9d6;
+  --sage:#eff3e9;
+  --rose:#a96f86;
+  --danger:#9d4359;
+  --garden-blue:#d5e8f1;
+  --garden-pink:#efc8d5;
+  --garden-sage:#b5c7af;
+  --garden-ivory:#fff9ee;
+  --garden-gold:#c7aa81;
+}
+body{
+  background:
+    radial-gradient(ellipse at 8% 11%,rgba(239,207,216,.32),transparent 34%),
+    radial-gradient(ellipse at 88% 49%,rgba(208,226,227,.32),transparent 37%),
+    #faf5ee;
+  color:var(--ink);
+  font-family:Georgia,"Times New Roman",serif;
+}
+.top{
+  background:linear-gradient(105deg,#fffaf4,#fff8f4 70%,#f8f2ed);
+  border-bottom:2px solid #e8d3d0;
+  box-shadow:0 6px 22px #7d566317;
+}
+.top:after{border-color:#c6b3a69f}
+.brand-mark{
+  color:#87546e;
+  background:linear-gradient(135deg,#fce4e9,#f0dce5);
+  border:1px solid #c89eaa;
+  box-shadow:inset 0 0 0 3px #fffaf3,2px 3px 0 #e6d4cc;
+}
+.brand strong{color:#6e4a64;font-size:31px}
+.brand small{color:#977884;letter-spacing:.1px}
+.privacy{
+  background:#f7ecec;
+  border-color:#dfcbd0;
+  color:#795b69;
+}
+.hero{
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  color:#604858;
+  background:
+    radial-gradient(ellipse 250px 105px at 10% 17%,rgba(255,255,255,.80),transparent 98%),
+    radial-gradient(ellipse 230px 95px at 83% 18%,rgba(255,255,255,.65),transparent 98%),
+    radial-gradient(ellipse 280px 125px at 45% 5%,rgba(255,255,255,.53),transparent 96%),
+    linear-gradient(to top,rgba(190,210,181,.40),transparent 35%),
+    linear-gradient(115deg,#e9edf0 0%,#f3e9ed 42%,#f5e5e2 75%,#f2ebe2 100%);
+  border-bottom:5px double #d5c5b4;
+}
+.hero:before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  width:650px;height:410px;
+  bottom:-280px;left:-120px;top:auto;right:auto;
+  background:radial-gradient(ellipse at center,#9ebda977,#9ebda900 70%);
+  border:none;
+  border-radius:50%;
+}
+.hero:after{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  width:720px;height:460px;
+  bottom:-330px;right:-70px;top:auto;left:auto;
+  background:radial-gradient(ellipse at center,#acc6bd88,#9ebda900 70%);
+  border:none;
+  border-radius:50%;
+}
+.hero-inner{
+  max-width:1330px;
+  min-height:385px;
+  padding:47px 22px 53px;
+  grid-template-columns:minmax(0,1fr) minmax(260px,360px);
+  gap:42px;
+}
+.hero-copy{position:relative}
+.eyebrow{
+  color:#896976;
+  font-size:11px;
+  letter-spacing:2.9px;
+}
+.hero h1{
+  color:#67475b;
+  font-size:clamp(47px,5.5vw,76px);
+  letter-spacing:-.045em;
+  line-height:1.05;
+  margin:13px 0 18px;
+}
+.hero h1 em{
+  color:#a46f85;
+  font-size:clamp(29px,3vw,43px);
+  margin-top:11px;
+  font-weight:400;
+}
+.hero-flourish{color:#b07d94}
+.hero-sub{
+  font:17px/1.65 Georgia,"Times New Roman",serif;
+  color:#685564;
+  max-width:590px;
+}
+.hero-status{
+  background:#fffbf3cb;
+  border:1px solid #d8c5bc;
+  color:#7d6472;
+  box-shadow:0 2px 7px #84677713;
+  border-radius:999px;
+  font-style:italic;
+  font-size:13px;
+  padding:8px 15px;
+}
+.garden-flower{
+  position:absolute;
+  pointer-events:none;
+  color:#bc8698;
+  opacity:.58;
+  font:23px Georgia,serif;
+}
+.flower-left{left:-21px;top:20px;transform:rotate(-25deg)}
+.flower-right{left:min(500px,92%);bottom:-8px;transform:rotate(18deg)}
+.hero-art{min-height:278px}
+.antique-frame{
+  z-index:0;
+  width:100%;
+  max-width:340px;
+  min-height:278px;
+  padding:30px 15px 18px;
+  background:
+    radial-gradient(ellipse at 50% 15%,#fffdf3 10%,transparent 78%),
+    linear-gradient(135deg,#fffdf4,#f5e5e4 75%,#f0e0d9);
+  border:6px double #c2a17e;
+  border-radius:135px 135px 10px 10px / 70px 70px 10px 10px;
+  box-shadow:0 9px 23px #665a4c1f,inset 0 0 0 5px #fffaf1,inset 0 0 0 7px #d2baa2;
+  transform:rotate(1deg);
+}
+.antique-frame:before{
+  inset:12px;
+  border:1px dotted #b99c82;
+  border-radius:120px 120px 7px 7px / 65px 65px 7px 7px;
+}
+.antique-frame:after{
+  inset:20px;
+  border:1px solid #cfbea389;
+  border-radius:100px 100px 4px 4px / 55px 55px 4px 4px;
+}
+.frame-corner{font-size:20px;color:#aa8b71}
+.corner-left{left:30px;top:21px}
+.corner-right{right:30px;top:21px}
+.ribbon-bow{top:-26px;filter:drop-shadow(1px 3px 3px #68485722)}
+.bow-loop{background:linear-gradient(130deg,#f2c8d5,#c58aa1);border-color:#ae7991}
+.bow-knot{background:#dfabc2;border-color:#ad7993;box-shadow:inset 2px 2px #ffe8ee}
+.bow-tail{background:linear-gradient(130deg,#f2bfd0,#ca91a7);border-color:#b57e96}
+.frame-overline{
+  position:relative;
+  z-index:1;
+  margin:38px 0 8px;
+  color:#9b7b70;
+  letter-spacing:2.1px;
+  font-weight:600;
+}
+.frame-caption{
+  z-index:2;
+  color:#956b81;
+  font-size:15px;
+  margin-top:7px;
+}
+.antique-frame .book-stack{
+  z-index:2;
+  position:relative;
+  filter:drop-shadow(3px 5px 4px #64504e29);
+  border-bottom-color:#b79d7b;
+}
+.antique-frame .spine{border-color:#856f6d67}
+.antique-frame .spine-one{background:#b98094;color:#fff3e3}
+.antique-frame .spine-two{background:#9bb6bd;color:#fff6e8}
+.antique-frame .spine-three{background:#a8b396;color:#fff8e7}
+.antique-frame .spine-four{background:#c4a78e;color:#fff9e9}
+.antique-frame .spine-five{background:#a995b8;color:#fff6e7}
+/* No decorative images fetched: soft botanical flourishes are drawn with CSS. */
+.botanical-spray{
+  position:absolute;
+  z-index:3;
+  width:78px;height:100px;
+  bottom:26px;
+  opacity:.95;
+  pointer-events:none;
+}
+.spray-left{left:-29px;transform:rotate(-16deg)}
+.spray-right{right:-29px;transform:scaleX(-1) rotate(-16deg)}
+.botanical-spray:before{
+  content:"";position:absolute;left:37px;top:9px;width:3px;height:85px;
+  background:#89a17d;border-radius:5px;transform:rotate(24deg);
+}
+.botanical-spray .leaf{
+  position:absolute;display:block;background:#a3b69a;border:1px solid #819d7e;
+  width:18px;height:37px;border-radius:100% 0 100% 0;
+}
+.leaf-a{top:17px;left:20px;transform:rotate(-25deg)}
+.leaf-b{top:41px;left:44px;transform:rotate(80deg)}
+.leaf-c{top:56px;left:9px;transform:rotate(-20deg)}
+.rose-flower{
+  display:block;
+  position:absolute;top:0;left:26px;width:39px;height:39px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 52% 54%,#a96c86 0 9%,#e5aebe 11% 18%,transparent 21%),
+    radial-gradient(ellipse at 27% 38%,#f7cbd5 0 30%,transparent 32%),
+    radial-gradient(ellipse at 71% 35%,#ebb3c4 0 29%,transparent 31%),
+    radial-gradient(ellipse at 56% 78%,#d692ae 0 33%,transparent 35%),
+    #f2bccb;
+  box-shadow:0 2px 0 #ad7b914f,0 0 0 2px #fff2e7;
+  transform:rotate(-12deg);
+}
+.main{background:transparent}
+.tabs{
+  background:#fffaf4;
+  border:1px solid #dfd3c9;
+  box-shadow:0 4px 15px #805c6d0c;
+}
+.tab{color:#715666}
+.tab:hover{background:#f8eced}
+.tab span{color:#a47c85}
+.tab.active{
+  color:#fffdf8;background:#806074;border-color:#806074;
+}
+.tab.active span{color:#fbe2ea}
+.section-kicker{color:#977387}
+.library-header h2{color:#655069}
+.heading-flower{color:#bf8aa3}
+.btn{
+  background:#816277;border-color:#816277;
+  box-shadow:0 3px 0 #68445522;
+  border-radius:7px;
+}
+.btn:hover{background:#67475f}
+.btn.subtle{
+  color:#76546b;background:#fffdfa;
+  border:1px solid #dfc7cf;
+}
+.btn.subtle:hover{background:#faebef}
+.search-label input{
+  background:#fffdf8;
+  border:1px solid #d9c8cf;
+  border-radius:9px;
+  box-shadow:inset 0 2px 4px #8b71820b;
+}
+.book-card{
+  border-color:#e2d1d0;
+  background:#fffefb;
+  border-radius:12px;
+  box-shadow:0 5px 16px #8b6b7b12;
+}
+.book-card:hover{
+  border-color:#d1abb7;
+  box-shadow:0 10px 24px #8b6b7b27;
+}
+.book-cover{background:linear-gradient(155deg,#c6adb5,#816980)}
+.book-card:nth-child(4n+2) .book-cover{background:linear-gradient(155deg,#afc7c9,#79979e)}
+.book-card:nth-child(4n+3) .book-cover{background:linear-gradient(155deg,#b6c1a7,#7e8f83)}
+.book-card:nth-child(4n+4) .book-cover{background:linear-gradient(155deg,#e0c3a1,#b69295)}
+.book-cover:before{border-color:#fef3daba}
+.book-data strong{color:#5f485b}
+.detail,.surface{
+  border:1px solid #e7d8d3;
+  background:linear-gradient(150deg,#fffefa,#fff9f3);
+  box-shadow:0 10px 28px #77556a10;
+  border-radius:12px;
+}
+.detail-title,.detail-section h3{color:#6c5066}
+.badge{
+  color:#77566b;background:#f8ebef;border-color:#e9cfd6;
+  border-radius:7px;
+}
+.badge.special{background:#fff2dd;border-color:#e3caa8;color:#856347}
+.notes-panel{
+  background:linear-gradient(130deg,#fdf0f2,#eff4ef);
+  border:1px solid #e8d6d4;
+  border-radius:11px;
+}
+.notes-panel h3:before{content:"❀ ";color:#bf859f}
+.note-editor{background:#fffefa;border-radius:7px;border-color:#dfcdd0}
+.nested,.copy-box{
+  background:#fffbf8;border-color:#e8d9d5;
+  border-radius:9px;
+}
+details.collapse>summary{color:#76576e}
+.tip{
+  background:#f2f1e9;border-color:#e2dfd1;
+  border-radius:9px;
+}
+.two-columns .tip:nth-child(2){background:#f9eceb;border-color:#ead8d4}
+.two-columns .tip:nth-child(3){background:#eff3ec;border-color:#dce6d8}
+.two-columns .tip:nth-child(4){background:#eef2f5;border-color:#dce3e7}
+.empty{
+  background:linear-gradient(130deg,#fffaf6,#f7f2ed);
+  border-color:#dbc6cf;border-radius:11px;
+}
+.empty:before{content:"❀  ♡  ❀";color:#c1889d}
+.upload{background:#fffaf8;border-color:#c5acb6;border-radius:10px}
+dialog{background:#fffdf8;border:1px solid #dcc5cc;border-radius:13px}
+footer{
+  color:#8a7280;
+  background:#f8f0eb;
+  border-top:4px double #d5bbc1;
+}
+:focus-visible,button:focus-visible,a:focus-visible,
+input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{
+  outline-color:#8f637b!important;
+}
+@media(max-width:950px){
+  .hero-inner{grid-template-columns:minmax(0,1fr) minmax(235px,290px);gap:20px}
+  .antique-frame{transform:rotate(1deg) scale(.92)}
+}
+@media(max-width:680px){
+  .hero-inner{display:block;min-height:0;padding:36px 18px 43px}
+  .hero h1{font-size:clamp(44px,10vw,59px)}
+  .hero h1 em{font-size:clamp(26px,6vw,36px)}
+  .hero-sub{font-size:15px}
+  .hero-art{display:none}
+  .hero-copy:after{
+    content:"❦  ❀  ❦";
+    display:block;
+    margin-top:16px;
+    color:#bb8c9c;
+    letter-spacing:8px;
+    text-align:center;
+    font-size:19px;
+  }
+  .garden-flower{display:none}
+  .top{padding:12px 13px}
+  .brand strong{font-size:23px}
+  .brand small{font-size:10px}
+  .tabs{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    width:100%;
+    gap:5px;
+  }
+  .tab{min-width:0;justify-content:center}
+  .library-header h2{font-size:29px}
+  .book-card{border-radius:10px}
+  .detail{padding:17px}
+}
+@media(prefers-reduced-motion:reduce){
+  .book-card:hover{transform:none}
+  *,*:before,*:after{transition:none!important;animation:none!important}
+}
