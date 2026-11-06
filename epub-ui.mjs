@@ -79,7 +79,8 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      try{
       const result=await api('/api/epubs/preview',{
        method:'POST',data:{items:[{title:updated.title,
-        author:updated.author,sha256:entry.metadata.sha256}]}});
+        author:updated.author,sha256:entry.metadata.sha256,
+        identifier:entry.metadata.identifier}]}});
       if(!Array.isArray(result.results)||result.results.length!==1)
        throw Error('Incomplete match response');
       entry.metadata.title=updated.title;
@@ -170,7 +171,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      const payload=await api('/api/epubs/preview',{
       method:'POST',data:{items:toMatch.map(entry=>({
        title:entry.metadata.title,author:entry.metadata.author,
-       sha256:entry.metadata.sha256
+       sha256:entry.metadata.sha256,identifier:entry.metadata.identifier
       }))}});
      if(!Array.isArray(payload.results)||payload.results.length!==toMatch.length)
       throw Error('Incomplete EPUB matching response');
