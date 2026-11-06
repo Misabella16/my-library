@@ -196,11 +196,28 @@ export async function handleGoodreadsApi(request,db,path){
       return fail('Invalid catalogue pagination parameters.');
     const offset=Number(offsetRaw),limit=Number(limitRaw);
     if(limit<1||limit>1000)return fail('Catalogue page size must be between 1 and 1000.');
-    const total=await query(db,'SELECT COUNT(*) AS n FROM books WHERE archived_at IS NULL');
+    // New previews use a PK cursor, avoiding OFFSET scans and the full-table
+    // COUNT on every page. Keep offset mode for older clients until refreshed.
+    const cursorMode=url.searchParams.has('cursor');
+    const cursor=url.searchParams.get('cursor')||'';
+    if(cursorMode && cursor && !/^[0-9a-f-]{36}$/i.test(cursor))
+      return fail('Invalid catalogue cursor.');
+    if(cursorMode){
+      const books=await rows(db,
+        'SELECT id,title,author,goodreads_id FROM books '+
+        'WHERE archived_at IS NULL AND id>? ORDER BY id LIMIT ?',[cursor,limit]);
+      const nextCursor=books.length===limit?books[books.length-1].id:null;
+      const includeTotal=url.searchParams.get('include_total')==='1';
+      const count=includeTotal?await query(db,'SELECT COUNT(*) AS n FROM books WHERE archived_at IS NULL'):null;
+      return json({books,next_cursor:nextCursor,has_more:Boolean(nextCursor),
+        ...(includeTotal?{total:Number(count?.n)||0}:{}),limit});
+    }
+    const includeTotal=url.searchParams.get('include_total')!=='0';
+    const total=includeTotal?await query(db,'SELECT COUNT(*) AS n FROM books WHERE archived_at IS NULL'):null;
     const books=await rows(db,
       'SELECT id,title,author,goodreads_id FROM books WHERE archived_at IS NULL ORDER BY id LIMIT ? OFFSET ?',
       [limit,offset]);
-    return json({books,total:Number(total?.n)||0,offset,limit});
+    return json({books,...(includeTotal?{total:Number(total?.n)||0}:{}),offset,limit});
   }
   if(path==='/api/imports'&&request.method==='GET')return importHistory(db);
   if(path==='/api/imports/goodreads'&&request.method==='POST'){

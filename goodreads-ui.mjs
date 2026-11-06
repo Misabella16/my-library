@@ -6,22 +6,26 @@ import {reconciliationRows,reconciliationCounts,reconciliationCsv,isGoodreadsImp
 const MAX_CATALOG_CHECK=100000;
 async function existingCatalogue(api,onProgress=()=>{}) {
   const books=[];
-  let total=Infinity,offset=0;
-  while(offset<total && books.length<MAX_CATALOG_CHECK){
-    // Owner-authenticated identity-only pages, not full book details.
-    // The former 5,000-book cap prevented large Goodreads reimports.
+  let total=null,cursor='',complete=false;
+  while(books.length<MAX_CATALOG_CHECK){
+    // The title/author identity pages use the books primary key cursor.
+    // Only the first page performs a COUNT; later pages never use OFFSET.
     const limit=Math.min(1000,MAX_CATALOG_CHECK-books.length);
-    const payload=await api('/api/imports/catalogue?limit='+limit+'&offset='+offset);
-    if(!Array.isArray(payload.books) || !Number.isSafeInteger(Number(payload.total)) ||
-       Number(payload.total)<0 || payload.books.length>limit)
+    const query=new URLSearchParams({limit:String(limit),cursor});
+    if(total===null)query.set('include_total','1');
+    const payload=await api('/api/imports/catalogue?'+query);
+    if(!Array.isArray(payload.books)||payload.books.length>limit||
+       (total===null&&(!Number.isSafeInteger(payload.total)||payload.total<0)))
       throw Error('Could not verify the existing library count.');
-    total=Number(payload.total);
-    if(!payload.books.length)break;
+    if(total===null)total=payload.total;
     books.push(...payload.books);
-    offset+=payload.books.length;
     onProgress(books.length,total);
+    if(!payload.has_more){complete=true;break;}
+    if(!payload.next_cursor||!payload.books.length||payload.next_cursor===cursor)
+      throw Error('The catalogue cursor did not advance.');
+    cursor=payload.next_cursor;
   }
-  return {books,total,complete:books.length>=total};
+  return {books,total:total??0,complete:complete&&books.length===(total??0)};
 }
 
 const node=(tag,className,text)=>{

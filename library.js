@@ -75,9 +75,11 @@ async function listBooks({append=false}={}){
   const token=++state.refreshToken;
   const offset=append?state.books.length:0;
   const q=new URLSearchParams({q:state.query,offset:String(offset),limit:'60'});
+  // Reuse first-page count for Load more; no extra D1 COUNT scan.
+  if(append)q.set('include_total','0');
   const result=await api('/api/books?'+q);
   if(token!==state.refreshToken) return;
-  state.total=result.total ?? result.books?.length ?? 0;
+  if(!append)state.total=result.total ?? result.books?.length ?? 0;
   state.books=append?[...state.books,...(result.books||[])]:result.books||[];
   renderGrid();
   // Keep an open book's detail page visible even when a search or pagination
@@ -248,7 +250,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#search').addEventListener('input',()=>{
     state.query=$('#search').value.trim();
     clearTimeout(window.bookQueryTimer);
-    window.bookQueryTimer=setTimeout(()=>listBooks().catch(e=>showMessage(e.message,true)),250);
+    // Delay rapid typing to avoid a new D1 LIKE search for every keystroke.
+    window.bookQueryTimer=setTimeout(()=>listBooks().catch(e=>showMessage(e.message,true)),650);
   });
   $('#book-grid').addEventListener('click',async e=>{
     const item=e.target.closest('[data-select-book]');
