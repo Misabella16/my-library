@@ -1,5 +1,6 @@
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
+import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
 'use strict';
@@ -325,14 +326,6 @@ document.addEventListener('DOMContentLoaded',async()=>{
       form.reset();$('#add-copy-dialog').close();await selectBook(state.selectedId);
     },'Copy added');
   });
-  $('#photo-files').addEventListener('change',e=>{
-    state.urls.forEach(u=>URL.revokeObjectURL(u));state.urls=[];
-    const photos=Array.from(e.target.files||[]).slice(0,50).filter(file=>['image/png','image/jpeg','image/webp'].includes(file.type));
-    $('#photo-preview').innerHTML=photos.map(file=>{
-      const url=URL.createObjectURL(file);state.urls.push(url);
-      return '<figure><img src="'+safe(url)+'" alt="Local shelf photo preview"><figcaption>'+safe(file.name)+'</figcaption></figure>';
-    }).join('');
-  });
   try{
     await api('/api/session');
   }catch(err){
@@ -347,6 +340,11 @@ document.addEventListener('DOMContentLoaded',async()=>{
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
     initEpubImport(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
+    initShelfPhotoAssistant(api,{onSelectBook:async bookId=>{
+      document.querySelector('[data-tab="library"]')?.click();
+      await selectBook(bookId);
+      document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
+    }});
   }catch(err){
     showMessage('Goodreads controls could not initialize: '+(err.message||'Please refresh.'),true);
   }
