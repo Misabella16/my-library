@@ -298,3 +298,26 @@ test('Failed EPUB transaction does not leave a partial synopsis change',async()=
   assert.equal(count(f.sqlite,'epub_files'),0);
  }finally{f.sqlite.close();}
 });
+
+test('Private EPUB download streams the original R2 object with safe headers',async()=>{
+ const f=fixture();
+ try{
+  const upload=await post(f.db,f.env,'/api/epubs/upload',form(await validMeta()));
+  assert.equal(upload.status,201);
+  const {file_id}=await upload.json();
+  const response=await handleEpubApi(
+   new Request('https://books.example.com/api/epubs/file/'+file_id),
+   f.db,f.env,'/api/epubs/file/'+file_id);
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('content-type'),'application/epub+zip');
+  assert.match(response.headers.get('content-disposition'),/attachment/);
+  assert.equal(response.headers.get('cache-control'),'private, no-store');
+  assert.equal(response.headers.get('x-content-type-options'),'nosniff');
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())],[80,75,3,4,0,0,0,0]);
+  assert.ok(!response.headers.get('content-disposition').includes('epubs/'));
+  const missing=await handleEpubApi(
+   new Request('https://books.example.com/api/epubs/file/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+   f.db,f.env,'/api/epubs/file/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  assert.equal(missing.status,404);
+ }finally{f.sqlite.close();}
+});
