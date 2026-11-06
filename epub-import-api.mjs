@@ -146,7 +146,10 @@ export async function handleEpubApi(request,db,env,path){
       return bad('The target book changed since preview. Re-preview this EPUB.',409);
     if(matched.status==='new' && !normalizeEpubText(title))return bad('Title is required');
     const bookId=matched.status==='match'?matched.book_id:uuid();
-    const key='epubs/'+actual.slice(0,2)+'/'+actual+'.epub';
+    // A unique R2 key per attempted import prevents failed concurrent requests
+    // from deleting a successful import's file when cleanup runs.
+    const fileId=uuid();
+    const key='epubs/'+actual.slice(0,2)+'/'+fileId+'.epub';
     const coverId=coverBytes?uuid():null;
     const coverKey=coverBytes?'epub-covers/'+actual.slice(0,2)+'/'+actual+'-'+coverId+
       (ctype==='image/png'?'.png':ctype==='image/webp'?'.webp':'.jpg'):null;
@@ -160,7 +163,7 @@ export async function handleEpubApi(request,db,env,path){
         await env.BOOK_FILES.put(coverKey,coverBytes,{httpMetadata:{contentType:ctype}});
         uploaded.push(coverKey);
       }
-      const ts=new Date().toISOString(),editionId=uuid(),fileId=uuid(),batchId=uuid();
+      const ts=new Date().toISOString(),editionId=uuid(),batchId=uuid();
       const statements=[];
       if(matched.status==='new'){
         statements.push(db.prepare(
