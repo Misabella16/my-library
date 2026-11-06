@@ -56,7 +56,7 @@ test('Cloudflare D1 quota and temporary errors are classified without leaking SQ
   assert.equal(classifyDatabaseError(new Error(write)).code,'database_write_quota');
   assert.equal(classifyDatabaseError(new Error('D1 DB is overloaded. Requests queued for too long.')).code,
     'database_temporarily_unavailable');
-  assert.equal(classifyDatabaseError(new Error('Secret SQL error: SELECT private_notes')).code,undefined);
+  assert.equal(classifyDatabaseError(new Error('Secret SQL error: SELECT private_notes')),null);
 });
 
 test('Authenticated database-health request returns clear daily quota or transient error',async()=>{
