@@ -32,3 +32,7 @@ Updating this documentation triggers a fresh production build through the connec
 ## After changing Cloudflare Access team domain
 
 The `momoshelf` Pages project must receive a fresh production deployment after edits to `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, or `OWNER_EMAIL`. Verify `https://momoshelf.pages.dev/_logout` redirects to the Cloudflare Access logout endpoint, rather than responding with a JSON configuration error. This check does not confirm successful owner login: after logout, sign in as the configured owner, verify `/api/session` succeeds, and confirm private browsing without an authorized account cannot read any library content. Do not enter or commit environment-variable values or session tokens here.
+
+## Owner email adjustment: deployment note
+
+After the owner updates the production `OWNER_EMAIL` variable in Cloudflare Pages, trigger a new deployment of `momoshelf` from `main` to apply it. Verify the authenticated owner can open the homepage and `/api/session`; anonymous and unauthorized requests must still be denied. This file contains no addresses, tokens, or secret values.
