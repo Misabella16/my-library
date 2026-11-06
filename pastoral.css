@@ -627,3 +627,18 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-vi
  .goodreads-sync-panel{padding:15px}
  .goodreads-sync-panel .goodreads-actions{flex-direction:column;align-items:stretch}
 }
+
+
+/* Large EPUB folder imports, manual identity corrections and accessible progress. */
+.epub-preview-card .muted{font-size:12px;color:#7c6d76}
+.epub-manual-match{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+ gap:7px;margin-top:7px}
+.epub-manual-match input{min-width:0;border:1px solid #d9cbd2;border-radius:6px;
+ background:#fff;padding:8px 9px;font:inherit;font-size:12px;color:#413943}
+.epub-manual-match button{grid-column:1/-1;justify-self:start;
+ white-space:normal;text-align:left}
+#epub-import-summary{padding:8px 10px;border-left:2px solid #bca1b2;
+ background:#f7f1f3;border-radius:4px;overflow-wrap:anywhere}
+.epub-tool .goodreads-actions{flex-wrap:wrap;gap:11px}
+@media(max-width:680px){.epub-manual-match{grid-template-columns:1fr}
+.epub-manual-match button{grid-column:auto}}
