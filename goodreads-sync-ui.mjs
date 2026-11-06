@@ -38,7 +38,7 @@ const commitChunks=eligible=>{
  return batches;
 };
 export function initGoodreadsSync(api,{onImported=async()=>{}}={}){
- const get=id=>document.getElementById(id);
+ const get=id=>document.getElementById?.(id)||document.querySelector?.('#'+id);
  const preview=get('goodreads-sync-preview'),button=get('goodreads-sync-confirm'),
    approval=get('goodreads-sync-approval'),yes=get('goodreads-sync-yes'),
    no=get('goodreads-sync-no'),feedback=get('goodreads-sync-feedback'),
