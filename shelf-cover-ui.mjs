@@ -39,8 +39,9 @@ export function initShelfCoverComparison(api,{
    opt.value=String(n);opt.textContent=file.name||'Photo '+(n+1);
    select.append(opt);
   }
-  say(select.children.length?'Choose a photo, then drag around one visible book cover.':
+  say(select.children.length?'Drag around one cover after the photo loads.':
    'Choose shelf photos above to begin visual comparison.');
+  if(select.children.length)choosePhoto();
  }
  const point=event=>{
   const box=canvas.getBoundingClientRect();
@@ -99,7 +100,13 @@ export function initShelfCoverComparison(api,{
   const token=generation;
   try{
    const photo=getPhotos()[Number(select.value)];
-   const original=await signature(source,selection);
+   const mapped={
+    x:selection.x*source.width/canvas.width,
+    y:selection.y*source.height/canvas.height,
+    width:selection.width*source.width/canvas.width,
+    height:selection.height*source.height/canvas.height
+   };
+   const original=await signature(source,mapped);
    const response=await api('/api/books?'+new URLSearchParams({q,limit:'20',include_total:'0'}));
    if(token!==generation)return;
    const books=(response.books||[]).filter(b=>b.id&&b.cover_id).slice(0,12);
