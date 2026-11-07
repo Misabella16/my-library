@@ -405,7 +405,10 @@ test('Stored EPUB backfill previews and adds missing synopsis and subjects witho
    'https://books.example.com/api/epubs/backfill/apply',{method:'POST',body:JSON.stringify({
     file_id:uploaded.file_id,expected_updated_at:preview.files[0].expected_updated_at
    })}),f.db,'/api/epubs/backfill/apply');
-  assert.equal(replay.status,409);
+  assert.equal(replay.status,200);
+  assert.equal((await replay.json()).status,'already_processed');
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM change_log WHERE action='epub_backfill'").get().n,
+   1,'No duplicate EPUB backfill repair logs');
   const undone=await handleEpubBackfillApi(new Request(
    'https://books.example.com/api/epubs/backfill/undo',{method:'POST',body:JSON.stringify({
     change_id:data.change_id
