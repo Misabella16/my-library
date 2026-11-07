@@ -1,3 +1,4 @@
+import {summarizeEpubHealth} from './epub-backfill-health.mjs';
 // Private EPUB metadata repairs. Nothing is changed by opening the preview.
 const el=(tag,text,css)=>{
  const node=document.createElement(tag);
@@ -9,6 +10,8 @@ export function initEpubBackfill(api){
  const root=document.getElementById('epub-backfill');
  if(!root)return;
  const preview=root.querySelector('#epub-backfill-preview');
+ const health=root.querySelector('#epub-backfill-health');
+ const healthStatus=root.querySelector('#epub-backfill-health-status');
  const apply=root.querySelector('#epub-backfill-apply');
  const next=root.querySelector('#epub-backfill-next');
  const status=root.querySelector('#epub-backfill-status');
@@ -21,6 +24,7 @@ export function initEpubBackfill(api){
  let bulkCursor='',bulkFinished=false;
  const update=()=>{
   preview.disabled=busy;
+  health.disabled=busy;
   bulk.disabled=busy||bulkFinished;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
   next.disabled=busy||!nextCursor;
@@ -109,6 +113,32 @@ export function initEpubBackfill(api){
   }finally{
    busy=false;update();
   }
+ });
+ health.addEventListener('click',async()=>{
+  if(busy)return;
+  busy=true;update();
+  const inspected=[];
+  let after='',complete=false;
+  try{
+   while(inspected.length<50){
+    const params=new URLSearchParams({limit:'10'});
+    if(after)params.set('after',after);
+    const page=await api('/api/epubs/backfill/preview?'+params);
+    if(!Array.isArray(page.files))throw Error('Incomplete metadata health preview');
+    inspected.push(...page.files);
+    if(!page.next_cursor||page.files.length===0){complete=true;break;}
+    after=page.next_cursor;
+   }
+   const stats=summarizeEpubHealth(inspected);
+   healthStatus.textContent='Scanned '+stats.checked+' saved EPUBs · '+
+    stats.missingSynopsis+' missing synopses · '+stats.missingSubjects+
+    ' with missing subject tags · '+stats.missingCover+
+    ' without ebook covers · '+stats.ready+' needing no changes.'+
+    (complete?' End of saved EPUBs reached.':' This was a 50-file sample.');
+  }catch(error){
+   healthStatus.textContent='Health check interrupted after '+inspected.length+
+    ' EPUBs: '+(error.message||'Request failed')+'. No metadata was changed.';
+  }finally{busy=false;update();}
  });
  preview.addEventListener('click',()=>load(''));
  next.addEventListener('click',()=>{if(nextCursor)load(nextCursor);});
