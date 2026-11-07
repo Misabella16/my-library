@@ -1,3 +1,4 @@
+import {extractIsbn13} from './epub-isbn.mjs';
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
 import {createPhotoReview,setReviewPhotos,assignPhotoMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
@@ -33,6 +34,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   isbnStatus=get('photo-isbn-status');
  if(!input||!images||!search||!button||!results||!status)return;
  let currentUrls=[],busy=false;
+ const manualInput=get('photo-isbn-input'),manualButton=get('photo-isbn-search');
  const review=createPhotoReview();
  const barcodeMatches=node('div',undefined,'photo-barcode-matches');
  isbnStatus?.after?.(barcodeMatches);
@@ -103,7 +105,11 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
     :'Local barcode detection is unavailable in this browser. Search by title below.';
    return;
   }
-  isbnStatus.textContent='Checking '+codes.size+' detected ISBN barcode'+
+  await displayIsbnMatches(codes,generation);
+ });
+
+ async function displayIsbnMatches(codes,generation){
+  isbnStatus.textContent='Checking '+codes.size+' ISBN'+
    (codes.size===1?'':'s')+' against your existing editions. Nothing is saved automatically.';
   for(const [code,photo] of codes){
    let response;
@@ -129,7 +135,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
       (match.vendor?' · '+match.vendor:'')+
       (matches.length>1?' · Check edition identity':'') ,'muted'));
     const associate=node('button','Associate this photo (review only)','btn subtle mini');
-    associate.type='button';
+    associate.type='button';associate.disabled=!review.photos.length;
     associate.addEventListener('click',()=>{
      try{
       assignPhotoMatch(review,photo.id,{
@@ -209,6 +215,24 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    }
   }
   isbnStatus.textContent='ISBN lookup complete. Matches are suggestions only; no books, editions, or copies were modified.';
+ }
+ manualButton?.addEventListener('click',async()=>{
+  if(busy)return;
+  const isbn=extractIsbn13(manualInput?.value||'');
+  if(!isbn){
+   isbnStatus.textContent='Enter a valid ISBN-13 from the physical book barcode.';
+   return;
+  }
+  busy=true;manualButton.disabled=true;
+  selectionGeneration++;
+  const generation=selectionGeneration;
+  barcodeMatches.replaceChildren();
+  try{
+   // A manual entry can search without any photo. It never implies that
+   // the book is owned, or changes the current photo review.
+   const photo=review.photos[0]||{id:'',name:'Manual ISBN'};
+   await displayIsbnMatches(new Map([[isbn,photo]]),generation);
+  }finally{busy=false;manualButton.disabled=false;}
  });
  button.addEventListener('click',async()=>{
   if(busy)return;
