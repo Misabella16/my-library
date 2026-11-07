@@ -23,10 +23,11 @@ export function initEpubBackfill(api){
  const history=root.querySelector('#epub-backfill-history');
  const historyList=root.querySelector('#epub-backfill-history-list');
  const bulk=root.querySelector('#epub-backfill-bulk');
+ const pauseButton=root.querySelector('#epub-backfill-pause');
  const retryButton=root.querySelector('#epub-backfill-retry');
  const reportButton=root.querySelector('#epub-backfill-report');
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
- let bulkCursor='',bulkFinished=false;
+ let bulkCursor='',bulkFinished=false,bulkActive=false,pauseRequested=false;
  let reportRows=[];
  const failedQueue=new Map();
  let healthCursor='',healthFinished=false,healthScanned=0,healthRows=[];
@@ -35,6 +36,7 @@ export function initEpubBackfill(api){
   health.disabled=busy||healthFinished;
   if(healthExport)healthExport.disabled=busy||healthRows.length===0;
   bulk.disabled=busy||bulkFinished;
+  if(pauseButton)pauseButton.disabled=!bulkActive||pauseRequested;
   if(retryButton)retryButton.disabled=busy||!failedQueue.size;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
@@ -85,18 +87,26 @@ export function initEpubBackfill(api){
   anchor.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  });
+ pauseButton?.addEventListener('click',()=>{
+  if(!bulkActive)return;
+  pauseRequested=true;
+  pauseButton.disabled=true;
+  status.textContent='Pause requested. The current EPUB will finish before stopping.';
+ });
  bulk.addEventListener('click',async()=>{
   if(busy)return;
+  bulkActive=true;pauseRequested=false;
   busy=true;update();
   let after=bulkCursor,checked=0,applied=0,unchanged=0,failed=0;
   const target=50;
   try{
-   while(checked<target){
+   while(checked<target&&!pauseRequested){
     const params=new URLSearchParams({limit:'10'});
     if(after)params.set('after',after);
     const page=await api('/api/epubs/backfill/preview?'+params);
     if(!Array.isArray(page.files))throw Error('Incomplete EPUB metadata page');
     for(const item of page.files){
+     if(pauseRequested)break;
      // Commit the cursor only AFTER handling an item. If Cloudflare reaches
      // its daily quota halfway through a page, the failed item must be first
      // in the next click, not silently skipped with the rest of that page.
@@ -137,14 +147,15 @@ export function initEpubBackfill(api){
     }
     after=bulkCursor;
    }
-   status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
+   status.textContent=(pauseRequested?'Paused safely. Press Repair next 50 to resume. ':'')+
+    'Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
     unchanged+' unchanged · '+failed+' need refresh or review.'+
     (bulkFinished?' Entire saved EPUB catalogue scanned.':' Use Repair next 50 to continue.');
   }catch(error){
    status.textContent='Repair stopped safely after '+checked+' files: '+
     (error.message||'Request failed')+'. Completed changes remain saved.';
   }finally{
-   busy=false;update();
+   busy=false;bulkActive=false;pauseRequested=false;update();
   }
  });
  retryButton?.addEventListener('click',async()=>{
