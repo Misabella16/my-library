@@ -86,7 +86,10 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    return fail('Book changed since preview. Refresh the repair preview.',409);
   const previous=await one(db,"SELECT id FROM change_log WHERE action='epub_backfill' "+
    "AND entity_type='epub_files' AND entity_id=? AND undone_at IS NULL LIMIT 1",[row.id]);
-  if(previous)return fail('This EPUB was already backfilled. Undo before retrying.',409);
+  // Already repaired is an ordinary no-op during a repeated bulk scan.
+  // Do not treat a previous successful repair as a failure, and never redo
+  // an existing change without first undoing its audited history.
+  if(previous)return json({status:'already_processed',file_id:row.id});
   const {synopsis,tags}=unpack(row.metadata_json);
   const description=!row.synopsis?.trim()?synopsis:'';
   const existing=await many(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',[row.book_id]);
