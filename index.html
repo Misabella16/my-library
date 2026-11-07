@@ -17,7 +17,7 @@
 <body>
 <header class="top">
   <a class="brand" href="/" aria-label="My Library home"><span class="brand-mark" aria-hidden="true">୨୧</span>
-    <span><strong>My Library</strong><small>the secret garden of stories</small></span></a>
+    <span><strong data-site-text="brand">My Library</strong><small data-site-text="tagline">the secret garden of stories</small></span></a>
   <div class="account-tools"><span class="privacy">✧ Private collection</span><a class="btn subtle" href="/_logout">Log out</a></div>
 </header>
 <section class="hero">
@@ -25,9 +25,9 @@
     <div class="hero-copy">
       <span class="garden-flower flower-left" aria-hidden="true">❀</span>
       <span class="garden-flower flower-right" aria-hidden="true">❀</span>
-      <p class="eyebrow">✦ A PRIVATE READING GARDEN ✦</p>
-      <h1>My Library <span class="hero-flourish" aria-hidden="true">୨୧</span><em>A little garden of stories.</em></h1>
-      <p class="hero-sub">Beloved books, treasured editions, and stories to return to, tucked away in your own little world.</p>
+      <p class="eyebrow" data-site-text="eyebrow">✦ A PRIVATE READING GARDEN ✦</p>
+      <h1><span data-site-text="heroTitle">My Library</span> <span class="hero-flourish" aria-hidden="true">୨୧</span><em data-site-text="heroAccent">A little garden of stories.</em></h1>
+      <p class="hero-sub" data-site-text="heroDescription">Beloved books, treasured editions, and stories to return to, tucked away in your own little world.</p>
       <p class="hero-status" id="connection-status" role="status">Opening the garden gates…</p>
     </div>
     <div class="hero-art" aria-hidden="true">
@@ -56,11 +56,12 @@
     <button class="tab" type="button" data-tab="shelves"><span aria-hidden="true">▥</span> My Shelves</button>
     <button class="tab" type="button" data-tab="photos"><span aria-hidden="true">✧</span> Shelf Photos</button>
     <button class="tab" type="button" data-tab="imports"><span aria-hidden="true">↺</span> Imports & Undo</button>
+    <button class="tab" type="button" data-tab="studio"><span aria-hidden="true">✎</span> Customize Site</button>
   </nav>
   <div class="notice" id="notice" role="status" hidden></div>
   <section class="tab-panel active" id="library">
     <div class="library-header">
-      <div><p class="section-kicker">❧ THE READING GARDEN ❧</p><h2>The Collection <span class="heading-flower" aria-hidden="true">✧</span></h2><p class="muted" id="count">Your books will appear here.</p></div>
+      <div><p class="section-kicker">❧ THE READING GARDEN ❧</p><h2><span data-site-text="collectionTitle">The Collection</span> <span class="heading-flower" aria-hidden="true">✧</span></h2><p class="muted" id="count">Your books will appear here.</p></div>
       <button class="btn" type="button" id="add-book">＋ Add to collection</button>
     </div>
     <div class="toolbar">
@@ -76,10 +77,10 @@
     <div class="loadmore"><button class="btn subtle" id="load-more" type="button" hidden>Load more books</button></div>
   </section>
   <section class="tab-panel" id="shelves" hidden>
-    <div class="surface"><h2>My Shelves</h2><p>Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under <strong>My Editions & Copies</strong>.</p><div class="tip">Want to organize by genre, favorites, reading challenge or anything else? Add a personal shelf on the book page. You can also store a physical bookcase and shelf for every individual copy.</div></div>
+    <div class="surface"><h2>My Shelves</h2><p data-site-text="shelvesDescription">Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.</p><div class="tip">Want to organize by genre, favorites, reading challenge or anything else? Add a personal shelf on the book page. You can also store a physical bookcase and shelf for every individual copy.</div></div>
   </section>
   <section class="tab-panel" id="photos" hidden>
-    <div class="surface"><h2>Shelf Photos</h2><p>Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
+    <div class="surface"><h2>Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
       <div class="tip"><strong>Privacy-first helper:</strong> Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Automatic recognition of cover artwork or spine text is not yet available; you can search for a title or author below instead. No photo or copy information is saved automatically.</div>
       <label class="upload">Choose shelf photos <input id="photo-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
       <p id="photo-status" class="small-status" role="status">Choose a shelf photo to preview privately.</p>
@@ -96,6 +97,56 @@
         <button class="btn subtle" id="photo-match-search" type="button">Find book matches</button>
       </div>
       <div id="photo-match-results" class="photo-match-results" aria-live="polite"></div>
+    </div>
+  </section>
+  <section class="tab-panel" id="studio" hidden>
+    <div class="surface site-studio">
+      <p class="section-kicker">✧ YOUR LIBRARY, YOUR DESIGN</p>
+      <h2>Customize My Library</h2>
+      <p>Change the wording, upload your own logo, swap the decorative hero artwork, or add a gentle background image. Preview changes directly on your site. Changes are private, and your books, covers, and EPUBs remain untouched.</p>
+      <form id="site-studio-form" class="edit-form">
+        <div class="two-columns">
+          <label>Site name<input name="brand" maxlength="70" required></label>
+          <label>Small tagline<input name="tagline" maxlength="110" required></label>
+          <label>Header eyebrow<input name="eyebrow" maxlength="110" required></label>
+          <label>Hero heading<input name="heroTitle" maxlength="90" required></label>
+          <label>Decorative subtitle<input name="heroAccent" maxlength="110" required></label>
+          <label>Collection heading<input name="collectionTitle" maxlength="100" required></label>
+        </div>
+        <label>Hero description<textarea name="heroDescription" maxlength="450" rows="3" required></textarea></label>
+        <label>My Shelves explanation<textarea name="shelvesDescription" maxlength="700" rows="3" required></textarea></label>
+        <label>Shelf Photos explanation<textarea name="photosDescription" maxlength="700" rows="3" required></textarea></label>
+        <label>Footer wording<input name="footer" maxlength="180" required></label>
+        <div class="goodreads-actions">
+          <button type="submit" class="btn" id="site-studio-save">Save wording</button>
+          <button type="button" class="btn subtle" id="site-studio-defaults">Restore original wording</button>
+          <button type="button" class="btn subtle" id="site-studio-reload">Discard unsaved wording</button>
+        </div>
+      </form>
+      <h3>Site images</h3>
+      <p class="muted">Choose JPG, PNG, or WebP, up to 5 MB each. Site images are separate from edition covers and are stored privately. Removing an image restores the original Rococo-inspired decoration.</p>
+      <div class="site-studio-images">
+        <div class="site-studio-image-slot">
+          <strong>Logo or monogram</strong><span class="muted">Appears at the top beside your site name.</span>
+          <img data-site-preview="logo" alt="Custom logo preview" hidden>
+          <input type="file" data-site-image-input="logo" accept="image/png,image/jpeg,image/webp">
+          <button class="btn subtle mini" type="button" data-site-image-remove="logo">Restore original logo</button>
+        </div>
+        <div class="site-studio-image-slot">
+          <strong>Hero illustration</strong><span class="muted">Replaces the decorative books and bow on the right.</span>
+          <img data-site-preview="hero" alt="Custom hero preview" hidden>
+          <input type="file" data-site-image-input="hero" accept="image/png,image/jpeg,image/webp">
+          <button class="btn subtle mini" type="button" data-site-image-remove="hero">Restore original illustration</button>
+        </div>
+        <div class="site-studio-image-slot">
+          <strong>Header background</strong><span class="muted">A full-width image behind the hero text, with a dark overlay for readability.</span>
+          <img data-site-preview="background" alt="Custom background preview" hidden>
+          <input type="file" data-site-image-input="background" accept="image/png,image/jpeg,image/webp">
+          <button class="btn subtle mini" type="button" data-site-image-remove="background">Restore original background</button>
+        </div>
+      </div>
+      <p id="site-studio-status" class="small-status" role="status" aria-live="polite">Loading your private site settings…</p>
+      <p class="goodreads-private-note">Only your account can edit this site. These controls update site wording and decorative images without modifying your book records, EPUB files, special editions, or existing edition covers. A refresh shows the saved changes.</p>
     </div>
   </section>
   <section class="tab-panel" id="imports" hidden>
@@ -213,7 +264,7 @@
   </div>
   </section>
 </main>
-<footer><span aria-hidden="true">❀</span> My Library · every beloved story deserves a place to bloom <span aria-hidden="true">❀</span></footer>
+<footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
 <dialog id="add-book-dialog" aria-labelledby="add-book-title">
   <form id="add-book-form" class="form">
     <div class="modal-head"><h2 id="add-book-title">Add a Book</h2><button class="close" type="button" data-close-dialog aria-label="Close">×</button></div>
