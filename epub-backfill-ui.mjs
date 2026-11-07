@@ -1,3 +1,4 @@
+import {epubHealthCsv} from './epub-health-report.mjs';
 import {summarizeEpubHealth} from './epub-backfill-health.mjs';
 import {epubRepairCsv} from './epub-repair-report.mjs';
 // Private EPUB metadata repairs. Nothing is changed by opening the preview.
@@ -12,6 +13,7 @@ export function initEpubBackfill(api){
  if(!root)return;
  const preview=root.querySelector('#epub-backfill-preview');
  const health=root.querySelector('#epub-backfill-health');
+ const healthExport=root.querySelector('#epub-health-report');
  const healthStatus=root.querySelector('#epub-backfill-health-status');
  const apply=root.querySelector('#epub-backfill-apply');
  const next=root.querySelector('#epub-backfill-next');
@@ -25,10 +27,11 @@ export function initEpubBackfill(api){
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
  let bulkCursor='',bulkFinished=false;
  let reportRows=[];
- let healthCursor='',healthFinished=false,healthScanned=0;
+ let healthCursor='',healthFinished=false,healthScanned=0,healthRows=[];
  const update=()=>{
   preview.disabled=busy;
   health.disabled=busy||healthFinished;
+  if(healthExport)healthExport.disabled=busy||healthRows.length===0;
   bulk.disabled=busy||bulkFinished;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
@@ -137,6 +140,15 @@ export function initEpubBackfill(api){
    busy=false;update();
   }
  });
+ healthExport?.addEventListener('click',()=>{
+  if(!healthRows.length)return;
+  const data=epubHealthCsv(healthRows);
+  const url=URL.createObjectURL(new Blob([data],{type:'text/csv;charset=utf-8'}));
+  const a=el('a');
+  a.href=url;a.download='my-library-epub-health.csv';
+  document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
  health.addEventListener('click',async()=>{
   if(busy)return;
   busy=true;update();
@@ -149,6 +161,8 @@ export function initEpubBackfill(api){
     const page=await api('/api/epubs/backfill/preview?'+params);
     if(!Array.isArray(page.files))throw Error('Incomplete metadata health preview');
     inspected.push(...page.files);
+    healthRows.push(...page.files);
+    // Advance after each completed page, not before the read completes.
     if(page.files.length)healthCursor=page.files.at(-1).file_id;
     if(!page.next_cursor||page.files.length===0){complete=true;break;}
     after=page.next_cursor;
