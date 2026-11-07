@@ -197,9 +197,41 @@ function renderDetail(){
       dest.innerHTML=files.length?files.map(file=>
        '<p class="epub-file-entry"><a class="btn mini subtle" href="/api/epubs/file/'+
        safe(file.id)+'" download>Download EPUB</a> <span>'+
-       safe(file.original_filename||'Book EPUB')+'</span></p>').join(''):
+       safe(file.original_filename||'Book EPUB')+'</span> '+
+       '<button class="btn mini subtle" type="button" data-repair-private-epub="'+
+       safe(file.id)+'">Recover missing cover & metadata</button>'+
+       '<span data-repair-result="'+safe(file.id)+'" aria-live="polite"></span></p>').join(''):
        '<p class="muted">No EPUB uploaded for this book yet.</p>';
       if(response.truncated)dest.insertAdjacentText('beforeend',' Showing the first 100 files.');
+      dest.addEventListener('click',async event=>{
+        const button=event.target.closest('[data-repair-private-epub]');
+        if(!button||button.disabled)return;
+        const fileId=safeId(button.dataset.repairPrivateEpub);
+        if(!fileId)return;
+        const feedback=dest.querySelector('[data-repair-result="'+fileId+'"]');
+        button.disabled=true;
+        if(feedback)feedback.textContent=' Inspecting stored EPUB…';
+        try{
+          const preview=await api('/api/epubs/backfill/file/'+fileId);
+          if(preview.book_id!==b.id)throw Error('EPUB link changed. Refresh this book.');
+          const missing=preview.synopsis||preview.subjects?.length||preview.cover_missing;
+          if(!missing){
+            if(feedback)feedback.textContent=preview.cover_unavailable?
+              ' No embedded cover found in this EPUB. Try ISBN lookup under Edition covers.':
+              ' This EPUB has no additional missing metadata.';
+            return;
+          }
+          const outcome=await api('/api/epubs/backfill/apply',{method:'POST',
+            data:{file_id:fileId,expected_updated_at:preview.expected_updated_at}});
+          if(feedback)feedback.textContent=' '+(outcome.status==='applied'?
+            'Recovered what was available. Refreshing book…':
+            'No additional changes were needed.');
+          await selectBook(b.id);
+          showMessage('Saved EPUB repair checked. Existing book edits and selected covers were preserved.');
+        }catch(err){
+          if(feedback)feedback.textContent=' '+(err.message||'EPUB repair unavailable');
+        }finally{button.disabled=false;}
+      });
     }catch(error){dest.textContent='Could not load EPUBs: '+(error.message||'Request failed');}
     finally{load.disabled=false;}
   });
