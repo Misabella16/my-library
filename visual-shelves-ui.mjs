@@ -239,7 +239,8 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
      catch(error){say('Could not open book: '+(error.message||'Request failed'));}
      finally{button.disabled=false;}
     });
-    details.append(button,detailsToggle);
+    details.append(button);
+    arranging.append(detailsToggle);
     card.append(spine,cover,details,arranging,hover);listing.append(card);
    }
    if(!dirty)applyLayout();
