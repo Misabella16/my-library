@@ -93,7 +93,9 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const present=new Set(existing.map(tag=>tag.label.toLocaleLowerCase()));
   const additions=tags.filter(label=>!present.has(label.toLocaleLowerCase()));
   const coverCount=await one(db,
-   "SELECT COUNT(*) AS n FROM edition_images WHERE edition_id=? AND role='cover'",[row.edition_id]);
+   "SELECT SUM(CASE WHEN role='cover' THEN 1 ELSE 0 END) AS n, "+
+   "SUM(CASE WHEN display_cover=1 THEN 1 ELSE 0 END) AS selected "+
+   "FROM edition_images WHERE edition_id=?",[row.edition_id]);
   const needsCover=coverCount?.n===0&&row.edition_format==='ebook'&&row.edition_special===0;
   let coverInfo=null,coverKey=null;
   if(needsCover&&env.BOOK_FILES){
@@ -128,6 +130,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const now=new Date().toISOString(),batchId=crypto.randomUUID(),changeId=crypto.randomUUID();
   const stmts=[];
   let coverId=null;
+  const coverDisplay=coverCount?.selected?0:1;
   if(coverInfo){
    coverId=crypto.randomUUID();
    const ext=coverInfo.mime==='image/png'?'.png':
@@ -135,9 +138,9 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    coverKey='epub-covers/backfill/'+coverId+ext;
    stmts.push(db.prepare(
     "INSERT INTO edition_images(id,edition_id,origin,private_object_key,role,match_status,display_cover) "+
-    "SELECT ?,?,'epub',?,'cover','unverified',1 WHERE NOT EXISTS ("+
+    "SELECT ?,?,'epub',?,'cover','unverified',? WHERE NOT EXISTS ("+
     "SELECT 1 FROM edition_images WHERE edition_id=? AND role='cover')")
-    .bind(coverId,row.edition_id,coverKey,row.edition_id));
+    .bind(coverId,row.edition_id,coverKey,coverDisplay,row.edition_id));
   }
   if(description){
    stmts.push(db.prepare("UPDATE books SET synopsis=?,updated_at=? WHERE id=? "+
@@ -152,7 +155,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
     .bind(row.book_id,tag));
   }
   const after={file_id:row.id,book_id:row.book_id,description,
-   tags:additions,cover_id:coverId,cover_key:coverKey,
+   tags:additions,cover_id:coverId,cover_key:coverKey,cover_display:coverDisplay,
    prior_updated_at:row.updated_at,
    applied_updated_at:description?now:row.updated_at};
   stmts.push(db.prepare("INSERT INTO import_batches(id,source,status,report,created_at) "+
@@ -199,7 +202,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    // repair. Undo must not erase those subsequent owner edits.
    if(!cover||cover.origin!=='epub'||
      cover.private_object_key!==after.cover_key||
-     cover.match_status!=='unverified'||cover.display_cover!==1||
+     cover.match_status!=='unverified'||cover.display_cover!==(after.cover_display??1)||
      cover.copy_id!==null)
     return fail('The repaired EPUB cover was changed or verified. Nothing was undone.',409);
   }
@@ -207,8 +210,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   if(after.cover_id){
    stmts.push(db.prepare(
     "DELETE FROM edition_images WHERE id=? AND origin='epub' AND private_object_key=? "+
-    "AND match_status='unverified' AND display_cover=1 AND copy_id IS NULL")
-    .bind(after.cover_id,after.cover_key));
+    "AND match_status='unverified' AND display_cover=? AND copy_id IS NULL")
+    .bind(after.cover_id,after.cover_key,after.cover_display??1));
   }
   if(after.description){
    stmts.push(db.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=? AND synopsis=? AND updated_at=?')
