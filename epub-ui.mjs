@@ -313,7 +313,6 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   running=true;previewComplete=false;previewPauseRequested=false;
   previewButton.disabled=true;uploadButton.disabled=true;
   if(saveAllButton)saveAllButton.disabled=true;
-  if(saveAllButton)saveAllButton.disabled=true;
   if(previewPauseButton)previewPauseButton.disabled=false;
   // A failed preview resumes at the last fully matched batch, rather than
   // repeating SHA hashing and D1 lookups for previously completed chunks.
@@ -470,6 +469,43 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    'Your original EPUBs were not modified.'+
    (remaining?' Click Save again to resume the remaining eligible EPUBs.':''));
  };
+ recheckButton?.addEventListener('click',async()=>{
+  if(running||!previewComplete)return;
+  const failures=items.filter(x=>x.match?.status==='upload_failed'&&x.metadata?.sha256);
+  if(!failures.length)return;
+  running=true;recheckButton.disabled=true;
+  let rechecked=0,alreadySaved=0,review=0;
+  try{
+   for(let i=0;i<failures.length;i+=PREVIEW_BATCH){
+    const batch=failures.slice(i,i+PREVIEW_BATCH);
+    const result=await api('/api/epubs/preview',{method:'POST',data:{items:batch.map(x=>({
+     title:x.metadata.title,author:x.metadata.author,
+     identifier:x.metadata.identifier,sha256:x.metadata.sha256
+    }))}});
+    if(!Array.isArray(result.results)||result.results.length!==batch.length)
+     throw Error('Incomplete retry preview. No files were changed.');
+    for(let j=0;j<batch.length;j++){
+     const entry=batch[j],matched=result.results[j];
+     // A retry may have succeeded on the server before the connection
+     // failed. The trusted SHA lookup detects it and blocks reupload.
+     const safeExisting=matched.status==='match'&&matched.book_id&&
+      matched.matched_title&&matched.matched_author;
+     entry.match=entry.reviewReason&&matched.status!=='already_uploaded'&&!safeExisting?
+      {status:'needs_review',reason:entry.reviewReason}:matched;
+     entry.error=null;rechecked++;
+     if(entry.match.status==='already_uploaded')alreadySaved++;
+     if(entry.match.status==='needs_review')review++;
+    }
+    flagPossibleEpubDuplicates(items);
+   }
+   inform('Rechecked '+rechecked+' failed EPUBs · '+alreadySaved+
+    ' already saved on the server · '+review+
+    ' need review. Retry only the remaining eligible EPUBs.');
+  }catch(error){
+   inform('Recheck interrupted: '+(error.message||'Request failed')+
+    '. Completed rechecks remain available; no EPUBs were uploaded.');
+  }finally{running=false;render();}
+ });
  uploadButton.addEventListener('click',()=>saveEligible(false));
  saveAllButton?.addEventListener('click',()=>saveEligible(true));
  render();
