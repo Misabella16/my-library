@@ -16,7 +16,7 @@ function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1,pauseAfterFirst=false
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list',
  'epub-backfill-health','epub-backfill-health-status','epub-health-report',
- 'epub-backfill-retry','epub-backfill-pause'];
+ 'epub-backfill-retry','epub-backfill-pause','epub-backfill-all'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -230,4 +230,30 @@ test('Verified EPUBs without embedded covers are not mistaken for complete books
  assert.match(csv,/No embedded cover \(verified\)/);
  assert.match(csv,/"false","false","false","true","false"/);
  assert.match(csv,/"false","false","false","false","false"/);
+});
+
+test('Repair-all scans every saved EPUB in one click with bounded 10-row previews',async()=>{
+ const f=fixture(112);
+ try{
+  assert.equal(f.get('epub-backfill-all').disabled,false);
+  await f.get('epub-backfill-all').click();
+  assert.equal(f.applied.length,112);
+  assert.equal(new Set(f.applied).size,112);
+  assert.equal(f.get('epub-backfill-all').disabled,true);
+  assert.match(f.get('epub-backfill-status').textContent,/Entire saved EPUB catalogue scanned/);
+  assert.equal(f.calls.filter(x=>x.startsWith('/api/epubs/backfill/preview?')).length,12);
+ }finally{f.restore();}
+});
+test('Repair-all stops at a quota failure and resumes safely without skipping the failed EPUB',async()=>{
+ const f=fixture(53,{failOnceAt:17});
+ try{
+  await f.get('epub-backfill-all').click();
+  assert.equal(f.applied.length,17);
+  assert.match(f.get('epub-backfill-status').textContent,/stopped safely/);
+  assert.equal(f.get('epub-backfill-all').disabled,false);
+  await f.get('epub-backfill-all').click();
+  assert.equal(f.applied.length,53);
+  assert.equal(new Set(f.applied).size,53);
+  assert.equal(f.get('epub-backfill-all').disabled,true);
+ }finally{f.restore();}
 });
