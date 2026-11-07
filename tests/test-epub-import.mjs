@@ -716,7 +716,9 @@ test('Verified missing EPUB covers are recorded once and future repairs skip the
    body:JSON.stringify({file_id:fileId,expected_updated_at:first.expected_updated_at})});
   const applied=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
   assert.equal(applied.status,200,await applied.clone().text());
-  assert.equal((await applied.json()).cover_checked,true);
+  const appliedResult=await applied.json();
+  assert.equal(appliedResult.status,'applied');
+  assert.equal(appliedResult.tags_added,1);
   assert.equal(reads,1);
   const metadata=JSON.parse(f.sqlite.prepare('SELECT metadata_json FROM epub_files WHERE id=?').get(fileId).metadata_json);
   assert.equal(metadata.cover_repair_checked_version,1);
@@ -728,7 +730,7 @@ test('Verified missing EPUB covers are recorded once and future repairs skip the
   assert.equal(second.cover_unavailable,true);
   const repeated=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
   assert.equal(repeated.status,200);
-  assert.equal((await repeated.json()).status,'no_changes');
+  assert.equal((await repeated.json()).status,'already_processed');
   assert.equal(reads,1,'No repeat R2 request');
   assert.equal(count(f.sqlite,'edition_images'),0);
  }finally{f.sqlite.close();}
