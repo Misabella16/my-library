@@ -1,3 +1,4 @@
+import {epubHealthCsv} from '../epub-health-report.mjs';
 import {summarizeEpubHealth} from '../epub-backfill-health.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ function fixture(rows=55,{failOnceAt=-1}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list',
- 'epub-backfill-health','epub-backfill-health-status'];
+ 'epub-backfill-health','epub-backfill-health-status','epub-health-report'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -138,4 +139,30 @@ test('Health summary does not count complete books as needing repair',()=>{
   {synopsis:'Missing',subjects:['Fantasy'],cover_missing:true},
   {synopsis:'',subjects:[],cover_missing:true}
  ]),{checked:3,missingSynopsis:1,missingCover:2,missingSubjects:1,ready:1});
+});
+
+test('Health export captures all inspected records and never writes metadata',async()=>{
+ const f=fixture(55);
+ try{
+  assert.equal(f.get('epub-health-report').disabled,true);
+  await f.get('epub-backfill-health').click();
+  assert.equal(f.get('epub-health-report').disabled,false);
+  await f.get('epub-backfill-health').click();
+  assert.equal(f.calls.filter(x=>x==='/api/epubs/backfill/apply').length,0);
+  assert.equal(f.calls.filter(x=>x.startsWith('/api/epubs/backfill/preview?')).length,6);
+ }finally{f.restore();}
+});
+test('Health CSV summarizes missing fields and neutralizes spreadsheet formulas',()=>{
+ const csv=epubHealthCsv([
+  {file_id:'file-1',book_id:'book-1',title:'=HYPERLINK("bad")',
+   synopsis:'summary',subjects:['Fantasy'],cover_missing:false},
+  {file_id:'file-2',book_id:'book-2',title:'Healthy',
+   synopsis:'',subjects:[],cover_missing:false}
+ ]);
+ assert.match(csv,/Missing ebook cover/);
+ assert.ok(csv.includes('"\'=HYPERLINK(""bad"")"'));
+ assert.match(csv,/"true","true","false","true"/);
+ assert.match(csv,/"false","false","false","false"/);
+ assert.equal(csv.includes('private_notes'),false);
+ assert.equal(csv.includes('private_object_key'),false);
 });
