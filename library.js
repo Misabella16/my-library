@@ -2,6 +2,7 @@ import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
 import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
+import {initSiteStudio} from './site-studio-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
@@ -444,6 +445,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     // Repair controls must be available on the first authenticated visit,
     // including when no new EPUB has been uploaded in this session.
     initEpubBackfill(api);
+    initSiteStudio(api);
     initShelfPhotoAssistant(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);

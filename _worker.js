@@ -5,6 +5,7 @@ import {handleEpubBackfillApi} from './epub-backfill-api.mjs';
 import {handleEbookCoverLookup} from './ebook-cover-lookup-api.mjs';
 import {handleShelfIsbnApi} from './shelf-photo-isbn-api.mjs';
 import {handleShelfInventoryApi} from './shelf-photo-inventory-api.mjs';
+import {handleSiteContentApi} from './site-content-api.mjs';
 import {classifyDatabaseError} from './database-errors.mjs';
 export {classifyDatabaseError} from './database-errors.mjs';
 // My Library Phase 2: private, independent Cloudflare Pages advanced-mode Worker.
@@ -258,6 +259,8 @@ async function serveApi(request,env,path){
   if(goodreadsSyncResponse)return goodreadsSyncResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
+  const siteContentResponse=await handleSiteContentApi(request,env,path);
+  if(siteContentResponse)return siteContentResponse;
   const inventoryResponse=await handleShelfInventoryApi(request,db,path);
   if(inventoryResponse)return inventoryResponse;
   const shelfIsbnResponse=await handleShelfIsbnApi(request,db,path);
