@@ -52,8 +52,73 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  const exportButton=node('button','Download photo match review CSV','btn subtle mini');
  exportButton.type='button';
  exportButton.disabled=true;
- reviewArea.append(reviewHeading,reviewText,reviewList,exportButton);
+ const saveReview=node('button','Save reviewed matches privately','btn mini');
+ const loadReview=node('button','View saved shelf review','btn subtle mini');
+ const undoSaved=node('button','Undo last saved review','btn subtle mini');
+ const savedView=node('div',undefined,'photo-saved-review');
+ saveReview.type=loadReview.type=undoSaved.type='button';
+ reviewArea.append(reviewHeading,reviewText,reviewList,exportButton,
+  saveReview,loadReview,undoSaved,savedView);
  results.after?.(reviewArea);
+ let savedRevision=null;
+ const showSaved=record=>{
+  savedView.replaceChildren();
+  const heading=node('p','Last saved: '+(record.saved_at||'Nothing saved yet'),'muted');
+  savedView.append(heading);
+  for(const photo of record.photos||[]){
+   const matches=(record.matches||[]).filter(row=>row.photoId===photo.id);
+   const entry=node('p',photo.name+': '+
+    (matches.length?matches.map(row=>row.title).join(' · '):'No matched books'),'muted');
+   savedView.append(entry);
+  }
+  if((record.photos||[]).length)
+   savedView.append(node('p','Photo images were not uploaded. To see them again, select the original files on your device.','muted'));
+ };
+ loadReview.addEventListener('click',async()=>{
+  loadReview.disabled=true;
+  try{
+   const record=await api('/api/shelf-photo-review');
+   savedRevision=record.revision;showSaved(record);
+   tell('Saved review loaded. Your original photo images remain on your device.');
+  }catch(error){tell('Unable to load saved review: '+(error.message||'Request failed'));}
+  finally{loadReview.disabled=false;}
+ });
+ saveReview.addEventListener('click',async()=>{
+  if(!review.photos.length){tell('Select photos before saving a review.');return;}
+  saveReview.disabled=true;
+  try{
+   if(savedRevision===null){
+    const current=await api('/api/shelf-photo-review');
+    savedRevision=current.revision;
+   }
+   const payload={
+    expected_revision:savedRevision,
+    photos:review.photos.map(row=>({name:row.name})),
+    matches:photoReviewRows(review).filter(row=>row.bookId).map(row=>({
+     photoId:row.photoId,bookId:row.bookId,title:row.title,author:row.author
+    }))
+   };
+   const response=await api('/api/shelf-photo-review',{method:'POST',data:payload});
+   savedRevision=response.revision;showSaved(response);
+   tell('Reviewed book matches saved privately. No photos, copies or edition artwork were uploaded or changed.');
+  }catch(error){
+   tell('Save failed: '+(error.message||'Refresh the saved review before trying again.'));
+  }finally{saveReview.disabled=false;}
+ });
+ undoSaved.addEventListener('click',async()=>{
+  undoSaved.disabled=true;
+  try{
+   if(savedRevision===null){
+    const current=await api('/api/shelf-photo-review');
+    savedRevision=current.revision;
+   }
+   const response=await api('/api/shelf-photo-review/undo',{method:'POST',
+    data:{expected_revision:savedRevision}});
+   savedRevision=response.revision;showSaved(response);
+   tell('The previous saved shelf review was restored. No catalogue records changed.');
+  }catch(error){tell('Unable to undo saved review: '+(error.message||'Request failed'));}
+  finally{undoSaved.disabled=false;}
+ });
  exportButton.addEventListener('click',()=>{
   const csv=photoReviewCsv(review);
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
