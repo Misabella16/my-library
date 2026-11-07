@@ -63,9 +63,9 @@ export async function handleShelfSavedReviewApi(request,env,path){
  if(data?.expected_revision!==existing.revision)
   return fail('Shelf review was changed in another tab. Reload before saving.',409);
  if(path==='/api/shelf-photo-review/undo'){
-  const previous=await load(bucket,PREVIOUS);
-  if(previous.revision==='original'&&previous.saved_at===null)
+  if(!(await bucket.get(PREVIOUS)))
    return fail('No previous saved review is available',409);
+  const previous=await load(bucket,PREVIOUS);
   await write(bucket,KEY,{...previous,revision:crypto.randomUUID(),
    saved_at:new Date().toISOString()});
   await write(bucket,PREVIOUS,existing);
