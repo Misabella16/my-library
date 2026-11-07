@@ -56,6 +56,9 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
    const saved=await api(path,{method:'POST',data:payload});
    layout=saved;dirty=false;
    shelfLabel.value=layout.label||'';
+   const heading=contents.querySelector('.visual-shelf-selected-header h3');
+   if(heading)heading.textContent=(layout.label?layout.label+' · ':'')+
+    [selected.room,selected.bookcase,selected.shelf].map(locationName).join(' / ');
    applyLayout();
    say(action==='undo'?'Previous shelf layout restored.':
     'Shelf label and spine order saved privately.');
@@ -138,7 +141,8 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
    if(token!==generation||locationKey(selected)!==key)return;
    if(reset){
     const header=element('div',undefined,'visual-shelf-selected-header');
-    const heading=element('h3',locationName(selected.room)+' / '+
+    const heading=element('h3',(layout.label?layout.label+' · ':'')+
+     locationName(selected.room)+' / '+
      locationName(selected.bookcase)+' / '+locationName(selected.shelf));
     modeControls=element('div',undefined,'visual-shelf-mode-toggle');
     modeControls.setAttribute('role','group');
@@ -172,6 +176,8 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
     const spine=element('button',undefined,'visual-shelf-spine');
     spine.type='button';
     const style=spineStyleFor(copy);
+    card.style.setProperty('--spine-width',style.width+'px');
+    card.style.setProperty('--spine-height',style.height+'px');
     spine.dataset.tone=String(style.tone);
     spine.style.setProperty('--spine-height',style.height+'px');
     spine.style.setProperty('--spine-width',style.width+'px');
