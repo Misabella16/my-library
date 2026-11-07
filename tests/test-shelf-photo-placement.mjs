@@ -21,6 +21,7 @@ function setup({second=false,physical=true}={}){
   .run('dddddddd-dddd-4ddd-8ddd-dddddddddddd',edition,'physical','owned');
  const db={
   prepare(statement){return{bind(...args){return{
+   sql:statement,args,
    first:async()=>sql.prepare(statement).get(...args)||null,
    all:async()=>({results:sql.prepare(statement).all(...args)}),
    run:async()=>({meta:{changes:sql.prepare(statement).run(...args).changes}})
