@@ -76,7 +76,10 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
     subjects:extracted.tags.filter(tag=>!current.has(tag.toLocaleLowerCase())),
     cover_missing:!row.cover_count&&
      row.edition_format==='ebook'&&row.edition_special===0&&
-     !coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256)};
+     !coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256),
+    cover_unavailable:!row.cover_count&&
+     row.edition_format==='ebook'&&row.edition_special===0&&
+     coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256)};
   }),next_cursor:rows.length>limit?page[page.length-1].id:null});
  }
  if(path==='/api/epubs/backfill/apply'&&method==='POST'){
