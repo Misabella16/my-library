@@ -42,7 +42,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
  // Refresh one failed EPUB without scanning the entire catalogue.
  // The explicit retry button uses this to obtain a current edit timestamp,
  // preserving later user changes and keeping D1 reads bounded.
- const single=new RegExp('^/api/epubs/backfill/file/([0-9a-f-]{36})/preview
+ const single=new RegExp('^/api/epubs/backfill/file/([0-9a-f-]{36})/preview$').exec(path);
  if(single&&method==='GET'){
   const row=await linkedFile(db,single[1]);
   if(!row)return fail('EPUB not found',404);
