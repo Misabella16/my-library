@@ -29,10 +29,14 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    progress=get('epub-import-progress'),summary=get('epub-import-summary'),
    exportButton=get('epub-download-report'),
    reviewFilter=get('epub-review-filter'),
-   pauseButton=get('pause-epub-upload');
+   pauseButton=get('pause-epub-upload'),
+   saveAllButton=get('epub-save-all'),
+   recheckButton=get('epub-recheck-failures'),
+   issuesReportButton=get('epub-issues-report'),
+   previewPauseButton=get('pause-epub-preview');
  if(!fileInput||!previewButton||!uploadButton||!list||!status||!progress)return;
  let files=[],items=[],running=false,previewComplete=false,visible=PAGE_SIZE;
- let uploadActive=false,pauseRequested=false;
+ let uploadActive=false,pauseRequested=false,previewPauseRequested=false;
  const localCoverUrls=new Set();
  function clearCoverPreviews(){
   for(const url of localCoverUrls)URL.revokeObjectURL(url);
@@ -238,8 +242,13 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    list.append(more);
   }
   if(exportButton)exportButton.disabled=!items.length||running;
+  if(issuesReportButton)issuesReportButton.disabled=!items.some(x=>needsAttention(x))||running;
+  if(recheckButton)recheckButton.disabled=running||!items.some(x=>x.match?.status==='upload_failed');
+  if(previewPauseButton)previewPauseButton.disabled=!running||previewComplete||previewPauseRequested||uploadActive;
   if(pauseButton)pauseButton.disabled=!uploadActive||pauseRequested;
   uploadButton.disabled=running||!previewComplete||eligible===0;
+  if(saveAllButton)saveAllButton.disabled=running||!previewComplete||eligible===0;
+  if(saveAllButton)saveAllButton.textContent=eligible?'Save all '+eligible+' eligible EPUBs':'No eligible EPUBs to save';
   uploadButton.textContent='Save '+Math.min(eligible,SAVE_RUN_LIMIT)+
    ' eligible EPUB'+(eligible===1?'':'s')+' privately'+
    (eligible>SAVE_RUN_LIMIT?' (next group of '+eligible+' remaining)':'');
@@ -248,7 +257,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   clearCoverPreviews();
   if(running){inform('A batch is in progress. Finish or resume it before selecting another folder.');return;}
   files=[...(selection||[])].filter(f=>/\.epub$/i.test(f.name));
-  items=[];previewComplete=false;visible=PAGE_SIZE;lastPreviewCount=0;
+  items=[];previewComplete=false;previewPauseRequested=false;visible=PAGE_SIZE;lastPreviewCount=0;
   list.replaceChildren();progress.hidden=true;progress.value=0;
   previewButton.disabled=files.length===0||files.length>MAX_SELECTION;
   uploadButton.disabled=true;
@@ -262,6 +271,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   }
   if(summary)summary.textContent='No files have been uploaded.';
  }
+ const needsAttention=entry=>['needs_review','possible_duplicate','upload_failed'].includes(entry.match?.status)||!!entry.error;
  if(exportButton)exportButton.addEventListener('click',()=>{
   if(!items.length)return;
   const text=bulkEpubReport(items);
@@ -271,6 +281,15 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   anchor.href=url;anchor.download='my-library-epub-review.csv';
   document.body.append(anchor);
   anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
+ if(issuesReportButton)issuesReportButton.addEventListener('click',()=>{
+  const issues=items.filter(needsAttention);
+  if(!issues.length)return;
+  const url=URL.createObjectURL(new Blob([bulkEpubReport(issues)],{type:'text/csv;charset=utf-8'}));
+  const anchor=document.createElement('a');
+  anchor.href=url;anchor.download='my-library-epubs-needing-review.csv';
+  document.body.append(anchor);anchor.click();anchor.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  });
  if(reviewFilter)reviewFilter.addEventListener('change',()=>{
@@ -284,9 +303,18 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  });
  fileInput.addEventListener('change',()=>selectFiles(fileInput.files));
  if(folderInput)folderInput.addEventListener('change',()=>selectFiles(folderInput.files));
+ previewPauseButton?.addEventListener('click',()=>{
+  if(!running||previewComplete||uploadActive)return;
+  previewPauseRequested=true;previewPauseButton.disabled=true;
+  inform('Finishing the current preview group before pausing. No EPUBs are uploaded.');
+ });
  previewButton.addEventListener('click',async()=>{
   if(running||!files.length||files.length>MAX_SELECTION)return;
-  running=true;previewComplete=false;previewButton.disabled=true;uploadButton.disabled=true;
+  running=true;previewComplete=false;previewPauseRequested=false;
+  previewButton.disabled=true;uploadButton.disabled=true;
+  if(saveAllButton)saveAllButton.disabled=true;
+  if(saveAllButton)saveAllButton.disabled=true;
+  if(previewPauseButton)previewPauseButton.disabled=false;
   // A failed preview resumes at the last fully matched batch, rather than
   // repeating SHA hashing and D1 lookups for previously completed chunks.
   const completed=items.length;
@@ -295,6 +323,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   progress.hidden=false;progress.max=files.length;progress.value=completed;
   try{
    for(let start=completed;start<files.length;start+=PREVIEW_BATCH){
+    if(previewPauseRequested)break;
     const batch=files.slice(start,start+PREVIEW_BATCH),toMatch=[],pending=[];
     for(const file of batch){
      const entry={file,metadata:null,match:{status:'needs_review'},error:null};
@@ -352,18 +381,26 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     await Promise.resolve();
    }
    flagPossibleEpubDuplicates(items);
-   previewComplete=true;render();
-   inform('Preview complete. '+items.filter(canImport).length+
-    ' EPUBs eligible. Similar-title files with different hashes are held for optional review.');
+   previewComplete=lastPreviewCount===files.length;
+   render();
+   if(previewComplete){
+    inform('Preview complete. '+items.filter(canImport).length+
+     ' EPUBs eligible. Similar-title files with different hashes are held for optional review.');
+   }else{
+    inform('Preview paused after '+lastPreviewCount+' of '+files.length+
+     ' EPUBs. Click Preview again to resume without repeating completed matches.');
+   }
   }catch(error){
    previewComplete=false;render();
    inform('Preview interrupted after '+lastPreviewCount+' files: '+
     (error.message||'Request failed')+'. No EPUBs were uploaded. Click Preview again to resume from the last completed batch.');
-  }finally{running=false;previewButton.disabled=false;render();}
+  }finally{running=false;previewPauseRequested=false;
+   if(previewPauseButton)previewPauseButton.disabled=true;
+   previewButton.disabled=false;render();}
  });
- uploadButton.addEventListener('click',async()=>{
+ const saveEligible=async(saveAll=false)=>{
   if(running||!previewComplete)return;
-  const eligible=items.filter(canImport).slice(0,SAVE_RUN_LIMIT);
+  const eligible=items.filter(canImport).slice(0,saveAll?MAX_SELECTION:SAVE_RUN_LIMIT);
   if(!eligible.length)return;
   running=true;uploadActive=true;pauseRequested=false;
   previewButton.disabled=true;uploadButton.disabled=true;
@@ -418,7 +455,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     }
    }
    progress.value=saved+skipped+failed;
-   if((saved+skipped+failed)%10===0)render();
+   if((saved+skipped+failed)%(saveAll?50:10)===0)render();
+   if(saveAll&&(saved+skipped+failed)%SAVE_RUN_LIMIT===0)
+    await new Promise(resolve=>setTimeout(resolve,0));
   }
   running=false;uploadActive=false;
   if(pauseButton)pauseButton.disabled=true;
@@ -429,7 +468,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    (pausedReason?pausedReason+' ':'')+'Batch update: '+saved+' uploaded, '+skipped+' skipped, '+
    failed+' failed or needing retry. '+remaining+' eligible files remain. '+
    'Your original EPUBs were not modified.'+
-   (remaining?' Click Save again for the next group of up to '+SAVE_RUN_LIMIT+' EPUBs.':''));
- });
+   (remaining?' Click Save again to resume the remaining eligible EPUBs.':''));
+ };
+ uploadButton.addEventListener('click',()=>saveEligible(false));
+ saveAllButton?.addEventListener('click',()=>saveEligible(true));
  render();
 }
