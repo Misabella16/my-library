@@ -40,7 +40,7 @@ const headers={'content-type':'application/json; charset=utf-8',
  'cache-control':'private, no-store','x-content-type-options':'nosniff'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers});
 const fail=(message,status=400)=>json({error:message},status);
-const empty=()=>({revision:'original',text:{},images:{},updated_at:null});
+const empty=()=>({revision:'original',text:{},images:{},previous_text:null,updated_at:null});
 async function load(bucket){
  const object=await bucket.get(CONFIG_KEY);
  if(!object)return empty();
@@ -50,7 +50,7 @@ async function load(bucket){
  if(!data||typeof data!=='object'||typeof data.revision!=='string')
   throw Error('Invalid saved site settings');
  return {revision:data.revision,text:data.text||{},images:data.images||{},
-  updated_at:data.updated_at||null};
+  previous_text:data.previous_text||null,updated_at:data.updated_at||null};
 }
 async function store(bucket,data){
  await bucket.put(CONFIG_KEY,JSON.stringify(data),{
