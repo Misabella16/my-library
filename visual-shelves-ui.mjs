@@ -1,3 +1,4 @@
+import {spineStyleFor,spineDescription} from './visual-shelf-spines.mjs';
 // Lazy-loaded, read-only visual shelves. No library-wide scans in the browser.
 const byId=id=>document.getElementById(id);
 const element=(name,text,cls)=>{
@@ -17,6 +18,16 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
  if(!panel||!groups||!contents||!status||!reload||!moreGroups||!moreCopies)return null;
  let groupsCursor='',moreLocations=false,selected=null,
   copiesCursor='',moreItems=false,busy=false,initial=false,generation=0;
+ let displayMode='covers',modeControls=null;
+ const applyMode=()=>{
+  const listing=contents.querySelector('.visual-shelf-books');
+  if(listing)listing.classList.toggle('spines-view',displayMode==='spines');
+  for(const btn of modeControls?.querySelectorAll('button')||[]){
+   const active=btn.dataset.mode===displayMode;
+   btn.setAttribute('aria-pressed',String(active));
+   btn.classList.toggle('active',active);
+  }
+ };
  const say=message=>{status.textContent=message;};
  const setBusy=x=>{busy=x;reload.disabled=x;moreGroups.disabled=x||!moreLocations;
   moreCopies.disabled=x||!moreItems;};
@@ -73,14 +84,41 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
    const data=await api('/api/shelves/copies?'+args.toString());
    if(token!==generation||locationKey(selected)!==key)return;
    if(reset){
+    const header=element('div',undefined,'visual-shelf-selected-header');
     const heading=element('h3',locationName(selected.room)+' / '+
      locationName(selected.bookcase)+' / '+locationName(selected.shelf));
-    contents.append(heading);
+    modeControls=element('div',undefined,'visual-shelf-mode-toggle');
+    modeControls.setAttribute('role','group');
+    modeControls.setAttribute('aria-label','Bookshelf display mode');
+    for(const [mode,label] of [['covers','Cover cards'],['spines','Book spines']]){
+     const button=element('button',label,'btn subtle mini');
+     button.type='button';button.dataset.mode=mode;
+     button.addEventListener('click',()=>{displayMode=mode;applyMode();});
+     modeControls.append(button);
+    }
+    header.append(heading,modeControls);contents.append(header);
    }
    const listing=contents.querySelector('.visual-shelf-books')||element('div',undefined,'visual-shelf-books');
    if(!listing.parentNode)contents.append(listing);
    for(const copy of data.copies||[]){
     const card=element('article',undefined,'visual-shelf-book');
+    const spine=element('button',undefined,'visual-shelf-spine');
+    spine.type='button';
+    const style=spineStyleFor(copy);
+    spine.dataset.tone=String(style.tone);
+    spine.style.setProperty('--spine-height',style.height+'px');
+    spine.style.setProperty('--spine-width',style.width+'px');
+    spine.setAttribute('aria-label','Open '+spineDescription(copy));
+    const spineTitle=element('span',copy.title,'visual-shelf-spine-title');
+    const spineAuthor=element('span',copy.author||'Unknown author','visual-shelf-spine-author');
+    spine.append(spineTitle,spineAuthor);
+    if(copy.is_special)spine.append(element('span','✦','visual-shelf-spine-mark'));
+    spine.addEventListener('click',async()=>{
+     spine.disabled=true;
+     try{await onSelectBook(copy.book_id);}
+     catch(error){say('Could not open book: '+(error.message||'Request failed'));}
+     finally{spine.disabled=false;}
+    });
     const cover=element('div',undefined,'visual-shelf-cover');
     if(copy.cover_image_id&&/^[0-9a-f-]{36}$/i.test(copy.cover_image_id)){
      const img=element('img');img.src='/api/images/'+copy.cover_image_id;
@@ -99,8 +137,9 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
      catch(error){say('Could not open book: '+(error.message||'Request failed'));}
      finally{button.disabled=false;}
     });
-    details.append(button);card.append(cover,details);listing.append(card);
+    details.append(button);card.append(spine,cover,details);listing.append(card);
    }
+   applyMode();
    copiesCursor=data.next_cursor||'';
    moreItems=!!data.has_more;moreCopies.hidden=!moreItems;
    if(!data.copies?.length&&reset)contents.append(element('p',
