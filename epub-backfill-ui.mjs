@@ -23,6 +23,7 @@ export function initEpubBackfill(api){
  const history=root.querySelector('#epub-backfill-history');
  const historyList=root.querySelector('#epub-backfill-history-list');
  const bulk=root.querySelector('#epub-backfill-bulk');
+ const repairAll=root.querySelector('#epub-backfill-all');
  const pauseButton=root.querySelector('#epub-backfill-pause');
  const retryButton=root.querySelector('#epub-backfill-retry');
  const reportButton=root.querySelector('#epub-backfill-report');
@@ -36,6 +37,7 @@ export function initEpubBackfill(api){
   health.disabled=busy||healthFinished;
   if(healthExport)healthExport.disabled=busy||healthRows.length===0;
   bulk.disabled=busy||bulkFinished;
+  if(repairAll)repairAll.disabled=busy||bulkFinished;
   if(pauseButton)pauseButton.disabled=!bulkActive||pauseRequested;
   if(retryButton)retryButton.disabled=busy||!failedQueue.size;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
@@ -93,12 +95,12 @@ export function initEpubBackfill(api){
   pauseButton.disabled=true;
   status.textContent='Pause requested. The current EPUB will finish before stopping.';
  });
- bulk.addEventListener('click',async()=>{
+ const runRepairs=async(repairEntireCatalogue=false)=>{
   if(busy)return;
   bulkActive=true;pauseRequested=false;
   busy=true;update();
   let after=bulkCursor,checked=0,applied=0,unchanged=0,failed=0;
-  const target=50;
+  const target=repairEntireCatalogue?10000:50;
   try{
    while(checked<target&&!pauseRequested){
     const params=new URLSearchParams({limit:'10'});
@@ -141,6 +143,7 @@ export function initEpubBackfill(api){
     }
     status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
      failed+' need review. Changes are logged for Undo.';
+    if(repairEntireCatalogue&&checked%50===0)await new Promise(resolve=>setTimeout(resolve,0));
     if(!page.next_cursor||page.files.length===0){
      bulkFinished=true;
      break;
@@ -150,14 +153,18 @@ export function initEpubBackfill(api){
    status.textContent=(pauseRequested?'Paused safely. Press Repair next 50 to resume. ':'')+
     'Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
     unchanged+' unchanged · '+failed+' need refresh or review.'+
-    (bulkFinished?' Entire saved EPUB catalogue scanned.':' Use Repair next 50 to continue.');
+    (bulkFinished?' Entire saved EPUB catalogue scanned.':
+     repairEntireCatalogue?' You can resume the next group of saved EPUBs.':
+     ' Use Repair next 50 to continue.');
   }catch(error){
    status.textContent='Repair stopped safely after '+checked+' files: '+
     (error.message||'Request failed')+'. Completed changes remain saved.';
   }finally{
    busy=false;bulkActive=false;pauseRequested=false;update();
   }
- });
+ };
+ bulk.addEventListener('click',()=>runRepairs(false));
+ repairAll?.addEventListener('click',()=>runRepairs(true));
  retryButton?.addEventListener('click',async()=>{
   if(busy||!failedQueue.size)return;
   busy=true;update();
