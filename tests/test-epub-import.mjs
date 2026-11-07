@@ -608,3 +608,39 @@ test('Stored EPUB cover recovery works with streaming R2 object bodies',async()=
   assert.equal(count(f.sqlite,'edition_images'),1);
  }finally{f.sqlite.close();}
 });
+
+test('Undo refuses to remove EPUB cover once owner marks it verified',async()=>{
+ const f=fixture();
+ try{
+  const bytes=epubArchiveWithCover();
+  const sha=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(editionId,bookId,'Standard');
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(fileId,sha,'novel.epub','epubs/private/test.epub','{}',bookId,editionId);
+  await f.env.BOOK_FILES.put('epubs/private/test.epub',bytes);
+  const stamp=f.sqlite.prepare('SELECT updated_at FROM books WHERE id=?').get(bookId).updated_at;
+  const applied=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/apply',{method:'POST',
+    body:JSON.stringify({file_id:fileId,expected_updated_at:stamp})}),
+   f.db,'/api/epubs/backfill/apply',f.env);
+  const data=await applied.json();
+  assert.equal(data.cover_added,true);
+  const cover=f.sqlite.prepare('SELECT id FROM edition_images').get();
+  f.sqlite.prepare("UPDATE edition_images SET match_status='user_verified' WHERE id=?")
+   .run(cover.id);
+  const undo=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/undo',{method:'POST',
+    body:JSON.stringify({change_id:data.change_id})}),
+   f.db,'/api/epubs/backfill/undo',f.env);
+  assert.equal(undo.status,409);
+  assert.equal(count(f.sqlite,'edition_images'),1);
+  assert.equal(f.sqlite.prepare('SELECT match_status FROM edition_images').get().match_status,'user_verified');
+  assert.equal(f.objects.size,2,'Verified cover and original EPUB remain in private R2');
+ }finally{f.sqlite.close();}
+});
