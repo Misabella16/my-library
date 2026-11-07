@@ -722,6 +722,7 @@ test('Verified missing EPUB covers are recorded once and future repairs skip the
   assert.deepEqual(metadata.subjects,['Fantasy']);
   const second=(await (await preview()).json()).files[0];
   assert.equal(second.cover_missing,false);
+  assert.equal(second.cover_unavailable,true);
   const repeated=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
   assert.equal(repeated.status,200);
   assert.equal((await repeated.json()).status,'no_changes');
