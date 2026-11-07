@@ -148,7 +148,64 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
      catch(error){tell('Could not open book: '+(error.message||'Request failed'));}
      finally{open.disabled=false;}
     });
-    row.append(associate,open);barcodeMatches.append(row);
+    // A barcode match is only a candidate. Require a separate explicit
+    // inventory preview before claiming ownership or recording a location.
+    const inventory=node('button','Check physical inventory','btn subtle mini');
+    inventory.type='button';inventory.disabled=match.format==='ebook'||match.format==='audiobook';
+    const inventoryArea=node('div',undefined,'photo-inventory-review');
+    inventory.addEventListener('click',async()=>{
+     inventory.disabled=true;inventoryArea.replaceChildren();
+     try{
+      const inspected=await api('/api/shelf-photos/edition/'+match.edition_id+'/preview');
+      if(generation!==selectionGeneration)return;
+      if(inspected.isbn!==code||inspected.edition_id!==match.edition_id)
+       throw Error('Edition identity changed; rescan or reload the photo.');
+      inventoryArea.append(node('p','Edition: '+(inspected.edition_name||'Unknown')+
+       (inspected.vendor?' · '+inspected.vendor:'')+
+       (inspected.is_special?' · Special edition':'')+
+       '. Exact ISBN: '+code,'muted'));
+      const owned=inspected.existing_copies||[];
+      if(owned.length||inspected.truncated){
+       inventoryArea.append(node('p',
+        'Existing physical copies: '+owned.length+(inspected.truncated?'+':'')+
+        '. Open this book to edit a copy or its shelf position. Nothing was duplicated.','muted'));
+       return;
+      }
+      const confirm=node('button','Confirm I own this physical edition','btn mini');
+      confirm.type='button';
+      const form=node('div',undefined,'photo-inventory-location');
+      const fields=[
+       ['room','Room (optional)'],['bookcase','Bookcase (optional)'],
+       ['shelf','Shelf (optional)'],['shelf_position','Position (optional)']
+      ];
+      const entries={};
+      for(const [name,label] of fields){
+       const field=node('label',label,'muted');
+       const input=node('input');input.type='text';input.maxLength=name==='shelf_position'?100:150;
+       input.placeholder=label;field.append(input);form.append(field);entries[name]=input;
+      }
+      confirm.addEventListener('click',async()=>{
+       if(!globalThis.confirm?.('Confirm that you physically own this exact ISBN edition? This creates one owned copy; it does not change other editions or cover images.'))return;
+       confirm.disabled=true;
+       try{
+        const data={isbn:code,confirm:true};
+        for(const [name,input] of Object.entries(entries))data[name]=input.value;
+        const outcome=await api('/api/shelf-photos/edition/'+match.edition_id+'/claim',
+         {method:'POST',data});
+        inventoryArea.replaceChildren(node('p','Physical copy recorded. Open the book to review shelf placement and special edition details.','muted'));
+        tell('Recorded your confirmed physical copy of '+match.title+'.');
+        await onSelectBook(outcome.book_id);
+       }catch(error){
+        inventoryArea.append(node('p','Inventory not changed: '+(error.message||'Request failed'),'muted'));
+        confirm.disabled=false;
+       }
+      });
+      inventoryArea.append(node('p','Only confirm if you physically own this edition. Leave locations blank if unknown.','muted'),form,confirm);
+     }catch(error){
+      inventoryArea.replaceChildren(node('p','Inventory preview unavailable: '+(error.message||'Request failed'),'muted'));
+     }finally{inventory.disabled=false;}
+    });
+    row.append(associate,open,inventory,inventoryArea);barcodeMatches.append(row);
    }
   }
   isbnStatus.textContent='ISBN lookup complete. Matches are suggestions only; no books, editions, or copies were modified.';
