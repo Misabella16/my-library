@@ -77,7 +77,18 @@
     <div class="loadmore"><button class="btn subtle" id="load-more" type="button" hidden>Load more books</button></div>
   </section>
   <section class="tab-panel" id="shelves" hidden>
-    <div class="surface"><h2>My Shelves</h2><p data-site-text="shelvesDescription">Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.</p><div class="tip">Want to organize by genre, favorites, reading challenge or anything else? Add a personal shelf on the book page. You can also store a physical bookcase and shelf for every individual copy.</div></div>
+    <div class="surface"><h2>My Shelves</h2><p data-site-text="shelvesDescription">Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.</p><div class="tip">This visual inventory shows the physical copies you own, grouped by room, bookcase and shelf. Special editions and multiple copies appear separately. Your personal reading shelves remain on each book's page.</div></div>
+    <div class="surface visual-shelf-browser" aria-label="Physical library by location">
+      <div class="visual-shelf-toolbar">
+        <div><p class="section-kicker">❦ THE PHYSICAL COLLECTION ❦</p><h3>Browse my bookcases</h3></div>
+        <button class="btn subtle" id="shelf-inventory-refresh" type="button">Refresh shelves</button>
+      </div>
+      <p class="small-status" id="shelf-inventory-status" role="status" aria-live="polite">Open My Shelves to load your physical inventory.</p>
+      <div id="shelf-location-groups" class="visual-shelf-groups" aria-label="Rooms, bookcases and shelves"></div>
+      <div class="loadmore"><button class="btn subtle" type="button" id="shelf-groups-more" hidden>Load more shelf locations</button></div>
+      <div id="shelf-location-contents" class="visual-shelf-contents" aria-live="polite"></div>
+      <div class="loadmore"><button class="btn subtle" type="button" id="shelf-copies-more" hidden>Load more books on this shelf</button></div>
+    </div>
   </section>
   <section class="tab-panel" id="photos" hidden>
     <div class="surface"><h2>Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>

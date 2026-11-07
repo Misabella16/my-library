@@ -28,3 +28,27 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
 .photo-cover-candidate>div{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .photo-cover-candidate>div strong,.photo-cover-candidate>div p{flex-basis:100%;margin:0}
 @media(max-width:600px){.photo-cover-candidate{gap:9px}.photo-cover-candidate>img{width:65px;height:96px}}
+
+/* Private physical inventory, grouped by actual room / bookcase / shelf. */
+.visual-shelf-browser{margin-top:18px}
+.visual-shelf-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.visual-shelf-toolbar h3{margin:3px 0}
+.visual-shelf-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:20px 0}
+.visual-shelf-location{display:grid;text-align:left;gap:12px;padding:16px;border:1px solid var(--line);
+ border-radius:12px;background:var(--paper);color:var(--ink);cursor:pointer;font:inherit}
+.visual-shelf-location:hover,.visual-shelf-location:focus-visible{outline:2px solid #9d866b;outline-offset:2px}
+.visual-shelf-address{font-weight:600;line-height:1.4}
+.visual-shelf-location strong{font-size:.83rem;font-weight:500;color:var(--muted)}
+.visual-shelf-contents{margin-top:20px}
+.visual-shelf-books{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:13px;margin:15px 0}
+.visual-shelf-book{display:flex;align-items:flex-start;gap:12px;padding:13px;border:1px solid var(--line);
+ border-radius:12px;background:var(--paper);min-width:0}
+.visual-shelf-cover{width:64px;min-width:64px;height:94px;border-radius:5px;overflow:hidden;background:#e8dfd3;
+ display:grid;place-items:center}
+.visual-shelf-cover img{width:100%;height:100%;object-fit:cover}
+.visual-shelf-cover-placeholder{font-size:27px;color:#8d776b}
+.visual-shelf-details{display:grid;align-content:start;gap:5px;min-width:0;overflow-wrap:anywhere}
+.visual-shelf-details p{margin:0;font-size:.83rem}
+.visual-shelf-details .btn{justify-self:start;margin-top:4px}
+@media(max-width:620px){.visual-shelf-groups{grid-template-columns:repeat(2,minmax(0,1fr))}
+.visual-shelf-books{grid-template-columns:1fr}}
