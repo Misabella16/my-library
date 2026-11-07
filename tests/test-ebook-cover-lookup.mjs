@@ -26,6 +26,7 @@ function fixture({format='ebook',special=0,withIsbn=true,hasImage=false}={}){
  }};
  const db={
   prepare(sql){return {bind(...args){return {
+   sql,args,
    first:async()=>sqlite.prepare(sql).get(...args)||null,
    all:async()=>({results:sqlite.prepare(sql).all(...args)}),
    run:async()=>sqlite.prepare(sql).run(...args)
