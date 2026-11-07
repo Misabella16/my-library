@@ -193,15 +193,21 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    return fail('Book changed after repair. Nothing was undone.',409);
   if(after.cover_id){
    const cover=await one(db,
-    'SELECT id,edition_id,private_object_key,origin FROM edition_images WHERE id=?',
-    [after.cover_id]);
-   if(!cover||cover.origin!=='epub'||cover.private_object_key!==after.cover_key)
-    return fail('The repaired EPUB cover changed. Nothing was undone.',409);
+    'SELECT id,edition_id,private_object_key,origin,match_status,display_cover,copy_id '+
+    'FROM edition_images WHERE id=?',[after.cover_id]);
+   // A cover may have been selected, verified, or attached to a copy after
+   // repair. Undo must not erase those subsequent owner edits.
+   if(!cover||cover.origin!=='epub'||
+     cover.private_object_key!==after.cover_key||
+     cover.match_status!=='unverified'||cover.display_cover!==1||
+     cover.copy_id!==null)
+    return fail('The repaired EPUB cover was changed or verified. Nothing was undone.',409);
   }
   const now=new Date().toISOString(),stmts=[];
   if(after.cover_id){
    stmts.push(db.prepare(
-    "DELETE FROM edition_images WHERE id=? AND origin='epub' AND private_object_key=?")
+    "DELETE FROM edition_images WHERE id=? AND origin='epub' AND private_object_key=? "+
+    "AND match_status='unverified' AND display_cover=1 AND copy_id IS NULL")
     .bind(after.cover_id,after.cover_key));
   }
   if(after.description){
