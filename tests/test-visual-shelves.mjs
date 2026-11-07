@@ -40,6 +40,17 @@ test('Visual location counts include only owned, unarchived, physical copies',as
  try{
   f.add(1,{room:'Bedroom',bookcase:'A',shelf:'Top',special:true,vendor:'FairyLoot'});
   f.add(2,{room:'Bedroom',bookcase:'A',shelf:'Top'});
+  // Ensure previews remain bounded even for heavily-tagged books.
+  const bookId=uuid(11);
+  f.sqlite.prepare('UPDATE books SET synopsis=? WHERE id=?')
+   .run('An intricate magical fantasy '.repeat(50),bookId);
+  const insertTag=f.sqlite.prepare('INSERT INTO tags(id,label,kind) VALUES(?,?,?)');
+  const link=f.sqlite.prepare('INSERT INTO book_tags(book_id,tag_id,source) VALUES(?,?,?)');
+  for(let n=0;n<17;n++){
+   const tagId=uuid(2000+n);
+   insertTag.run(tagId,'Tag '+n,'personal');
+   link.run(bookId,tagId,'manual');
+  }
   f.add(3,{room:'Study',bookcase:'B',shelf:'4'});
   f.add(4,{owned:false});
   f.add(5,{medium:'digital'});
@@ -55,6 +66,11 @@ test('Visual location counts include only owned, unarchived, physical copies',as
   assert.equal(copies.copies.length,2);
   assert.equal(copies.copies.some(x=>x.is_special===1&&x.vendor==='FairyLoot'),true);
   assert.equal(copies.copies.every(x=>x.copy_id&&x.book_id&&x.edition_id),true);
+  const tagged=copies.copies.find(x=>x.book_id===bookId);
+  assert.ok(tagged,'Book with 17 tags should remain on the shelf');
+  assert.equal(JSON.parse(tagged.tags_json).length,12,'Tags shown on hover are capped');
+  assert.equal(tagged.synopsis_preview.length,480,'Summary preview is capped');
+  assert.match(tagged.synopsis_preview,/magical fantasy/);
  }finally{f.close();}
 });
 test('70 location groups page with a keyset cursor, no count scan and no OFFSET',async()=>{
