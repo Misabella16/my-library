@@ -23,16 +23,19 @@ export function initEpubBackfill(api){
  const history=root.querySelector('#epub-backfill-history');
  const historyList=root.querySelector('#epub-backfill-history-list');
  const bulk=root.querySelector('#epub-backfill-bulk');
+ const retryButton=root.querySelector('#epub-backfill-retry');
  const reportButton=root.querySelector('#epub-backfill-report');
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
  let bulkCursor='',bulkFinished=false;
  let reportRows=[];
+ const failedQueue=new Map();
  let healthCursor='',healthFinished=false,healthScanned=0,healthRows=[];
  const update=()=>{
   preview.disabled=busy;
   health.disabled=busy||healthFinished;
   if(healthExport)healthExport.disabled=busy||healthRows.length===0;
   bulk.disabled=busy||bulkFinished;
+  if(retryButton)retryButton.disabled=busy||!failedQueue.size;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
   next.disabled=busy||!nextCursor;
@@ -117,6 +120,9 @@ export function initEpubBackfill(api){
        const code=error?.payload?.code;
        if(['database_read_quota','database_write_quota',
         'database_storage_limit','database_limit_reached'].includes(code))throw error;
+       // Transient non-quota failures remain individually retryable even
+       // after the bulk cursor advances past this item.
+       failedQueue.set(item.file_id,item);
       }
      }
      checked++;
@@ -139,6 +145,37 @@ export function initEpubBackfill(api){
   }finally{
    busy=false;update();
   }
+ });
+ retryButton?.addEventListener('click',async()=>{
+  if(busy||!failedQueue.size)return;
+  busy=true;update();
+  let repaired=0,stillFailed=0;
+  // Retry at most ten failed files per click. Server-side edit guards still
+  // reject stale previews; no forced matches or destructive overwrites.
+  for(const item of [...failedQueue.values()].slice(0,10)){
+   try{
+    const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
+     file_id:item.file_id,expected_updated_at:item.expected_updated_at
+    }});
+    failedQueue.delete(item.file_id);
+    if(outcome.status==='applied'){
+     repaired++;
+     changes.push(outcome.change_id);
+    }
+    reportRows.push({file_id:item.file_id,title:item.title,status:'retry_'+outcome.status,
+     synopsis_filled:outcome.synopsis_filled,
+     tags_added:outcome.tags_added,cover_added:outcome.cover_added});
+   }catch(error){
+    stillFailed++;
+    const code=error?.payload?.code;
+    if(['database_read_quota','database_write_quota',
+     'database_storage_limit','database_limit_reached'].includes(code))break;
+   }
+  }
+  status.textContent='Retried failed EPUB repairs: '+repaired+' repaired · '+
+   failedQueue.size+' still need attention'+
+   (stillFailed?' (some may need a fresh preview).':'')+'.';
+  busy=false;update();
  });
  healthExport?.addEventListener('click',()=>{
   if(!healthRows.length)return;
@@ -199,7 +236,10 @@ export function initEpubBackfill(api){
      changes.push(output.change_id);
     }else unchanged++;
     // Another file of the same book may need a fresh preview.
-   }catch{errors++;}
+   }catch(error){
+    errors++;
+    failedQueue.set(item.file_id,item);
+   }
   }
   status.textContent='Applied '+applied+' safe repairs · '+unchanged+' unchanged · '+
    errors+' need refresh. No existing synopsis or reviews were overwritten.';

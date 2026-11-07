@@ -11,11 +11,12 @@ class FakeNode {
  append(...nodes){this.children.push(...nodes);}
  replaceChildren(...nodes){this.children=[...nodes];}
 }
-function fixture(rows=55,{failOnceAt=-1}={}){
+function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list',
- 'epub-backfill-health','epub-backfill-health-status','epub-health-report'];
+ 'epub-backfill-health','epub-backfill-health-status','epub-health-report',
+ 'epub-backfill-retry'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -30,7 +31,7 @@ function fixture(rows=55,{failOnceAt=-1}={}){
   title:'Novel '+i,synopsis:'',subjects:['Fantasy'],cover_missing:false
  }));
  const calls=[],applied=[];
- let failedQuota=false;
+ let failedQuota=false,failedTransient=false;
  const api=async(path,opts)=>{
   calls.push(path);
   if(path.startsWith('/api/epubs/backfill/preview?')){
@@ -47,6 +48,10 @@ function fixture(rows=55,{failOnceAt=-1}={}){
     const error=new Error('D1 quota exhausted');
     error.payload={code:'database_read_quota'};
     throw error;
+   }
+   if(!failedTransient&&index===failTransientAt){
+    failedTransient=true;
+    throw new Error('Transient R2 error');
    }
    applied.push(opts.data.file_id);
    return {status:'applied',change_id:opts.data.file_id};
@@ -165,4 +170,28 @@ test('Health CSV summarizes missing fields and neutralizes spreadsheet formulas'
  assert.match(csv,/"false","false","false","false"/);
  assert.equal(csv.includes('private_notes'),false);
  assert.equal(csv.includes('private_object_key'),false);
+});
+
+test('Transient failed EPUB repair remains retryable after bulk scan moves beyond its cursor',async()=>{
+ const f=fixture(12,{failTransientAt:5});
+ try{
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,11);
+  assert.equal(f.applied.includes(String(5).padStart(36,'0')),false);
+  assert.equal(f.get('epub-backfill-bulk').disabled,true);
+  assert.equal(f.get('epub-backfill-retry').disabled,false);
+  await f.get('epub-backfill-retry').click();
+  assert.equal(f.applied.length,12);
+  assert.equal(new Set(f.applied).size,12);
+  assert.equal(f.get('epub-backfill-retry').disabled,true);
+  assert.match(f.get('epub-backfill-status').textContent,/1 repaired/);
+ }finally{f.restore();}
+});
+test('Retry never runs when there are no failed EPUB records',async()=>{
+ const f=fixture(3);
+ try{
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.get('epub-backfill-retry').disabled,true);
+  assert.equal(f.applied.length,3);
+ }finally{f.restore();}
 });
