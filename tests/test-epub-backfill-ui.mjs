@@ -41,6 +41,10 @@ function fixture(rows=55,{failOnceAt=-1,failKind='quota'}={}){
    const page=records.slice(start,start+10);
    return {files:page,next_cursor:start+10<records.length?page.at(-1).file_id:null};
   }
+  if(path.startsWith('/api/epubs/backfill/file/')&&path.endsWith('/preview')){
+   const fileId=path.split('/')[5];
+   return records.find(x=>x.file_id===fileId)||{error:'Not found'};
+  }
   if(path==='/api/epubs/backfill/apply'){
    const index=records.findIndex(item=>item.file_id===opts.data.file_id);
    if(!failedQuota&&index===failOnceAt){
@@ -200,6 +204,7 @@ test('Failed EPUB repairs can be retried in a bounded queue without rescan',asyn
   assert.equal(f.get('epub-backfill-retry').disabled,true);
   assert.equal(f.calls.filter(path=>path.startsWith('/api/epubs/backfill/preview?')).length,
    reads,'Retry must not fetch the whole preview again');
+  assert.equal(f.calls.filter(path=>path.startsWith('/api/epubs/backfill/file/')).length,1);
  }finally{f.restore();}
 });
 test('EPUB scan checkpoints store cursors only and can be cleared without deleting books',()=>{
