@@ -93,8 +93,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const present=new Set(existing.map(tag=>tag.label.toLocaleLowerCase()));
   const additions=tags.filter(label=>!present.has(label.toLocaleLowerCase()));
   const coverCount=await one(db,
-   "SELECT SUM(CASE WHEN role='cover' THEN 1 ELSE 0 END) AS n, "+
-   "SUM(CASE WHEN display_cover=1 THEN 1 ELSE 0 END) AS selected "+
+   "SELECT COALESCE(SUM(CASE WHEN role='cover' THEN 1 ELSE 0 END),0) AS n, "+
+   "COALESCE(SUM(CASE WHEN display_cover=1 THEN 1 ELSE 0 END),0) AS selected "+
    "FROM edition_images WHERE edition_id=?",[row.edition_id]);
   const needsCover=coverCount?.n===0&&row.edition_format==='ebook'&&row.edition_special===0;
   let coverInfo=null,coverKey=null;
