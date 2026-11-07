@@ -12,7 +12,8 @@ class FakeNode{
  setAttribute(){}
 }
 const names=['photo-files','photo-preview','photo-book-search','photo-match-search',
- 'photo-match-results','photo-status','photo-isbn-status','photo-isbn-input','photo-isbn-search'];
+ 'photo-match-results','photo-status','photo-isbn-status','photo-isbn-input','photo-isbn-search',
+ 'photo-title-lines','photo-scan-text','photo-match-titles','photo-title-suggestions','photo-title-photo'];
 test('Optional barcode detection stays local and reports ISBN-13 without photos leaving the browser',async()=>{
  const original=globalThis.BarcodeDetector,bitmap=globalThis.createImageBitmap;
  let closed=0;
@@ -152,4 +153,49 @@ test('Manual ISBN fallback works without a photo or BarcodeDetector and does not
   await nodes.get('photo-isbn-search').dispatch('click');
   assert.equal(calls.length,1,'Invalid ISBN never queries database');
  }finally{globalThis.document=savedDocument;}
+});
+
+test('Manual list of shelf spine titles suggests two existing books for one photo without writes',async()=>{
+ const oldDocument=globalThis.document,oldDetector=globalThis.BarcodeDetector;
+ const oldBitmap=globalThis.createImageBitmap;
+ const oldCreate=globalThis.URL.createObjectURL,oldRevoke=globalThis.URL.revokeObjectURL;
+ const nodes=new Map(names.map(name=>[name,new FakeNode()]));
+ const calls=[];
+ try{
+  globalThis.document={getElementById:id=>nodes.get(id)||null,
+   createElement:()=>new FakeNode()};
+  globalThis.BarcodeDetector=undefined;
+  globalThis.createImageBitmap=undefined;
+  globalThis.URL.createObjectURL=()=> 'blob:photo';
+  globalThis.URL.revokeObjectURL=()=>{};
+  initShelfPhotoAssistant(async path=>{
+   calls.push(path);
+   if(!path.startsWith('/api/books?'))throw Error('Unexpected write or route');
+   const query=new URL('https://example.com'+path).searchParams.get('q');
+   return {books:[{id:'id-'+query,title:query,author:'Writer'}]};
+  });
+  nodes.get('photo-files').files=[new File(['sample'],'shelf.jpg',{type:'image/jpeg'})];
+  await nodes.get('photo-files').dispatch('change');
+  nodes.get('photo-title-lines').value='Babel\nPiranesi\nBabel';
+  await nodes.get('photo-match-titles').dispatch('click');
+  assert.equal(calls.length,2,'Duplicate title lines only searched once');
+  assert.ok(calls.every(x=>x.startsWith('/api/books?')));
+  const suggestions=nodes.get('photo-title-suggestions').children;
+  assert.equal(suggestions.length,2);
+  for(const entry of suggestions){
+   const candidate=entry.children[1];
+   const button=candidate.children.find(x=>x.textContent==='Add reviewed book to shelf photo');
+   assert.ok(button);
+   await button.dispatch('click');
+  }
+  const review=nodes.get('photo-match-results').afterNodes[0];
+  const rows=review.children.find(x=>x.className==='photo-review-rows');
+  assert.equal(rows.children.length,2);
+  assert.match(rows.children[0].textContent,/Babel/);
+  assert.match(rows.children[1].textContent,/Piranesi/);
+ }finally{
+  globalThis.document=oldDocument;globalThis.BarcodeDetector=oldDetector;
+  globalThis.createImageBitmap=oldBitmap;
+  globalThis.URL.createObjectURL=oldCreate;globalThis.URL.revokeObjectURL=oldRevoke;
+ }
 });

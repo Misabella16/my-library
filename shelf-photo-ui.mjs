@@ -1,6 +1,7 @@
 import {extractIsbn13} from './epub-isbn.mjs';
+import {scanShelfTextLocal,shelfTitleLines} from './shelf-photo-text.mjs';
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
-import {createPhotoReview,setReviewPhotos,assignPhotoMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
+import {createPhotoReview,setReviewPhotos,assignPhotoMatch,addPhotoBookMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
 // A privacy-first shelf-photo helper. Images never leave the browser.
 // Native BarcodeDetector is optional and cannot identify cover art or text.
@@ -35,13 +36,16 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  if(!input||!images||!search||!button||!results||!status)return;
  let currentUrls=[],busy=false;
  const manualInput=get('photo-isbn-input'),manualButton=get('photo-isbn-search');
+ const titleInput=get('photo-title-lines'),titleScan=get('photo-scan-text'),
+   titleMatch=get('photo-match-titles'),titleSuggestions=get('photo-title-suggestions'),
+   titlePhoto=get('photo-title-photo');
  const review=createPhotoReview();
  const barcodeMatches=node('div',undefined,'photo-barcode-matches');
  isbnStatus?.after?.(barcodeMatches);
  let selectionGeneration=0;
  const reviewArea=node('section',undefined,'photo-review-area');
  const reviewHeading=node('h3','Photo-by-photo review');
- const reviewText=node('p','Select a photo for each suggested book. These links are temporary and do not create copies or change your catalogue.','muted');
+ const reviewText=node('p','A shelf photo can contain multiple books. Add as many reviewed matches as you can identify. These temporary links never create physical copies or edit the library.','muted');
  const reviewList=node('div',undefined,'photo-review-rows');
  const exportButton=node('button','Download photo match review CSV','btn subtle mini');
  exportButton.type='button';
@@ -76,6 +80,14 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   const files=[...(input.files||[])].filter(x=>
    ['image/jpeg','image/png','image/webp'].includes(x.type)&&x.size<=8*1024*1024).slice(0,50);
   setReviewPhotos(review,files);renderReview();
+  if(titlePhoto){
+   titlePhoto.replaceChildren();
+   for(const record of review.photos){
+    const option=node('option',record.name);option.value=record.id;
+    titlePhoto.append(option);
+   }
+  }
+  if(titleSuggestions)titleSuggestions.replaceChildren();
   for(const file of files){
    const frame=node('figure');
    const image=node('img');
@@ -138,7 +150,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
     associate.type='button';associate.disabled=!review.photos.length;
     associate.addEventListener('click',()=>{
      try{
-      assignPhotoMatch(review,photo.id,{
+      addPhotoBookMatch(review,photo.id,{
        id:match.book_id,title:match.title,author:match.author
       });
       renderReview();
@@ -216,6 +228,79 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   }
   isbnStatus.textContent='ISBN lookup complete. Matches are suggestions only; no books, editions, or copies were modified.';
  }
+
+ titleScan?.addEventListener('click',async()=>{
+  if(busy||!input.files?.length)return;
+  busy=true;titleScan.disabled=true;
+  const token=selectionGeneration;
+  const file=[...(input.files||[])].find(f=>['image/jpeg','image/png','image/webp'].includes(f.type));
+  try{
+   if(!file)return;
+   const found=await scanShelfTextLocal(file);
+   if(token!==selectionGeneration)return;
+   if(found.supported&&found.lines.length){
+    titleInput.value=found.lines.join('\n');
+    tell('Detected '+found.lines.length+' possible text line(s) locally. Review and correct the titles before matching.');
+   }else{
+    tell(found.supported?'No readable text detected; type the titles shown in the photo.':
+     'This browser does not support local text detection. Type visible titles below. No image is uploaded.');
+   }
+  }finally{busy=false;titleScan.disabled=false;}
+ });
+ titleMatch?.addEventListener('click',async()=>{
+  if(busy)return;
+  const titles=shelfTitleLines(titleInput?.value);
+  if(!titles.length){tell('Enter at least one book title, one per line.');return;}
+  busy=true;titleMatch.disabled=true;
+  const token=selectionGeneration;
+  titleSuggestions.replaceChildren();
+  try{
+   // Up to 12 indexed bounded searches; never download the full library,
+   // automatically create a book, or infer edition/copy ownership.
+   for(const title of titles){
+    const box=node('article',undefined,'photo-match-result');
+    box.append(node('strong','Possible title: '+title));
+    titleSuggestions.append(box);
+    try{
+     const response=await api('/api/books?'+new URLSearchParams({q:title,limit:'20'}));
+     if(token!==selectionGeneration)return;
+     const books=Array.isArray(response.books)?response.books:[];
+     const ranked=suggestShelfMatches({title},books,{limit:3});
+     if(!ranked.length){
+      box.append(node('p','No confident match in your collection. Correct the spelling or search manually.','muted'));
+      continue;
+     }
+     for(const item of ranked){
+      const book=books.find(b=>b.id===item.bookId);
+      if(!book)continue;
+      const candidate=node('div',undefined,'photo-book-suggestion');
+      candidate.append(node('span',book.title+' · '+(book.author||'Unknown author')+
+       ' · '+(item.classification==='safe_book_match'?'Strong title match':'Needs review'),'muted'));
+      const assign=node('button','Add reviewed book to shelf photo','btn subtle mini');
+      assign.type='button';assign.disabled=!review.photos.length;
+      assign.addEventListener('click',()=>{
+       try{
+        const photoId=titlePhoto?.value||review.photos[0]?.id;
+        const added=addPhotoBookMatch(review,photoId,book);
+        renderReview();
+        tell(added?'Recorded a reviewed book suggestion. No inventory changes made.':
+         'This book is already linked to that shelf photo.');
+       }catch(error){tell(error.message||'Choose a photo.');}
+      });
+      const open=node('button','Open book','btn subtle mini');
+      open.type='button';
+      open.addEventListener('click',()=>onSelectBook(book.id).catch(error=>
+       tell(error.message||'Could not open the book')));
+      candidate.append(assign,open);box.append(candidate);
+     }
+    }catch(error){
+     box.append(node('p','Search unavailable: '+(error.message||'Try again'),'muted'));
+    }
+   }
+   if(token===selectionGeneration)
+    tell('Text suggestions checked against My Library. Review each title before linking; no photos were sent.');
+  }finally{busy=false;titleMatch.disabled=false;}
+ });
  manualButton?.addEventListener('click',async()=>{
   if(busy)return;
   const isbn=extractIsbn13(manualInput?.value||'');
@@ -271,7 +356,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
     assign.disabled=!review.photos.length;
     assign.addEventListener('click',()=>{
      try{
-      assignPhotoMatch(review,select.value,book);renderReview();
+      addPhotoBookMatch(review,select.value,book);renderReview();
       tell('Suggested match recorded for photo review only. Open the book to verify edition and physical copy.');
      }catch(error){tell(error.message||'Choose a photo first.');}
     });

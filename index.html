@@ -81,7 +81,7 @@
   </section>
   <section class="tab-panel" id="photos" hidden>
     <div class="surface"><h2>Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
-      <div class="tip"><strong>Privacy-first helper:</strong> Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Automatic recognition of cover artwork or spine text is not yet available; you can search for a title or author below instead. No photo or copy information is saved automatically.</div>
+      <div class="tip"><strong>Privacy-first helper:</strong> Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Some browsers can detect visible text locally; others require typing the titles. Cover-art image matching is not yet supported. You can review multiple books found in one photo. No photo or copy information is saved automatically.</div>
       <label class="upload">Choose shelf photos <input id="photo-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
       <p id="photo-status" class="small-status" role="status">Choose a shelf photo to preview privately.</p>
       <div id="photo-preview" class="preview-pictures"></div>
@@ -90,6 +90,17 @@
         <label for="photo-isbn-input">Or enter a physical book ISBN manually (works without barcode scanning)</label>
         <input id="photo-isbn-input" type="text" inputmode="numeric" maxlength="30" placeholder="9780306406157">
         <button id="photo-isbn-search" type="button" class="btn subtle">Find this ISBN in My Library</button>
+      </div>
+      <div class="photo-search-controls">
+        <h3>Recognize book titles on covers and spines</h3>
+        <p class="muted">Try local text detection when your browser supports it, or type the titles you can see, one per line. Images stay on this device. Each suggested book must be reviewed; no copies are created automatically.</p>
+        <button class="btn subtle" id="photo-scan-text" type="button">Read text from first shelf photo (if supported)</button>
+        <label for="photo-title-lines">Visible titles, one per line (up to 12)</label>
+        <textarea id="photo-title-lines" rows="5" maxlength="2200" placeholder="Title one&#10;Title two"></textarea>
+        <label for="photo-title-photo">Associate reviewed books with this photo</label>
+        <select id="photo-title-photo"></select>
+        <button class="btn" id="photo-match-titles" type="button">Find these titles in My Library</button>
+        <div id="photo-title-suggestions" class="photo-match-results" aria-live="polite"></div>
       </div>
       <div class="photo-search-controls">
         <label for="photo-book-search">Find a pictured book by title or author</label>
