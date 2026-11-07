@@ -33,7 +33,7 @@ function fixture(){
  };}};
  const call=(method='GET',data,loc=location)=>handleShelfLayoutApi(
   new Request('https://books.example/api/shelves/layout?'+new URLSearchParams(loc),
-   {method,...(data?{body:JSON.stringify(data)}:{})}),db,'/api/shelves/layout');
+   {method,...(data?{body:JSON.stringify(data)}:{})}),db,env,'/api/shelves/layout');
  return {sql,objects,call,reads:()=>dbReads,close:()=>sql.close()};
 }
 test('Private shelf label and order persist independently of physical copy location with Undo',async()=>{
