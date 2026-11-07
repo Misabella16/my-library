@@ -3,6 +3,7 @@ import {initEpubImport} from './epub-ui.mjs';
 import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
+import {initVisualShelves} from './visual-shelves-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
@@ -297,9 +298,11 @@ async function submitForm(form,button){
   }
 }
 document.addEventListener('DOMContentLoaded',async()=>{
+  let visualShelves=null;
   document.querySelectorAll('[data-tab]').forEach(tab=>tab.addEventListener('click',()=>{
     document.querySelectorAll('[data-tab]').forEach(t=>{t.classList.toggle('active',t===tab);t.setAttribute('aria-current',t===tab?'page':'false');});
     document.querySelectorAll('.tab-panel').forEach(p=>{p.hidden=p.id!==tab.dataset.tab;p.classList.toggle('active',p.id===tab.dataset.tab);});
+    if(tab.dataset.tab==='shelves')visualShelves?.activate();
   }));
   $('#add-book').addEventListener('click',()=>showDialog('add-book-dialog'));
   $('#refresh').addEventListener('click',async()=>{
@@ -446,6 +449,11 @@ document.addEventListener('DOMContentLoaded',async()=>{
     // including when no new EPUB has been uploaded in this session.
     initEpubBackfill(api);
     initSiteStudio(api);
+    visualShelves=initVisualShelves(api,{onSelectBook:async bookId=>{
+      document.querySelector('[data-tab="library"]')?.click();
+      await selectBook(bookId);
+      document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
+    }});
     initShelfPhotoAssistant(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);
