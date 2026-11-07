@@ -735,3 +735,50 @@ test('Verified missing EPUB covers are recorded once and future repairs skip the
   assert.equal(count(f.sqlite,'edition_images'),0);
  }finally{f.sqlite.close();}
 });
+
+test('Single EPUB repair preview identifies missing saved cover and metadata without writes',async()=>{
+ const f=fixture();
+ try{
+  const meta={...(await validMeta()),subjects:['Fantasy','Romance']};
+  const uploaded=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(uploaded.status,201);
+  const file=(await uploaded.json()).file_id;
+  const book=f.sqlite.prepare('SELECT book_id FROM epub_files WHERE id=?').get(file).book_id;
+  f.sqlite.prepare('UPDATE books SET synopsis=? WHERE id=?').run('',book);
+  f.sqlite.prepare('DELETE FROM book_tags WHERE book_id=?').run(book);
+  const beforeFiles=count(f.sqlite,'epub_files'),beforeImages=count(f.sqlite,'edition_images');
+  const preview=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+file),
+   f.db,'/api/epubs/backfill/file/'+file,f.env);
+  assert.equal(preview.status,200);
+  const payload=await preview.json();
+  assert.equal(payload.book_id,book);
+  assert.equal(payload.synopsis,'My private synopsis');
+  assert.deepEqual(payload.subjects,['Fantasy','Romance']);
+  assert.equal(payload.cover_missing,true);
+  assert.equal(payload.cover_unavailable,false);
+  assert.ok(payload.expected_updated_at);
+  assert.ok(!JSON.stringify(payload).includes('private_object_key'));
+  assert.equal(beforeFiles,count(f.sqlite,'epub_files'));
+  assert.equal(beforeImages,count(f.sqlite,'edition_images'));
+  assert.equal(count(f.sqlite,'book_tags'),0);
+ }finally{f.sqlite.close();}
+});
+test('Single EPUB repair preview never exposes archived book or nonexistent file',async()=>{
+ const f=fixture();
+ try{
+  const unknown='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const result=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+unknown),
+   f.db,'/api/epubs/backfill/file/'+unknown,f.env);
+  assert.equal(result.status,404);
+  const uploaded=await post(f.db,f.env,'/api/epubs/upload',form(await validMeta()));
+  const item=await uploaded.json();
+  f.sqlite.prepare('UPDATE books SET archived_at=? WHERE id=?')
+   .run('2026-11-01',item.book_id);
+  const hidden=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+item.file_id),
+   f.db,'/api/epubs/backfill/file/'+item.file_id,f.env);
+  assert.equal(hidden.status,404);
+ }finally{f.sqlite.close();}
+});
