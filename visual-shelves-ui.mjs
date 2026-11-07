@@ -18,7 +18,50 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
  if(!panel||!groups||!contents||!status||!reload||!moreGroups||!moreCopies)return null;
  let groupsCursor='',moreLocations=false,selected=null,
   copiesCursor='',moreItems=false,busy=false,initial=false,generation=0;
- let displayMode='covers',modeControls=null;
+ let displayMode='covers',modeControls=null,shelfLabel=null;
+ let layout={revision:'original',label:'',order:[],can_undo:false},dirty=false;
+ const cards=()=>[...(contents.querySelector('.visual-shelf-books')?.children||[])];
+ const applyLayout=()=>{
+  const listing=contents.querySelector('.visual-shelf-books');
+  if(!listing)return;
+  const index=new Map(layout.order.map((id,i)=>[id,i]));
+  const sorted=cards().map((card,i)=>({card,i,priority:index.has(card.dataset.copyId)?
+   index.get(card.dataset.copyId):100000+i})).sort((a,b)=>a.priority-b.priority);
+  for(const item of sorted)listing.append(item.card);
+ };
+ const markDirty=()=>{
+  dirty=true;
+  say('Arrangement changed on this device. Save shelf layout to keep it.');
+ };
+ const moveCard=(card,direction)=>{
+  const listing=card.parentNode;
+  if(!listing)return;
+  const items=cards(),index=items.indexOf(card),target=items[index+direction];
+  if(!target)return;
+  if(direction<0)listing.insertBefore(card,target);
+  else listing.insertBefore(target,card);
+  markDirty();
+ };
+ const layoutPath=()=>'/api/shelves/layout?'+new URLSearchParams(selected).toString();
+ const saveLayout=async(action)=>{
+  if(!selected||busy)return;
+  const path=layoutPath();
+  const displayed=cards().map(card=>card.dataset.copyId);
+  const order=[...displayed,...layout.order.filter(id=>!displayed.includes(id))].slice(0,80);
+  setBusy(true);
+  try{
+   const payload=action==='undo'?
+    {expected_revision:layout.revision,action:'undo'}:
+    {expected_revision:layout.revision,label:shelfLabel.value.trim(),order};
+   const saved=await api(path,{method:'POST',data:payload});
+   layout=saved;dirty=false;
+   shelfLabel.value=layout.label||'';
+   applyLayout();
+   say(action==='undo'?'Previous shelf layout restored.':
+    'Shelf label and spine order saved privately.');
+  }catch(error){say('Shelf layout not saved: '+(error.message||'Request failed'));}
+  finally{setBusy(false);}
+ };
  const applyMode=()=>{
   const listing=contents.querySelector('.visual-shelf-books');
   if(listing)listing.classList.toggle('spines-view',displayMode==='spines');
@@ -70,7 +113,17 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
  const openShelf=async location=>{
   generation++;
   selected={room:location.room,bookcase:location.bookcase,shelf:location.shelf};
-  copiesCursor='';moreItems=false;contents.replaceChildren();
+  const token=generation;
+  copiesCursor='';moreItems=false;dirty=false;contents.replaceChildren();
+  layout={revision:'original',label:'',order:[],can_undo:false};
+  try{
+   const saved=await api(layoutPath());
+   if(token!==generation)return;
+   layout=saved;
+  }catch(error){
+   if(token!==generation)return;
+   say('Custom shelf layout unavailable: '+(error.message||'Request failed'));
+  }
   await loadCopies({reset:true});
  };
  const loadCopies=async({reset=false}={})=>{
@@ -96,7 +149,21 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
      button.addEventListener('click',()=>{displayMode=mode;applyMode();});
      modeControls.append(button);
     }
-    header.append(heading,modeControls);contents.append(header);
+    header.append(heading,modeControls);
+    const editor=element('div',undefined,'visual-shelf-layout-editor');
+    const label=element('label','Custom shelf label');
+    shelfLabel=element('input');shelfLabel.type='text';shelfLabel.maxLength=80;
+    shelfLabel.placeholder='e.g. Signed fantasy favorites';
+    shelfLabel.value=layout.label||'';
+    shelfLabel.addEventListener('input',markDirty);
+    label.append(shelfLabel);
+    const save=element('button','Save shelf label & order','btn mini');
+    save.type='button';save.addEventListener('click',()=>saveLayout('save'));
+    const undo=element('button','Undo last saved layout','btn mini subtle');
+    undo.type='button';undo.addEventListener('click',()=>saveLayout('undo'));
+    const guidance=element('p','Use Move left / Move right on a book to arrange the visible spines. Load more books before arranging a large shelf. Custom order affects only the virtual display.','muted');
+    editor.append(label,save,undo,guidance);
+    contents.append(header,editor);
    }
    const listing=contents.querySelector('.visual-shelf-books')||element('div',undefined,'visual-shelf-books');
    if(!listing.parentNode)contents.append(listing);
@@ -119,6 +186,41 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
      catch(error){say('Could not open book: '+(error.message||'Request failed'));}
      finally{spine.disabled=false;}
     });
+    card.dataset.copyId=copy.copy_id;
+    const hover=element('aside',undefined,'visual-shelf-hover');
+    hover.setAttribute('aria-label','Details for '+copy.title);
+    hover.append(element('strong',copy.title),
+     element('p',copy.author||'Unknown author','muted'),
+     element('p',(copy.edition_name||'Standard')+
+      (copy.vendor?' · '+copy.vendor:'')+
+      (copy.is_special?' · Special edition':''),'muted'));
+    const synopsis=String(copy.synopsis_preview||'').trim();
+    hover.append(element('p',synopsis||
+     'No summary saved for this book yet.','visual-shelf-summary'));
+    let tags=[];
+    try{const parsed=JSON.parse(copy.tags_json||'[]');
+     if(Array.isArray(parsed))tags=parsed.filter(x=>typeof x==='string').slice(0,12);
+    }catch{}
+    const tagRow=element('div',undefined,'visual-shelf-tags');
+    if(tags.length)for(const label of tags)tagRow.append(element('span',label,'badge'));
+    else tagRow.append(element('span','No tags yet','muted'));
+    hover.append(tagRow);
+    const detailsToggle=element('button','Details','visual-shelf-details-toggle btn subtle mini');
+    detailsToggle.type='button';
+    detailsToggle.setAttribute('aria-expanded','false');
+    detailsToggle.addEventListener('click',()=>{
+     const open=card.classList.toggle('details-open');
+     detailsToggle.setAttribute('aria-expanded',String(open));
+     detailsToggle.textContent=open?'Hide details':'Details';
+    });
+    const arranging=element('div',undefined,'visual-shelf-order-buttons');
+    for(const [direction,label] of [[-1,'Move left'],[1,'Move right']]){
+     const action=element('button',direction<0?'‹':'›','btn subtle mini');
+     action.type='button';action.setAttribute('aria-label',label+' '+copy.title);
+     action.title=label;
+     action.addEventListener('click',()=>moveCard(card,direction));
+     arranging.append(action);
+    }
     const cover=element('div',undefined,'visual-shelf-cover');
     if(copy.cover_image_id&&/^[0-9a-f-]{36}$/i.test(copy.cover_image_id)){
      const img=element('img');img.src='/api/images/'+copy.cover_image_id;
@@ -137,8 +239,10 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
      catch(error){say('Could not open book: '+(error.message||'Request failed'));}
      finally{button.disabled=false;}
     });
-    details.append(button);card.append(spine,cover,details);listing.append(card);
+    details.append(button,detailsToggle);
+    card.append(spine,cover,details,arranging,hover);listing.append(card);
    }
+   if(!dirty)applyLayout();
    applyMode();
    copiesCursor=data.next_cursor||'';
    moreItems=!!data.has_more;moreCopies.hidden=!moreItems;
