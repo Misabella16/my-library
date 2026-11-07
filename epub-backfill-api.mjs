@@ -110,9 +110,9 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   if(!row)return fail('EPUB is no longer linked to an active book',404);
   const previous=await one(db,"SELECT id FROM change_log WHERE action='epub_backfill' "+
    "AND entity_type='epub_files' AND entity_id=? AND undone_at IS NULL LIMIT 1",[row.id]);
-  // A previous successful backfill is idempotent, even if it updated
-  // book.updated_at. Preserve the current main-branch contract.
-  if(previous)return json({status:'already_processed',file_id:row.id});
+  // A prior metadata repair must not block newly recoverable cover art.
+  // The already-processed response remains idempotent when no additional
+  // cover, synopsis or OPF subjects can be applied.
   if(row.updated_at!==data.expected_updated_at)
    return fail('Book changed since preview. Refresh the repair preview.',409);
   const {synopsis,tags,coverCheckedVersion,coverCheckedHash}=unpack(row.metadata_json);
@@ -168,7 +168,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    .bind(COVER_CHECK_VERSION,row.sha256,row.id,row.sha256);
   if(!description&&!additions.length&&!coverInfo){
    if(checkedNoCover)await checkedCoverStmt().run();
-   return json({status:'no_changes',file_id:row.id,cover_checked:checkedNoCover});
+   return json({status:previous?'already_processed':'no_changes',
+    file_id:row.id,cover_checked:checkedNoCover});
   }
   const now=new Date().toISOString(),batchId=crypto.randomUUID(),changeId=crypto.randomUUID();
   const stmts=[];
