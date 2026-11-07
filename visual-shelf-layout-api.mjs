@@ -11,7 +11,8 @@ function locationOf(url){
  if(values.some(x=>typeof x!=='string'||x.length>150))return null;
  return values;
 }
-const blank=()=>({revision:'original',label:'',order:[],previous:null});
+const blank=()=>({revision:'original',label:'',order:[],view:'covers',previous:null});
+const validView=x=>x==='covers'||x==='spines';
 async function storageKey(location){
  const hex=[...new Uint8Array(await crypto.subtle.digest('SHA-256',
   new TextEncoder().encode(JSON.stringify(location))))]
@@ -23,9 +24,10 @@ async function read(bucket,key){
  if(!value)return blank();
  const parsed=JSON.parse(await value.text());
  if(!parsed||typeof parsed.revision!=='string'||typeof parsed.label!=='string'||
-  !Array.isArray(parsed.order)||parsed.order.some(x=>!id(x)))
+  !Array.isArray(parsed.order)||parsed.order.some(x=>!id(x))||
+  (parsed.view!==undefined&&!validView(parsed.view)))
   throw Error('Previously saved shelf layout is invalid');
- return parsed;
+ return {...parsed,view:parsed.view||'covers'};
 }
 export async function handleShelfLayoutApi(request,db,env,path){
  if(path!=='/api/shelves/layout')return null;
@@ -37,24 +39,27 @@ export async function handleShelfLayoutApi(request,db,env,path){
  const current=await read(bucket,key);
  if(request.method==='GET')
   return ok({revision:current.revision,label:current.label,order:current.order,
-   can_undo:!!current.previous});
+   view:current.view,can_undo:!!current.previous});
  if(Number(request.headers.get('content-length')||0)>13000)return fail('Layout too large',413);
  let payload;
  try{payload=await request.json();}catch{return fail('Invalid shelf layout request');}
  if(payload?.expected_revision!==current.revision)
   return fail('This shelf was changed in another tab. Refresh before editing.',409);
- let label,order,previous;
+ let label,order,view,previous;
  if(payload.action==='undo'){
   if(!current.previous)return fail('There is no saved layout change to undo',409);
   label=current.previous.label;order=current.previous.order;
-  previous={label:current.label,order:current.order};
+  view=current.previous.view||'covers';
+  previous={label:current.label,order:current.order,view:current.view};
  }else{
   if(typeof payload.label!=='string'||payload.label.length>80||
     !Array.isArray(payload.order)||payload.order.length>80||
-    payload.order.some(x=>!id(x))||new Set(payload.order).size!==payload.order.length)
+    payload.order.some(x=>!id(x))||new Set(payload.order).size!==payload.order.length||
+    (payload.view!==undefined&&!validView(payload.view)))
    return fail('Invalid shelf label or arrangement');
   label=payload.label.trim();order=payload.order;
-  previous={label:current.label,order:current.order};
+  view=payload.view===undefined?current.view:payload.view;
+  previous={label:current.label,order:current.order,view:current.view};
   // Verify every selected copy is still owned, physical and on this exact
   // shelf. Avoid returning private cross-shelf metadata or modifying copies.
   if(order.length){
@@ -68,10 +73,10 @@ export async function handleShelfLayoutApi(request,db,env,path){
     return fail('One or more copies moved or changed. Refresh this shelf first.',409);
   }
  }
- if(label===current.label&&JSON.stringify(order)===JSON.stringify(current.order))
-  return ok({revision:current.revision,label,order,can_undo:!!current.previous});
- const next={revision:crypto.randomUUID(),label,order,previous};
+ if(label===current.label&&JSON.stringify(order)===JSON.stringify(current.order)&&view===current.view)
+  return ok({revision:current.revision,label,order,view,can_undo:!!current.previous});
+ const next={revision:crypto.randomUUID(),label,order,view,previous};
  await bucket.put(key,JSON.stringify(next),
   {httpMetadata:{contentType:'application/json; charset=utf-8'}});
- return ok({revision:next.revision,label,order,can_undo:true});
+ return ok({revision:next.revision,label,order,view,can_undo:true});
 }

@@ -26,7 +26,7 @@ test('Spine labels preserve exact edition, vendor, special identity and shelf po
 test('Visual shelf view switch only changes presentation; it never sends an extra API request',()=>{
  const script=readFileSync(new URL('../visual-shelves-ui.mjs',import.meta.url),'utf8');
  const css=readFileSync(new URL('../library.css',import.meta.url),'utf8');
- assert.match(script,/button\.addEventListener\('click',\(\)=>\{displayMode=mode;applyMode\(\);\}\)/);
+ assert.match(script,/button\.addEventListener\('click',\(\)=>\{displayMode=mode;applyMode\(\);markDirty\(\);\}\)/);
  assert.match(script,/listing\.classList\.toggle\('spines-view',displayMode==='spines'\)/);
  assert.match(script,/spine\.setAttribute\('aria-label','Open '\+spineDescription\(copy\)\)/);
  assert.match(script,/if\(copy\.is_special\)/);

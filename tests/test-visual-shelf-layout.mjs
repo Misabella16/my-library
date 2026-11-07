@@ -84,3 +84,25 @@ test('Shelf labels can be saved without any copies or D1 reads',async()=>{
   assert.equal(f.reads(),0);
  }finally{f.close();}
 });
+
+test('Shelf display preference persists, remains backwards compatible, and can be undone',async()=>{
+ const f=fixture();
+ try{
+  const first=await (await f.call()).json();
+  assert.equal(first.view,'covers');
+  const saved=await (await f.call('POST',{expected_revision:first.revision,
+   label:'Collectors corner',order:[copy],view:'spines'})).json();
+  assert.equal(saved.view,'spines');
+  assert.equal((await (await f.call()).json()).view,'spines');
+  const undo=await f.call('POST',{expected_revision:saved.revision,action:'undo'});
+  assert.equal((await undo.json()).view,'covers');
+ }finally{f.close();}
+});
+test('Invalid display mode is rejected without overwriting saved shelf layouts',async()=>{
+ const f=fixture();
+ try{
+  const bad=await f.call('POST',{expected_revision:'original',label:'A',order:[],view:'untrusted'});
+  assert.equal(bad.status,400);
+  assert.equal(f.objects.size,0);
+ }finally{f.close();}
+});
