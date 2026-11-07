@@ -12,7 +12,7 @@ class FakeNode{
  setAttribute(){}
 }
 const names=['photo-files','photo-preview','photo-book-search','photo-match-search',
- 'photo-match-results','photo-status','photo-isbn-status'];
+ 'photo-match-results','photo-status','photo-isbn-status','photo-isbn-input','photo-isbn-search'];
 test('Optional barcode detection stays local and reports ISBN-13 without photos leaving the browser',async()=>{
  const original=globalThis.BarcodeDetector,bitmap=globalThis.createImageBitmap;
  let closed=0;
@@ -115,4 +115,41 @@ test('Shelf-photo ISBN barcode finds an existing edition without creating a book
   globalThis.URL.createObjectURL=oldUrl;
   globalThis.URL.revokeObjectURL=oldRevoke;
  }
+});
+
+test('Manual ISBN fallback works without a photo or BarcodeDetector and does not create copies',async()=>{
+ const savedDocument=globalThis.document;
+ const nodes=new Map(names.map(name=>[name,new FakeNode()]));
+ const calls=[];
+ try{
+  globalThis.document={getElementById:id=>nodes.get(id)||null,
+   createElement:()=>new FakeNode()};
+  initShelfPhotoAssistant(async path=>{
+   calls.push(path);
+   if(path.startsWith('/api/shelf-photos/isbn?'))return {
+    isbn:'9780306406157',matches:[{
+     book_id:'11111111-1111-4111-8111-111111111111',
+     edition_id:'22222222-2222-4222-8222-222222222222',
+     title:'Atlas of Stories',edition_name:'Hardcover',format:'hardcover'
+    }]
+   };
+   throw new Error('Unexpected request '+path);
+  });
+  nodes.get('photo-isbn-input').value='978-0-306-40615-7';
+  await nodes.get('photo-isbn-search').dispatch('click');
+  assert.equal(calls.length,1);
+  assert.match(calls[0],/isbn=9780306406157/);
+  const list=nodes.get('photo-isbn-status').afterNodes[0];
+  assert.equal(list.children.length,1);
+  const row=list.children[0];
+  const associate=row.children.find(x=>x.textContent==='Associate this photo (review only)');
+  assert.ok(associate.disabled,'No photo can be associated if none was selected');
+  const check=row.children.find(x=>x.textContent==='Check physical inventory');
+  assert.equal(check.disabled,false);
+  assert.equal(calls.every(x=>x.includes('/api/shelf-photos/isbn?')),true);
+  assert.equal(nodes.get('photo-status').textContent,'');
+  nodes.get('photo-isbn-input').value='9780000000000';
+  await nodes.get('photo-isbn-search').dispatch('click');
+  assert.equal(calls.length,1,'Invalid ISBN never queries database');
+ }finally{globalThis.document=savedDocument;}
 });
