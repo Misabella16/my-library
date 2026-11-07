@@ -110,9 +110,13 @@ export function initEpubBackfill(api){
   const attempts=[...failedRepairs.values()].slice(0,10);
   for(const item of attempts){
    try{
-    const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
-     file_id:item.file_id,expected_updated_at:item.expected_updated_at
-    }});
+    const fresh=await api('/api/epubs/backfill/file/'+encodeURIComponent(item.file_id)+'/preview');
+    if(fresh?.file_id!==item.file_id)throw Error('EPUB repair preview no longer matches this file');
+    item.expected_updated_at=fresh.expected_updated_at;
+    const needsRepair=!!(fresh.synopsis||fresh.subjects?.length||fresh.cover_missing);
+    const outcome=needsRepair?await api('/api/epubs/backfill/apply',{method:'POST',data:{
+     file_id:item.file_id,expected_updated_at:fresh.expected_updated_at
+    }}):{status:'no_changes'};
     if(outcome.status==='applied'&&outcome.change_id)changes.push(outcome.change_id);
     failedRepairs.delete(item.file_id);
     recovered++;
