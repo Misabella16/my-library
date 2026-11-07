@@ -192,7 +192,33 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
     undo.type='button';undo.addEventListener('click',()=>saveLayout('undo'));
     const guidance=element('p','Drag a spine on desktop, or use Move left / right. Clear filters before reordering. Save your label, preferred view and arrangement together. Load more before organizing a large shelf.','muted');
     editor.append(label,save,undo,guidance);
-    contents.append(header,editor);
+    const tools=element('div',undefined,'visual-shelf-batch-tools');
+    const searchLabel=element('label','Search this shelf');
+    shelfSearch=element('input');shelfSearch.type='search';shelfSearch.maxLength=150;
+    shelfSearch.placeholder='Title, author, edition, vendor, tag…';
+    shelfSearch.addEventListener('input',applyFilters);searchLabel.append(shelfSearch);
+    const tagLabel=element('label','Tag');shelfTag=element('select');
+    shelfTag.addEventListener('change',applyFilters);tagLabel.append(shelfTag);
+    const specialLabel=element('label','Only special editions');
+    shelfSpecial=element('input');shelfSpecial.type='checkbox';
+    shelfSpecial.addEventListener('change',applyFilters);specialLabel.append(shelfSpecial);
+    shelfFilterInfo=element('p','', 'muted');
+    const clearFilters=element('button','Clear filters','btn subtle mini');
+    clearFilters.type='button';clearFilters.addEventListener('click',()=>{
+     shelfSearch.value='';shelfTag.value='';shelfSpecial.checked=false;applyFilters();
+    });
+    const exportButton=element('button','Export visible shelf CSV','btn subtle mini');
+    exportButton.type='button';exportButton.addEventListener('click',()=>{
+     const matched=matchingCards().map(card=>loadedCopies.get(card.dataset.copyId));
+     const csv=shelfCsv(matched,selected);
+     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+     const a=element('a');a.href=url;a.download='my-library-shelf-inventory.csv';
+     document.body.append(a);a.click();a.remove();
+     setTimeout(()=>URL.revokeObjectURL(url),1000);
+     say('Exported '+matched.length+' visible loaded copies. Load more to include additional pages.');
+    });
+    tools.append(searchLabel,tagLabel,specialLabel,clearFilters,exportButton,shelfFilterInfo);
+    contents.append(header,editor,tools);
    }
    const listing=contents.querySelector('.visual-shelf-books')||element('div',undefined,'visual-shelf-books');
    if(!listing.parentNode)contents.append(listing);
@@ -218,6 +244,29 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
      finally{spine.disabled=false;}
     });
     card.dataset.copyId=copy.copy_id;
+    loadedCopies.set(copy.copy_id,copy);
+    card.draggable=true;
+    card.addEventListener('dragstart',event=>{
+     if(filtersActive()){event.preventDefault();return;}
+     event.dataTransfer?.setData('text/plain',copy.copy_id);
+     if(event.dataTransfer)event.dataTransfer.effectAllowed='move';
+     card.classList.add('dragging');
+    });
+    card.addEventListener('dragend',()=>card.classList.remove('dragging'));
+    card.addEventListener('dragover',event=>{
+     if(filtersActive())return;
+     event.preventDefault();
+     if(event.dataTransfer)event.dataTransfer.dropEffect='move';
+    });
+    card.addEventListener('drop',event=>{
+     if(filtersActive())return;
+     event.preventDefault();
+     const id=event.dataTransfer?.getData('text/plain');
+     const source=cards().find(item=>item.dataset.copyId===id);
+     const parent=card.parentNode;
+     if(!source||source===card||!parent)return;
+     parent.insertBefore(source,card);markDirty();
+    });
     const hover=element('aside',undefined,'visual-shelf-hover');
     hover.setAttribute('aria-label','Details for '+copy.title);
     hover.append(element('strong',copy.title),
@@ -275,7 +324,15 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
     card.append(spine,cover,details,arranging,hover);listing.append(card);
    }
    if(!dirty)applyLayout();
-   applyMode();
+   if(shelfTag){
+    const chosen=shelfTag.value;
+    const tags=[...new Set([...loadedCopies.values()].flatMap(safeTags))].sort((a,b)=>a.localeCompare(b));
+    shelfTag.replaceChildren();
+    const any=element('option','All tags');any.value='';shelfTag.append(any);
+    for(const text of tags){const option=element('option',text);option.value=text;shelfTag.append(option);}
+    shelfTag.value=tags.includes(chosen)?chosen:'';
+   }
+   applyMode();applyFilters();
    copiesCursor=data.next_cursor||'';
    moreItems=!!data.has_more;moreCopies.hidden=!moreItems;
    if(!data.copies?.length&&reset)contents.append(element('p',
