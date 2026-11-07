@@ -687,3 +687,38 @@ test('Recovering ebook cover keeps an existing manually chosen jacket as display
   assert.deepEqual(surviving.map(row=>({...row})),[{id:jacketId,display_cover:1}]);
  }finally{f.sqlite.close();}
 });
+
+test('Single-file retry preview refreshes edit timestamp and only missing EPUB fields',async()=>{
+ const f=fixture();
+ try{
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis,updated_at) VALUES(?,?,?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer','User-edited summary','2026-11-07');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(editionId,bookId,'Standard');
+  f.sqlite.prepare("INSERT INTO tags(id,label,kind) VALUES (?,?,?)")
+   .run('dddddddd-dddd-4ddd-8ddd-dddddddddddd','Fantasy','personal');
+  f.sqlite.prepare('INSERT INTO book_tags(book_id,tag_id,source) VALUES(?,?,?)')
+   .run(bookId,'dddddddd-dddd-4ddd-8ddd-dddddddddddd','manual');
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(fileId,'a'.repeat(64),'old.epub','epubs/old.epub',
+    JSON.stringify({description:'Old file summary',subjects:['Fantasy','Magic']}),bookId,editionId);
+  const before=f.queries();
+  const response=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+fileId+'/preview'),
+   f.db,'/api/epubs/backfill/file/'+fileId+'/preview',f.env);
+  assert.equal(response.status,200);
+  assert.deepEqual((await response.json()).subjects,['Magic']);
+  const refreshed=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+fileId+'/preview'),
+   f.db,'/api/epubs/backfill/file/'+fileId+'/preview',f.env);
+  const item=await refreshed.json();
+  assert.equal(item.expected_updated_at,'2026-11-07');
+  assert.equal(item.synopsis,'','Existing user summary must not be offered for overwrite');
+  assert.equal(item.cover_missing,true);
+  assert.equal(f.queries()-before,6,'Three indexed reads per explicit file refresh');
+  assert.equal(f.objects.size,0,'Preview never reads or writes R2');
+ }finally{f.sqlite.close();}
+});
