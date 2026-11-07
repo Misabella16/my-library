@@ -3,7 +3,10 @@ import {suggestEpubMetadata} from './epub-metadata.mjs';
 import {bulkEpubReport,flagPossibleEpubDuplicates} from './epub-bulk.mjs';
 
 const PREVIEW_BATCH=50;
-const MAX_SELECTION=3000;
+const MAX_SELECTION=10000;
+// Limit each save action to a reasonable number of network writes. The
+// already-inspected selection remains available for the next save click.
+const SAVE_RUN_LIMIT=500;
 const PAGE_SIZE=80;
 const labels={
  new:'New book',match:'Matches existing book',
@@ -237,7 +240,8 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   if(exportButton)exportButton.disabled=!items.length||running;
   if(pauseButton)pauseButton.disabled=!uploadActive||pauseRequested;
   uploadButton.disabled=running||!previewComplete||eligible===0;
-  uploadButton.textContent='Save '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
+  uploadButton.textContent='Save next '+Math.min(eligible,SAVE_RUN_LIMIT)+
+   ' of '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
  }
  function selectFiles(selection){
   clearCoverPreviews();
@@ -358,7 +362,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  });
  uploadButton.addEventListener('click',async()=>{
   if(running||!previewComplete)return;
-  const eligible=items.filter(canImport);
+  const eligible=items.filter(canImport).slice(0,SAVE_RUN_LIMIT);
   if(!eligible.length)return;
   running=true;uploadActive=true;pauseRequested=false;
   previewButton.disabled=true;uploadButton.disabled=true;
@@ -423,7 +427,8 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   inform((pauseRequested?'Paused at your request. Click Save to resume remaining files. ':'' )+
    (pausedReason?pausedReason+' ':'')+'Batch update: '+saved+' uploaded, '+skipped+' skipped, '+
    failed+' failed or needing retry. '+remaining+' eligible files remain. '+
-   'Your original EPUBs were not modified.');
+   'Your original EPUBs were not modified.'+
+   (remaining?' Click Save again for the next group of up to '+SAVE_RUN_LIMIT+' EPUBs.':''));
  });
  render();
 }
