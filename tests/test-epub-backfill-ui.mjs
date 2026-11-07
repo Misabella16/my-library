@@ -11,12 +11,12 @@ class FakeNode {
  append(...nodes){this.children.push(...nodes);}
  replaceChildren(...nodes){this.children=[...nodes];}
 }
-function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1}={}){
+function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1,pauseAfterFirst=false}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list',
  'epub-backfill-health','epub-backfill-health-status','epub-health-report',
- 'epub-backfill-retry'];
+ 'epub-backfill-retry','epub-backfill-pause'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -54,6 +54,8 @@ function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1}={}){
     throw new Error('Transient R2 error');
    }
    applied.push(opts.data.file_id);
+   if(pauseAfterFirst&&applied.length===1)
+    await refs.get('epub-backfill-pause').click();
    return {status:'applied',change_id:opts.data.file_id};
   }
   if(path==='/api/epubs/backfill/history'){
@@ -193,5 +195,23 @@ test('Retry never runs when there are no failed EPUB records',async()=>{
   await f.get('epub-backfill-bulk').click();
   assert.equal(f.get('epub-backfill-retry').disabled,true);
   assert.equal(f.applied.length,3);
+ }finally{f.restore();}
+});
+
+test('Owner can pause repair between saved EPUB files and resume without processing duplicates',async()=>{
+ const f=fixture(12,{pauseAfterFirst:true});
+ try{
+  const pause=f.get('epub-backfill-pause');
+  assert.equal(pause.disabled,true);
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,1);
+  assert.match(f.get('epub-backfill-status').textContent,/Paused safely/);
+  assert.equal(pause.disabled,true);
+  assert.equal(f.get('epub-backfill-bulk').disabled,false);
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,12);
+  assert.equal(new Set(f.applied).size,12);
+  assert.equal(f.get('epub-backfill-bulk').disabled,true);
+  assert.equal(pause.disabled,true);
  }finally{f.restore();}
 });
