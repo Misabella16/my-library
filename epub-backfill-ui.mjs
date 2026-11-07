@@ -69,21 +69,28 @@ export function initEpubBackfill(api){
     const page=await api('/api/epubs/backfill/preview?'+params);
     if(!Array.isArray(page.files))throw Error('Incomplete EPUB metadata page');
     for(const item of page.files){
-     checked++;
-     if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing){unchanged++;continue;}
-     try{
-      const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
-       file_id:item.file_id,expected_updated_at:item.expected_updated_at
-      }});
-      if(outcome.status==='applied'){
-       changes.push(outcome.change_id);applied++;
-      }else unchanged++;
-     }catch(error){
-      failed++;
-      const code=error?.payload?.code;
-      if(['database_read_quota','database_write_quota',
-       'database_storage_limit','database_limit_reached'].includes(code))throw error;
+     // Commit the cursor only AFTER handling an item. If Cloudflare reaches
+     // its daily quota halfway through a page, the failed item must be first
+     // in the next click, not silently skipped with the rest of that page.
+     if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing){
+      unchanged++;
+     }else{
+      try{
+       const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
+        file_id:item.file_id,expected_updated_at:item.expected_updated_at
+       }});
+       if(outcome.status==='applied'){
+        changes.push(outcome.change_id);applied++;
+       }else unchanged++;
+      }catch(error){
+       failed++;
+       const code=error?.payload?.code;
+       if(['database_read_quota','database_write_quota',
+        'database_storage_limit','database_limit_reached'].includes(code))throw error;
+      }
      }
+     checked++;
+     bulkCursor=item.file_id;
     }
     status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
      failed+' need review. Changes are logged for Undo.';
@@ -91,8 +98,7 @@ export function initEpubBackfill(api){
      bulkFinished=true;
      break;
     }
-    after=page.next_cursor;
-    bulkCursor=after;
+    after=bulkCursor;
    }
    status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
     unchanged+' unchanged · '+failed+' need refresh or review.'+
