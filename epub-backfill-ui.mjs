@@ -25,9 +25,10 @@ export function initEpubBackfill(api){
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
  let bulkCursor='',bulkFinished=false;
  let reportRows=[];
+ let healthCursor='',healthFinished=false,healthScanned=0;
  const update=()=>{
   preview.disabled=busy;
-  health.disabled=busy;
+  health.disabled=busy||healthFinished;
   bulk.disabled=busy||bulkFinished;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
@@ -140,7 +141,7 @@ export function initEpubBackfill(api){
   if(busy)return;
   busy=true;update();
   const inspected=[];
-  let after='',complete=false;
+  let after=healthCursor,complete=false;
   try{
    while(inspected.length<50){
     const params=new URLSearchParams({limit:'10'});
@@ -148,15 +149,20 @@ export function initEpubBackfill(api){
     const page=await api('/api/epubs/backfill/preview?'+params);
     if(!Array.isArray(page.files))throw Error('Incomplete metadata health preview');
     inspected.push(...page.files);
+    if(page.files.length)healthCursor=page.files.at(-1).file_id;
     if(!page.next_cursor||page.files.length===0){complete=true;break;}
     after=page.next_cursor;
    }
    const stats=summarizeEpubHealth(inspected);
-   healthStatus.textContent='Scanned '+stats.checked+' saved EPUBs · '+
+   healthScanned+=stats.checked;
+   healthFinished=complete;
+   health.textContent=complete?'Health scan complete':'Check next 50 EPUBs (no edits)';
+   healthStatus.textContent='Scanned '+stats.checked+' saved EPUBs in this batch ('+
+    healthScanned+' total) · '+
     stats.missingSynopsis+' missing synopses · '+stats.missingSubjects+
     ' with missing subject tags · '+stats.missingCover+
     ' without ebook covers · '+stats.ready+' needing no changes.'+
-    (complete?' End of saved EPUBs reached.':' This was a 50-file sample.');
+    (complete?' End of saved EPUBs reached.':' Click again to inspect the next 50.');
   }catch(error){
    healthStatus.textContent='Health check interrupted after '+inspected.length+
     ' EPUBs: '+(error.message||'Request failed')+'. No metadata was changed.';

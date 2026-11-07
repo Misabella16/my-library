@@ -124,6 +124,12 @@ test('Read-only health check scans at most 50 EPUB records without writes',async
   assert.equal(f.calls.filter(p=>p.startsWith('/api/epubs/backfill/preview?')).length,5);
   assert.equal(f.calls.filter(p=>p==='/api/epubs/backfill/apply').length,0);
   assert.equal(f.get('epub-backfill-bulk').disabled,false);
+  assert.equal(f.get('epub-backfill-health').disabled,false);
+  await f.get('epub-backfill-health').click();
+  assert.match(f.get('epub-backfill-health-status').textContent,/Scanned 5 saved EPUBs in this batch \(55 total\)/);
+  assert.equal(f.get('epub-backfill-health').disabled,true);
+  assert.equal(f.calls.filter(p=>p.startsWith('/api/epubs/backfill/preview?')).length,6);
+  assert.equal(f.calls.filter(p=>p==='/api/epubs/backfill/apply').length,0);
  }finally{f.restore();}
 });
 test('Health summary does not count complete books as needing repair',()=>{
