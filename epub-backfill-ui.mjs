@@ -162,7 +162,8 @@ export function initEpubBackfill(api){
     healthScanned+' total) · '+
     stats.missingSynopsis+' missing synopses · '+stats.missingSubjects+
     ' with missing subject tags · '+stats.missingCover+
-    ' without ebook covers · '+stats.ready+' needing no changes.'+
+    ' needing cover checks · '+stats.unavailableCover+
+    ' confirmed without embedded covers · '+stats.ready+' needing no changes.'+
     (complete?' End of saved EPUBs reached.':' Click again to inspect the next 50.');
   }catch(error){
    healthStatus.textContent='Health check interrupted after '+inspected.length+
