@@ -199,3 +199,76 @@ test('Manual list of shelf spine titles suggests two existing books for one phot
   globalThis.URL.createObjectURL=oldCreate;globalThis.URL.revokeObjectURL=oldRevoke;
  }
 });
+
+test('Shared shelf placement requires review of two exact physical editions and one explicit batch confirmation',async()=>{
+ const priorDocument=globalThis.document,priorBarcode=globalThis.BarcodeDetector;
+ const priorBitmap=globalThis.createImageBitmap,priorConfirm=globalThis.confirm;
+ const oldCreate=globalThis.URL.createObjectURL,oldRevoke=globalThis.URL.revokeObjectURL;
+ const nodes=new Map(names.map(name=>[name,new FakeNode()]));
+ const bookIds=['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
+ const copyIds=['cccccccc-cccc-4ccc-8ccc-cccccccccccc','dddddddd-dddd-4ddd-8ddd-dddddddddddd'];
+ const calls=[];
+ try{
+  globalThis.document={getElementById:id=>nodes.get(id)||null,
+   createElement:()=>new FakeNode()};
+  globalThis.BarcodeDetector=undefined;globalThis.createImageBitmap=undefined;
+  globalThis.URL.createObjectURL=()=> 'blob:shelf-photo';
+  globalThis.URL.revokeObjectURL=()=>{};
+  globalThis.confirm=()=>true;
+  initShelfPhotoAssistant(async (path,options)=>{
+   calls.push({path,options});
+   if(path.startsWith('/api/books?')){
+    const q=new URL('https://library.example'+path).searchParams.get('q');
+    const n=q==='Babel'?0:1;
+    return {books:[{id:bookIds[n],title:q,author:'Writer'}]};
+   }
+   if(path.startsWith('/api/shelf-photos/book/')){
+    const n=path.includes(bookIds[0])?0:1;
+    return {copies:[{copy_id:copyIds[n],edition_id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+     edition_name:n?'Standard':'FairyLoot Exclusive',vendor:n?'':'FairyLoot',
+     is_special:n?0:1,room:n?'':'Bedroom',bookcase:n?'':'Case 1',
+     shelf:n?'':'Old shelf',shelf_position:n?'Right':'Left',
+     updated_at:'2026-11-01T00:00:00.000Z'}]};
+   }
+   if(path==='/api/shelf-photos/locations/batch')return {
+    status:'updated',updated:[{copy_id:copyIds[0]},{copy_id:copyIds[1]}]};
+   throw Error('Unexpected endpoint '+path);
+  });
+  nodes.get('photo-files').files=[new File(['image'],'shelf.jpg',{type:'image/jpeg'})];
+  await nodes.get('photo-files').dispatch('change');
+  nodes.get('photo-title-lines').value='Babel\nPiranesi';
+  await nodes.get('photo-match-titles').dispatch('click');
+  for(const group of nodes.get('photo-title-suggestions').children){
+   const suggestion=group.children[1];
+   await suggestion.children.find(x=>x.textContent==='Add reviewed book to shelf photo').dispatch('click');
+  }
+  const review=nodes.get('photo-match-results').afterNodes[0];
+  const batch=review.children.find(x=>x.className==='photo-batch-location');
+  assert.ok(batch);
+  const select=batch.children[2],prepare=batch.children[3],results=batch.children[4];
+  select.value='1';
+  assert.equal(calls.filter(x=>x.path==='/api/shelf-photos/locations/batch').length,0);
+  await prepare.dispatch('click');
+  assert.equal(results.children.length,3);
+  for(let n=0;n<2;n++)results.children[n].children[1].value=copyIds[n];
+  const form=results.children[2];
+  for(const [i,value] of ['Study','Case B','Shelf 4'].entries())
+   form.children[i].children[0].value=value;
+  await form.children[3].dispatch('click');
+  const updates=calls.filter(x=>x.path==='/api/shelf-photos/locations/batch');
+  assert.equal(updates.length,1);
+  assert.equal(updates[0].options.method,'POST');
+  assert.equal(updates[0].options.data.confirm,true);
+  assert.equal(updates[0].options.data.copies.length,2);
+  assert.deepEqual(updates[0].options.data.location,
+   {room:'Study',bookcase:'Case B',shelf:'Shelf 4'});
+  assert.equal(updates[0].options.data.copies[0].copy_id,copyIds[0]);
+  assert.equal(updates[0].options.data.copies[1].copy_id,copyIds[1]);
+  assert.equal(updates[0].options.data.copies[0].replace_existing,true);
+  assert.equal(calls.some(x=>x.path.includes('/claim')),false);
+ }finally{
+  globalThis.document=priorDocument;globalThis.BarcodeDetector=priorBarcode;
+  globalThis.createImageBitmap=priorBitmap;globalThis.confirm=priorConfirm;
+  globalThis.URL.createObjectURL=oldCreate;globalThis.URL.revokeObjectURL=oldRevoke;
+ }
+});
