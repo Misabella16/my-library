@@ -13,6 +13,7 @@ export function initEpubBackfill(api){
  if(!root)return;
  const preview=root.querySelector('#epub-backfill-preview');
  const health=root.querySelector('#epub-backfill-health');
+ const reset=root.querySelector('#epub-backfill-reset');
  const healthExport=root.querySelector('#epub-health-report');
  const healthStatus=root.querySelector('#epub-backfill-health-status');
  const apply=root.querySelector('#epub-backfill-apply');
@@ -31,6 +32,7 @@ export function initEpubBackfill(api){
  const update=()=>{
   preview.disabled=busy;
   health.disabled=busy||healthFinished;
+  if(reset)reset.disabled=busy;
   if(healthExport)healthExport.disabled=busy||healthRows.length===0;
   bulk.disabled=busy||bulkFinished;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
@@ -181,6 +183,16 @@ export function initEpubBackfill(api){
    healthStatus.textContent='Health check interrupted after '+inspected.length+
     ' EPUBs: '+(error.message||'Request failed')+'. No metadata was changed.';
   }finally{busy=false;update();}
+ });
+ reset?.addEventListener('click',()=>{
+  if(busy)return;
+  healthCursor='';healthFinished=false;healthScanned=0;healthRows=[];
+  bulkCursor='';bulkFinished=false;
+  items=[];cursor='';nextCursor=null;
+  results.replaceChildren();
+  healthStatus.textContent='Health scan reset. Ready to check saved EPUBs from the beginning.';
+  status.textContent='Repair scan reset. Saved changes and Undo history remain unchanged.';
+  update();
  });
  preview.addEventListener('click',()=>load(''));
  next.addEventListener('click',()=>{if(nextCursor)load(nextCursor);});
