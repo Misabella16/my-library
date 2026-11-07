@@ -136,7 +136,11 @@ function editionBlock(e){
       '<p class="muted">Upload an exact cover from your collection. For collector editions, research the specific vendor and ISBN first; results are not verified and nothing is saved automatically.</p>'+
       '<div class="edition-cover-search">'+editionCoverSearches({title:state.detail?.title,author:state.detail?.author,vendor:e.vendor,edition_name:e.edition_name,isbn:e.isbn}).map(item=>'<a class="btn mini subtle" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" href="'+safe(item.url)+'">'+safe(item.label)+'</a>').join('')+'</div>'+
       (thumbnails?'<div class="cover-thumbs">'+thumbnails+'</div>':'<p class="muted">No cover images yet.</p>')+
-      '<label class="upload">Upload cover (JPG, PNG or WebP; max 8 MB)<input type="file" accept="image/jpeg,image/png,image/webp" data-upload-cover="'+safe(e.id)+'"></label></details>'+
+      '<label class="upload">Upload cover (JPG, PNG or WebP; max 8 MB)<input type="file" accept="image/jpeg,image/png,image/webp" data-upload-cover="'+safe(e.id)+'"></label>'+
+      (e.format==='ebook'&&!e.is_special&&!(e.images||[]).length?
+       '<div class="cover-lookup"><button class="btn mini subtle" type="button" data-lookup-isbn-cover="'+safe(e.id)+'">Find missing cover by ISBN</button>'+
+       '<div class="isbn-cover-result" data-isbn-cover-result="'+safe(e.id)+'" aria-live="polite"></div></div>':'')+
+      '</details>'+
     '<h4>My copies</h4>'+(copyRows||'<p class="muted">No owned copies recorded. Add one above.</p>')+
     '</details></div>';
 }
@@ -307,6 +311,42 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }
     if(btn.dataset.displayCover){
       await perform(btn,async()=>{await api('/api/editions/'+btn.dataset.editionId+'/display-cover',{method:'PATCH',data:{image_id:btn.dataset.displayCover}});await selectBook(state.selectedId)},'Display cover updated');
+    }
+    if(btn.dataset.lookupIsbnCover){
+      const editionId=safeId(btn.dataset.lookupIsbnCover);
+      if(!editionId)return;
+      const area=$('[data-isbn-cover-result="'+editionId+'"]');
+      if(!area)return;
+      btn.disabled=true;
+      area.replaceChildren();
+      try{
+        const result=await api('/api/ebook-covers/'+editionId+'/preview');
+        const heading=document.createElement('p');
+        heading.textContent='Open Library ISBN '+result.isbn+'. Check that this is the correct edition before saving.';
+        const img=document.createElement('img');
+        // Fixed trusted source returned by the server, never caller text.
+        img.src=result.cover_url;
+        img.alt='Possible ebook cover for '+result.title;
+        img.loading='lazy';img.width=130;
+        img.referrerPolicy='no-referrer';
+        const confirmButton=document.createElement('button');
+        confirmButton.type='button';confirmButton.className='btn mini';
+        confirmButton.textContent='Save this cover to my ebook edition';
+        confirmButton.addEventListener('click',async()=>{
+          confirmButton.disabled=true;
+          try{
+            await api('/api/ebook-covers/'+editionId+'/save',{method:'POST',
+              data:{isbn:result.isbn,confirm:true}});
+            await selectBook(state.selectedId);
+            showMessage('ISBN cover saved privately. You can select a different cover later.');
+          }catch(error){
+            showMessage(error.message||'Could not save cover',true);
+            confirmButton.disabled=false;
+          }
+        });
+        area.append(heading,img,confirmButton);
+      }catch(error){area.textContent=error.message||'No reliable ISBN cover found';}
+      finally{btn.disabled=false;}
     }
   });
   $('#book-detail').addEventListener('change',async e=>{
