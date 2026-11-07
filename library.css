@@ -20,3 +20,11 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
 .hero-art .site-custom-hero{width:100%;height:100%;max-height:330px;object-fit:contain;display:block}
 .hero-art .antique-frame[hidden]{display:none}
 @media(max-width:750px){.site-studio-images{grid-template-columns:1fr}}
+
+/* Local shelf cover crop and private-artwork candidate cards. */
+.photo-cover-canvas{display:block;max-width:100%;width:auto;height:auto;touch-action:none;border-radius:12px;border:1px solid var(--line);background:var(--paper);cursor:crosshair}
+.photo-cover-candidate{display:flex;gap:14px;align-items:flex-start;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px}
+.photo-cover-candidate>img{width:84px;height:116px;object-fit:contain;flex-shrink:0}
+.photo-cover-candidate>div{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.photo-cover-candidate>div strong,.photo-cover-candidate>div p{flex-basis:100%;margin:0}
+@media(max-width:600px){.photo-cover-candidate{gap:9px}.photo-cover-candidate>img{width:65px;height:96px}}
