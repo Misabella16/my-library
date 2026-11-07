@@ -644,3 +644,43 @@ test('Undo refuses to remove EPUB cover once owner marks it verified',async()=>{
   assert.equal(f.objects.size,2,'Verified cover and original EPUB remain in private R2');
  }finally{f.sqlite.close();}
 });
+
+test('Recovering ebook cover keeps an existing manually chosen jacket as display cover',async()=>{
+ const f=fixture();
+ try{
+  const bytes=epubArchiveWithCover();
+  const sha=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const jacketId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(editionId,bookId,'Standard');
+  f.sqlite.prepare("INSERT INTO edition_images(id,edition_id,origin,image_url,role,display_cover) "+
+   "VALUES (?,?,'manual','https://example.com/jacket.png','dust_jacket',1)")
+   .run(jacketId,editionId);
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(fileId,sha,'book.epub','epubs/private/book.epub','{}',bookId,editionId);
+  await f.env.BOOK_FILES.put('epubs/private/book.epub',bytes);
+  const stamp=f.sqlite.prepare('SELECT updated_at FROM books WHERE id=?').get(bookId).updated_at;
+  const response=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/apply',{method:'POST',
+    body:JSON.stringify({file_id:fileId,expected_updated_at:stamp})}),
+   f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(response.status,200,await response.clone().text());
+  const data=await response.json();
+  assert.equal(data.cover_added,true);
+  const images=f.sqlite.prepare('SELECT id,role,display_cover FROM edition_images ORDER BY role').all();
+  assert.equal(images.length,2);
+  assert.equal(images.find(x=>x.id===jacketId).display_cover,1);
+  assert.equal(images.find(x=>x.role==='cover').display_cover,0);
+  const undo=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/undo',{method:'POST',
+    body:JSON.stringify({change_id:data.change_id})}),f.db,'/api/epubs/backfill/undo',f.env);
+  assert.equal(undo.status,200,await undo.clone().text());
+  const surviving=f.sqlite.prepare('SELECT id,display_cover FROM edition_images').all();
+  assert.deepEqual(surviving.map(row=>({...row})),[{id:jacketId,display_cover:1}]);
+ }finally{f.sqlite.close();}
+});
