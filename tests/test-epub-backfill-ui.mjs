@@ -1,3 +1,4 @@
+import {summarizeEpubHealth} from '../epub-backfill-health.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initEpubBackfill} from '../epub-backfill-ui.mjs';
@@ -12,7 +13,8 @@ class FakeNode {
 function fixture(rows=55,{failOnceAt=-1}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
- 'epub-backfill-history','epub-backfill-history-list'];
+ 'epub-backfill-history','epub-backfill-history-list',
+ 'epub-backfill-health','epub-backfill-health-status'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -111,4 +113,23 @@ test('Quota interruption halfway through a page resumes at failed EPUB rather th
   assert.equal(f.applied[6],String(6).padStart(36,'0'));
   assert.equal(f.get('epub-backfill-bulk').disabled,true);
  }finally{f.restore();}
+});
+
+test('Read-only health check scans at most 50 EPUB records without writes',async()=>{
+ const f=fixture(55);
+ try{
+  await f.get('epub-backfill-health').click();
+  assert.match(f.get('epub-backfill-health-status').textContent,/Scanned 50 saved EPUBs/);
+  assert.match(f.get('epub-backfill-health-status').textContent,/50 with missing subject tags/);
+  assert.equal(f.calls.filter(p=>p.startsWith('/api/epubs/backfill/preview?')).length,5);
+  assert.equal(f.calls.filter(p=>p==='/api/epubs/backfill/apply').length,0);
+  assert.equal(f.get('epub-backfill-bulk').disabled,false);
+ }finally{f.restore();}
+});
+test('Health summary does not count complete books as needing repair',()=>{
+ assert.deepEqual(summarizeEpubHealth([
+  {synopsis:'',subjects:[],cover_missing:false},
+  {synopsis:'Missing',subjects:['Fantasy'],cover_missing:true},
+  {synopsis:'',subjects:[],cover_missing:true}
+ ]),{checked:3,missingSynopsis:1,missingCover:2,missingSubjects:1,ready:1});
 });
