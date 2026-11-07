@@ -128,3 +128,19 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
  .visual-shelf-hover{max-height:260px}
  .visual-shelf-layout-editor{align-items:stretch}
 }
+
+/* Batch physical-shelf tools use only already paged book records. */
+.visual-shelf-batch-tools{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:14px 0}
+.visual-shelf-batch-tools label{display:flex;flex-direction:column;gap:5px;font-size:12px;min-width:145px}
+.visual-shelf-batch-tools label:first-child{min-width:min(280px,100%);flex:1}
+.visual-shelf-batch-tools input[type=search],.visual-shelf-batch-tools select{
+ padding:8px 10px;max-width:100%;min-height:37px;border-radius:7px;border:1px solid #b7ab9c;
+ background:var(--paper);color:var(--ink)}
+.visual-shelf-batch-tools input[type=checkbox]{width:18px;height:18px}
+.visual-shelf-batch-tools p{flex-basis:100%;margin:0}
+.visual-shelf-book[hidden],.visual-shelf-books.spines-view .visual-shelf-book[hidden]{display:none!important}
+.visual-shelf-book.dragging{opacity:.52;outline:2px dashed #ac8262}
+.visual-shelf-books.spines-view .visual-shelf-book{cursor:grab}
+.visual-shelf-books.spines-view .visual-shelf-book.dragging{cursor:grabbing}
+@media(max-width:620px){.visual-shelf-batch-tools{align-items:stretch}
+ .visual-shelf-batch-tools label{flex:1 1 100%}}
