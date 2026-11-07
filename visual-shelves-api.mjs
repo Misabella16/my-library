@@ -55,7 +55,10 @@ export async function handleVisualShelvesApi(request,db,path){
  const records=await list(db,
   'SELECT c.id AS copy_id,c.shelf_position,e.id AS edition_id,'+
   'e.edition_name,e.format,e.vendor,e.is_special,b.id AS book_id,'+
-  'b.title,b.author,'+
+  'b.title,b.author,substr(b.synopsis,1,480) AS synopsis_preview,'+
+  'COALESCE((SELECT json_group_array(label) FROM ('+
+  'SELECT t.label AS label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id '+
+  'WHERE bt.book_id=b.id ORDER BY t.label LIMIT 12)),\'[]\') AS tags_json,'+
   '(SELECT i.id FROM edition_images i WHERE i.edition_id=e.id '+
   'AND i.display_cover=1 LIMIT 1) AS cover_image_id'+
   BASE+'AND c.room=? AND c.bookcase=? AND c.shelf=? AND c.id>? '+
