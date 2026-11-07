@@ -42,6 +42,25 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    "ORDER BY l.created_at DESC LIMIT 20");
   return json({changes:rows});
  }
+ const singlePrefix='/api/epubs/backfill/file/';
+ if(path.startsWith(singlePrefix)&&method==='GET'){
+  const fileId=path.slice(singlePrefix.length);
+  if(!validId(fileId))return fail('Invalid EPUB file ID');
+  const row=await linkedFile(db,fileId);
+  if(!row)return fail('Private EPUB not found',404);
+  const meta=unpack(row.metadata_json);
+  const saved=await many(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',[row.book_id]);
+  const present=new Set(saved.map(tag=>tag.label.toLocaleLowerCase()));
+  const cover=await one(db,"SELECT COUNT(*) AS n FROM edition_images WHERE edition_id=? AND role='cover'",[row.edition_id]);
+  const standard=row.edition_format==='ebook'&&row.edition_special===0;
+  const checked=coverAlreadyChecked(meta.coverCheckedVersion,meta.coverCheckedHash,row.sha256);
+  return json({file_id:row.id,book_id:row.book_id,title:row.title,
+   expected_updated_at:row.updated_at,
+   synopsis:row.synopsis?.trim()?'':meta.synopsis,
+   subjects:meta.tags.filter(label=>!present.has(label.toLocaleLowerCase())),
+   cover_missing:!cover?.n&&standard&&!checked,
+   cover_unavailable:!cover?.n&&standard&&checked});
+ }
  if(path==='/api/epubs/backfill/preview'&&method==='GET'){
   const url=new URL(request.url);
   const after=url.searchParams.get('after')||'';
