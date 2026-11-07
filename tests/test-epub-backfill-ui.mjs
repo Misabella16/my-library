@@ -15,7 +15,7 @@ function fixture(rows=55,{failOnceAt=-1}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list',
- 'epub-backfill-health','epub-backfill-health-status','epub-health-report'];
+ 'epub-backfill-health','epub-backfill-health-status','epub-health-report','epub-backfill-reset'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -165,4 +165,23 @@ test('Health CSV summarizes missing fields and neutralizes spreadsheet formulas'
  assert.match(csv,/"false","false","false","false"/);
  assert.equal(csv.includes('private_notes'),false);
  assert.equal(csv.includes('private_object_key'),false);
+});
+
+test('Restart allows complete EPUB health and repair scans to run again safely',async()=>{
+ const f=fixture(2);
+ try{
+  await f.get('epub-backfill-health').click();
+  assert.equal(f.get('epub-backfill-health').disabled,true);
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.get('epub-backfill-bulk').disabled,true);
+  const first=f.applied.length;
+  assert.equal(first,2);
+  await f.get('epub-backfill-reset').click();
+  assert.equal(f.get('epub-backfill-health').disabled,false);
+  assert.equal(f.get('epub-backfill-bulk').disabled,false);
+  assert.match(f.get('epub-backfill-status').textContent,/Saved changes and Undo history remain unchanged/);
+  await f.get('epub-backfill-health').click();
+  assert.equal(f.get('epub-backfill-health').disabled,true);
+  assert.equal(f.applied.length,first,'Read-only rescan must not apply repairs');
+ }finally{f.restore();}
 });
