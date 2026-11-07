@@ -143,7 +143,7 @@ test('Health summary does not count complete books as needing repair',()=>{
   {synopsis:'',subjects:[],cover_missing:false},
   {synopsis:'Missing',subjects:['Fantasy'],cover_missing:true},
   {synopsis:'',subjects:[],cover_missing:true}
- ]),{checked:3,missingSynopsis:1,missingCover:2,missingSubjects:1,ready:1});
+ ]),{checked:3,missingSynopsis:1,missingCover:2,unavailableCover:0,missingSubjects:1,ready:1});
 });
 
 test('Health export captures all inspected records and never writes metadata',async()=>{

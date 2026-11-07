@@ -10,6 +10,8 @@ const one=(db,sql,args=[])=>db.prepare(sql).bind(...args).first();
 const many=async(db,sql,args=[])=>((await db.prepare(sql).bind(...args).all()).results||[]);
 const clean=(x,max)=>typeof x==='string'?x.trim().slice(0,max):'';
 const validId=x=>typeof x==='string'&&/^[0-9a-f-]{36}$/i.test(x);
+const COVER_CHECK_VERSION=1;
+const coverAlreadyChecked=(version,hash,sha)=>version===COVER_CHECK_VERSION&&hash===sha;
 function unpack(value){
  let metadata={};
  try{metadata=JSON.parse(value||'{}');}catch{}
@@ -18,7 +20,8 @@ function unpack(value){
  const raw=Array.isArray(metadata.subjects)?metadata.subjects.slice(0,8):[];
  const tags=[...new Map(raw.filter(x=>typeof x==='string').map(x=>clean(x,90))
   .filter(Boolean).map(x=>[x.toLocaleLowerCase(),x])).values()];
- return {synopsis,tags};
+ return {synopsis,tags,coverCheckedVersion:metadata.cover_repair_checked_version,
+  coverCheckedHash:metadata.cover_repair_checked_sha256};
 }
 async function linkedFile(db,fileId){
  return one(db,'SELECT f.id,f.book_id,f.edition_id,f.sha256,f.original_filename,'+
@@ -45,7 +48,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   if(after&&!validId(after))return fail('Invalid EPUB cursor');
   const requested=Number(url.searchParams.get('limit')||10);
   const limit=Number.isInteger(requested)?Math.max(1,Math.min(10,requested)):10;
-  const rows=await many(db,'SELECT f.id,f.book_id,f.metadata_json,b.title,b.synopsis,b.updated_at, '+
+  const rows=await many(db,'SELECT f.id,f.book_id,f.sha256,f.metadata_json,b.title,b.synopsis,b.updated_at, '+
    "(SELECT COUNT(*) FROM edition_images im WHERE im.edition_id=f.edition_id AND im.role='cover') AS cover_count, "+
    "e.format AS edition_format,e.is_special AS edition_special "+
    'FROM epub_files f JOIN books b ON b.id=f.book_id '+
@@ -72,7 +75,11 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
     synopsis:row.synopsis?.trim()?'':extracted.synopsis,
     subjects:extracted.tags.filter(tag=>!current.has(tag.toLocaleLowerCase())),
     cover_missing:!row.cover_count&&
-     row.edition_format==='ebook'&&row.edition_special===0};
+     row.edition_format==='ebook'&&row.edition_special===0&&
+     !coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256),
+    cover_unavailable:!row.cover_count&&
+     row.edition_format==='ebook'&&row.edition_special===0&&
+     coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256)};
   }),next_cursor:rows.length>limit?page[page.length-1].id:null});
  }
  if(path==='/api/epubs/backfill/apply'&&method==='POST'){
@@ -84,12 +91,12 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   if(!row)return fail('EPUB is no longer linked to an active book',404);
   const previous=await one(db,"SELECT id FROM change_log WHERE action='epub_backfill' "+
    "AND entity_type='epub_files' AND entity_id=? AND undone_at IS NULL LIMIT 1",[row.id]);
-  // No-op even if a previous successful repair updated the book timestamp.
-  // This check must come before stale-preview detection for repeat scans.
+  // A previous successful backfill is idempotent, even if it updated
+  // book.updated_at. Preserve the current main-branch contract.
   if(previous)return json({status:'already_processed',file_id:row.id});
   if(row.updated_at!==data.expected_updated_at)
    return fail('Book changed since preview. Refresh the repair preview.',409);
-  const {synopsis,tags}=unpack(row.metadata_json);
+  const {synopsis,tags,coverCheckedVersion,coverCheckedHash}=unpack(row.metadata_json);
   const description=!row.synopsis?.trim()?synopsis:'';
   const existing=await many(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',[row.book_id]);
   const present=new Set(existing.map(tag=>tag.label.toLocaleLowerCase()));
@@ -98,7 +105,9 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    "SELECT COALESCE(SUM(CASE WHEN role='cover' THEN 1 ELSE 0 END),0) AS n, "+
    "COALESCE(SUM(CASE WHEN display_cover=1 THEN 1 ELSE 0 END),0) AS selected "+
    "FROM edition_images WHERE edition_id=?",[row.edition_id]);
-  const needsCover=coverCount?.n===0&&row.edition_format==='ebook'&&row.edition_special===0;
+  const needsCover=coverCount?.n===0&&row.edition_format==='ebook'&&row.edition_special===0&&
+    !coverAlreadyChecked(coverCheckedVersion,coverCheckedHash,row.sha256);
+  let checkedNoCover=false;
   let coverInfo=null,coverKey=null;
   if(needsCover&&env.BOOK_FILES){
    // Download only one bounded owner-private EPUB when a cover is missing.
@@ -117,20 +126,33 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
       ?row.original_filename:'stored.epub',{type:'application/epub+zip'});
      const inspected=await inspectEpub(file);
      if(inspected.sha256!==row.sha256)return fail('Saved EPUB integrity check failed',409);
+     checkedNoCover=true;
      if(inspected.cover){
       const imageBytes=new Uint8Array(await inspected.cover.arrayBuffer());
       const mime=inspected.coverType;
       if(imageBytes.length>0&&imageBytes.length<=5*1024*1024&&
        ['image/png','image/jpeg','image/webp'].includes(mime))
        coverInfo={bytes:imageBytes,mime};
+       checkedNoCover=false;
      }
     }
    }
   }
-  if(!description&&!additions.length&&!coverInfo)
-   return json({status:'no_changes',file_id:row.id});
+  // Cache only a verified negative cover inspection. Versioned metadata
+  // permits a future improved extractor to retry without replacing books.
+  const checkedCoverStmt=()=>db.prepare(
+   "UPDATE epub_files SET metadata_json=json_set("+
+   " CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,"+
+   " '$.cover_repair_checked_version',?,"+
+   " '$.cover_repair_checked_sha256',?) WHERE id=? AND sha256=?")
+   .bind(COVER_CHECK_VERSION,row.sha256,row.id,row.sha256);
+  if(!description&&!additions.length&&!coverInfo){
+   if(checkedNoCover)await checkedCoverStmt().run();
+   return json({status:'no_changes',file_id:row.id,cover_checked:checkedNoCover});
+  }
   const now=new Date().toISOString(),batchId=crypto.randomUUID(),changeId=crypto.randomUUID();
   const stmts=[];
+  if(checkedNoCover)stmts.push(checkedCoverStmt());
   let coverId=null;
   const coverDisplay=coverCount?.selected?0:1;
   if(coverInfo){
