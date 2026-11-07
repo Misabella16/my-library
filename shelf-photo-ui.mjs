@@ -55,13 +55,21 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  const saveReview=node('button','Save reviewed matches privately','btn mini');
  const loadReview=node('button','View saved shelf review','btn subtle mini');
  const undoSaved=node('button','Undo last saved review','btn subtle mini');
+ const batchSection=node('section',undefined,'photo-batch-location');
+ const batchHeading=node('h3','Place multiple books on one shelf');
+ const batchDescription=node('p','Choose a shelf photograph, review the exact physical copy of each matched book, then enter one shared room, bookcase and shelf. No book or copy is created automatically.','muted');
+ const batchPhotoSelect=node('select');
+ const batchPrepare=node('button','Review matched physical copies','btn subtle mini');
+ batchPrepare.type='button';
+ const batchResults=node('div',undefined,'photo-batch-results');
+ batchSection.append(batchHeading,batchDescription,batchPhotoSelect,batchPrepare,batchResults);
  const locationHistoryButton=node('button','Recent shelf moves & Undo','btn subtle mini');
  locationHistoryButton.type='button';
  const locationHistoryView=node('div',undefined,'photo-location-history');
  const savedView=node('div',undefined,'photo-saved-review');
  saveReview.type=loadReview.type=undoSaved.type='button';
  reviewArea.append(reviewHeading,reviewText,reviewList,exportButton,
-  saveReview,loadReview,undoSaved,savedView,locationHistoryButton,locationHistoryView);
+  saveReview,loadReview,undoSaved,savedView,batchSection,locationHistoryButton,locationHistoryView);
  results.after?.(reviewArea);
  let savedRevision=null;
  const showSaved=record=>{
@@ -163,7 +171,123 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   document.body.append(anchor);anchor.click();anchor.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  });
+ // Batch review is limited to one photograph and one explicitly selected
+ // owned physical copy per book. A review-only match never claims ownership.
+ let batchToken=0;
+ function resetBatch(){
+  batchToken++;
+  batchResults.replaceChildren();
+  batchPhotoSelect.replaceChildren();
+  for(const photo of review.photos){
+   const option=node('option',photo.name);
+   option.value=photo.id;batchPhotoSelect.append(option);
+  }
+  batchPrepare.disabled=review.photos.length===0;
+ }
+ batchPrepare.addEventListener('click',async()=>{
+  const token=++batchToken;
+  batchResults.replaceChildren();
+  const photoId=batchPhotoSelect.value||review.photos[0]?.id;
+  const books=photoReviewRows(review).filter(x=>x.photoId===photoId&&x.bookId);
+  if(books.length<2){
+   batchResults.append(node('p','Review at least two different books in this photo before assigning a shared shelf.','muted'));
+   return;
+  }
+  if(books.length>20){
+   batchResults.append(node('p','Select up to 20 books per shared shelf placement.','muted'));
+   return;
+  }
+  batchPrepare.disabled=true;
+  const reviewed=[];
+  try{
+   for(const book of books){
+    const response=await api('/api/shelf-photos/book/'+encodeURIComponent(book.bookId)+'/physical-copies');
+    if(token!==batchToken)return;
+    const options=Array.isArray(response.copies)?response.copies:[];
+    const row=node('article',undefined,'photo-location-copy');
+    row.append(node('strong',book.title+' · Choose exact physical edition'));
+    const selection=node('select');
+    const placeholder=node('option','Do not include this book');
+    placeholder.value='';selection.append(placeholder);
+    for(const copy of options){
+     const option=node('option',(copy.edition_name||'Edition')+
+      (copy.vendor?' · '+copy.vendor:'')+
+      (copy.is_special?' · Special edition':'')+
+      ' · '+[copy.room,copy.bookcase,copy.shelf,copy.shelf_position].filter(Boolean).join(' / '));
+     option.value=copy.copy_id;
+     selection.append(option);
+    }
+    row.append(selection);
+    if(response.truncated)row.append(node('p','This book has more than 20 copies. Open its detail page to choose a copy not listed.','muted'));
+    if(!options.length)row.append(node('p','No owned physical edition recorded. Open the book to add the correct copy first.','muted'));
+    batchResults.append(row);
+    reviewed.push({book,options,selection});
+   }
+   if(token!==batchToken)return;
+   const locationInputs={};
+   const form=node('div',undefined,'photo-batch-location-form');
+   for(const [field,label] of [['room','Room'],['bookcase','Bookcase'],['shelf','Shelf']]){
+    const wrapper=node('label',label+' (required)');
+    const input=node('input');input.type='text';input.maxLength=150;
+    input.placeholder=label;locationInputs[field]=input;
+    wrapper.append(input);form.append(wrapper);
+   }
+   const confirm=node('button','Confirm shared shelf for selected copies','btn mini');
+   confirm.type='button';
+   confirm.addEventListener('click',async()=>{
+    if(token!==batchToken)return;
+    const chosen=reviewed.map(item=>({
+     ...item,copy:item.options.find(x=>x.copy_id===item.selection.value)
+    })).filter(x=>x.copy);
+    if(chosen.length<2){
+     tell('Select an exact physical copy for at least two different books.');return;
+    }
+    const location=Object.fromEntries(Object.entries(locationInputs).map(([key,input])=>[key,input.value.trim()]));
+    if(Object.values(location).some(value=>!value)){
+     tell('Enter a room, bookcase and shelf to place these books together.');return;
+    }
+    const copies=chosen.map(({copy})=>({
+     copy_id:copy.copy_id,expected_updated_at:copy.updated_at,
+     shelf_position:copy.shelf_position||'',replace_existing:false
+    }));
+    const changed=chosen.filter(({copy})=>
+     ['room','bookcase','shelf'].some(field=>copy[field]&&copy[field]!==location[field]));
+    if(changed.length){
+     const details=changed.map(({book,copy})=>book.title+' ('+
+      (copy.edition_name||'edition')+')').join(', ');
+     if(!globalThis.confirm?.('Replace existing shelf locations for '+details+'?'))return;
+     for(const item of copies)item.replace_existing=true;
+    }
+    if(!globalThis.confirm?.('Move '+copies.length+
+     ' confirmed physical copies to '+location.room+' / '+location.bookcase+' / '+location.shelf+
+     '? Existing books, covers and copy identities remain unchanged.'))return;
+    confirm.disabled=true;
+    try{
+     const outcome=await api('/api/shelf-photos/locations/batch',{
+      method:'POST',data:{location,copies,confirm:true}});
+     if(outcome.status==='updated'){
+      batchResults.replaceChildren(node('p',
+       'Placed '+outcome.updated.length+' physical copies on the shared shelf. Open Recent shelf moves & Undo to reverse individual changes.','muted'));
+      tell('Shared shelf location saved for the reviewed editions only.');
+     }else{
+      tell('All selected physical copies were already in the requested shelf.');
+      confirm.disabled=false;
+     }
+    }catch(error){
+     tell('Shared shelf not changed: '+(error.message||'Request failed'));
+     confirm.disabled=false;
+    }
+   });
+   form.append(confirm);batchResults.append(form);
+  }catch(error){
+   batchResults.append(node('p','Could not prepare all physical copies: '+
+    (error.message||'Request failed'),'muted'));
+  }finally{batchPrepare.disabled=false;}
+ });
  function renderReview(){
+  const previous=batchPhotoSelect.value;
+  resetBatch();
+  if([...batchPhotoSelect.children].some(x=>x.value===previous))batchPhotoSelect.value=previous;
   reviewList.replaceChildren();
   for(const row of photoReviewRows(review)){
    const entry=node('article',undefined,'photo-match-result');
