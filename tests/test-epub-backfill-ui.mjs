@@ -1,3 +1,4 @@
+import {readEpubScanProgress,saveEpubScanProgress,clearEpubScanProgress} from '../epub-backfill-checkpoint.mjs';
 import {epubHealthCsv} from '../epub-health-report.mjs';
 import {summarizeEpubHealth} from '../epub-backfill-health.mjs';
 import test from 'node:test';
@@ -11,11 +12,11 @@ class FakeNode {
  append(...nodes){this.children.push(...nodes);}
  replaceChildren(...nodes){this.children=[...nodes];}
 }
-function fixture(rows=55,{failOnceAt=-1}={}){
+function fixture(rows=55,{failOnceAt=-1,failKind='quota'}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list',
- 'epub-backfill-health','epub-backfill-health-status','epub-health-report','epub-backfill-reset'];
+ 'epub-backfill-health','epub-backfill-health-status','epub-health-report','epub-backfill-reset','epub-backfill-retry'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -44,8 +45,8 @@ function fixture(rows=55,{failOnceAt=-1}={}){
    const index=records.findIndex(item=>item.file_id===opts.data.file_id);
    if(!failedQuota&&index===failOnceAt){
     failedQuota=true;
-    const error=new Error('D1 quota exhausted');
-    error.payload={code:'database_read_quota'};
+    const error=new Error(failKind==='quota'?'D1 quota exhausted':'Transient repair error');
+    if(failKind==='quota')error.payload={code:'database_read_quota'};
     throw error;
    }
    applied.push(opts.data.file_id);
@@ -184,4 +185,68 @@ test('Restart allows complete EPUB health and repair scans to run again safely',
   assert.equal(f.get('epub-backfill-health').disabled,true);
   assert.equal(f.applied.length,first,'Read-only rescan must not apply repairs');
  }finally{f.restore();}
+});
+
+test('Failed EPUB repairs can be retried in a bounded queue without rescan',async()=>{
+ const f=fixture(3,{failOnceAt:1,failKind:'transient'});
+ try{
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,2);
+  assert.equal(f.get('epub-backfill-retry').disabled,false);
+  const reads=f.calls.filter(path=>path.startsWith('/api/epubs/backfill/preview?')).length;
+  await f.get('epub-backfill-retry').click();
+  assert.equal(f.applied.length,3);
+  assert.equal(new Set(f.applied).size,3);
+  assert.equal(f.get('epub-backfill-retry').disabled,true);
+  assert.equal(f.calls.filter(path=>path.startsWith('/api/epubs/backfill/preview?')).length,
+   reads,'Retry must not fetch the whole preview again');
+ }finally{f.restore();}
+});
+test('EPUB scan checkpoints store cursors only and can be cleared without deleting books',()=>{
+ const data=new Map();
+ const storage={
+  getItem:key=>data.get(key)||null,
+  setItem:(key,value)=>data.set(key,value),
+  removeItem:key=>data.delete(key)
+ };
+ saveEpubScanProgress(storage,{bulkCursor:'a'.repeat(36),healthCursor:'b'.repeat(36),
+  bulkFinished:true,healthFinished:false,healthScanned:54,title:'Private Notes',
+  private_object_key:'never-store-this'});
+ assert.deepEqual(readEpubScanProgress(storage),{
+  bulkCursor:'a'.repeat(36),healthCursor:'b'.repeat(36),
+  bulkFinished:true,healthFinished:false,healthScanned:54
+ });
+ const value=[...data.values()][0];
+ assert.equal(value.includes('Private Notes'),false);
+ assert.equal(value.includes('never-store-this'),false);
+ clearEpubScanProgress(storage);
+ assert.deepEqual(readEpubScanProgress(storage),{});
+});
+test('EPUB scan resumes its last saved file after a browser reload',async()=>{
+ const data=new Map();
+ const original=globalThis.sessionStorage;
+ globalThis.sessionStorage={
+  getItem:key=>data.get(key)||null,
+  setItem:(key,value)=>data.set(key,value),
+  removeItem:key=>data.delete(key)
+ };
+ try{
+  const first=fixture(55);
+  await first.get('epub-backfill-bulk').click();
+  assert.equal(first.applied.length,50);
+  first.restore();
+  const second=fixture(55);
+  try{
+   assert.match(second.get('epub-backfill-status').textContent,/Previous repair scan/);
+   await second.get('epub-backfill-bulk').click();
+   assert.equal(second.applied.length,5);
+   assert.equal(second.get('epub-backfill-bulk').disabled,true);
+   await second.get('epub-backfill-reset').click();
+   assert.deepEqual(readEpubScanProgress(globalThis.sessionStorage),{});
+   assert.equal(second.get('epub-backfill-bulk').disabled,false);
+  }finally{second.restore();}
+ }finally{
+  if(original===undefined)delete globalThis.sessionStorage;
+  else globalThis.sessionStorage=original;
+ }
 });
