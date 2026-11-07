@@ -4,6 +4,7 @@ import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
 import {initVisualShelves} from './visual-shelves-ui.mjs';
+import {initCollectionHealth} from './collection-health-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
@@ -449,6 +450,11 @@ document.addEventListener('DOMContentLoaded',async()=>{
     // including when no new EPUB has been uploaded in this session.
     initEpubBackfill(api);
     initSiteStudio(api);
+    initCollectionHealth(api,{onSelectBook:async bookId=>{
+      document.querySelector('[data-tab="library"]')?.click();
+      await selectBook(bookId);
+      document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
+    }});
     visualShelves=initVisualShelves(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);
