@@ -1,3 +1,4 @@
+import {epubRepairCsv} from './epub-repair-report.mjs';
 // Private EPUB metadata repairs. Nothing is changed by opening the preview.
 const el=(tag,text,css)=>{
  const node=document.createElement(tag);
@@ -17,11 +18,14 @@ export function initEpubBackfill(api){
  const history=root.querySelector('#epub-backfill-history');
  const historyList=root.querySelector('#epub-backfill-history-list');
  const bulk=root.querySelector('#epub-backfill-bulk');
+ const reportButton=root.querySelector('#epub-backfill-report');
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
  let bulkCursor='',bulkFinished=false;
+ let reportRows=[];
  const update=()=>{
   preview.disabled=busy;
   bulk.disabled=busy||bulkFinished;
+  if(reportButton)reportButton.disabled=busy||!reportRows.length;
   apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
   next.disabled=busy||!nextCursor;
   undo.disabled=busy||changes.length===0;
@@ -57,6 +61,18 @@ export function initEpubBackfill(api){
    status.textContent='Could not preview stored EPUBs: '+(error.message||'Request failed');
   }finally{busy=false;update();}
  }
+ reportButton?.addEventListener('click',()=>{
+  if(!reportRows.length)return;
+  const output=epubRepairCsv(reportRows);
+  const url=URL.createObjectURL(new Blob([output],{type:'text/csv;charset=utf-8'}));
+  const anchor=el('a');
+  anchor.href=url;
+  anchor.download='my-library-epub-repair-report.csv';
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
  bulk.addEventListener('click',async()=>{
   if(busy)return;
   busy=true;update();
@@ -74,6 +90,7 @@ export function initEpubBackfill(api){
      // in the next click, not silently skipped with the rest of that page.
      if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing){
       unchanged++;
+      reportRows.push({file_id:item.file_id,title:item.title,status:'no_changes'});
      }else{
       try{
        const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
@@ -82,8 +99,13 @@ export function initEpubBackfill(api){
        if(outcome.status==='applied'){
         changes.push(outcome.change_id);applied++;
        }else unchanged++;
+       reportRows.push({file_id:item.file_id,title:item.title,status:outcome.status,
+        synopsis_filled:outcome.synopsis_filled,
+        tags_added:outcome.tags_added,cover_added:outcome.cover_added});
       }catch(error){
        failed++;
+       reportRows.push({file_id:item.file_id,title:item.title,
+        status:'failed',error:error?.message||'Request failed'});
        const code=error?.payload?.code;
        if(['database_read_quota','database_write_quota',
         'database_storage_limit','database_limit_reached'].includes(code))throw error;
