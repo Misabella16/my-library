@@ -329,11 +329,15 @@
           <input id="epub-folder" type="file" accept=".epub,application/epub+zip" webkitdirectory directory multiple>
         </label>
         <button class="btn subtle" id="preview-epubs" type="button" disabled>Preview selected books</button>
+        <button class="btn subtle" id="pause-epub-preview" type="button" disabled>Pause preview after current group</button>
         <button class="btn subtle" id="epub-download-report" type="button" disabled>Download EPUB match report</button>
         <button class="btn" id="upload-epubs" type="button" disabled>Save eligible EPUBs privately</button>
+        <button class="btn" id="epub-save-all" type="button" disabled>Save all eligible EPUBs</button>
+        <button class="btn subtle" id="epub-recheck-failures" type="button" disabled>Recheck failed files before retry</button>
+        <button class="btn subtle" id="epub-issues-report" type="button" disabled>Download issues-only report</button>
         <button class="btn subtle" id="pause-epub-upload" type="button" disabled>Pause after current EPUB</button>
       </div>
-      <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files or a folder to begin. Maximum 24 MB per EPUB; 10,000 EPUBs per selection. Saves are limited to 500 files at a time, with pause/resume.</p>
+      <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files or a folder to begin. Maximum 24 MB per EPUB; 10,000 EPUBs per selection. Choose Save all to process the entire eligible selection in one click while keeping the tab open, or save groups of 500. You can pause previews/uploads and resume safely.</p>
       <p class="small-status" id="epub-import-summary" aria-live="polite">No EPUBs previewed yet.</p>
       <progress id="epub-import-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="EPUB upload progress"></progress>
       <label class="epub-filter-label" for="epub-review-filter">Show EPUB results
