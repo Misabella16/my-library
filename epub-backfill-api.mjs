@@ -39,6 +39,26 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    "ORDER BY l.created_at DESC LIMIT 20");
   return json({changes:rows});
  }
+ // Refresh one failed EPUB without scanning the entire catalogue.
+ // The explicit retry button uses this to obtain a current edit timestamp,
+ // preserving later user changes and keeping D1 reads bounded.
+ const single=/^\\/api\\/epubs\\/backfill\\/file\\/([0-9a-f-]{36})\\/preview$/.exec(path);
+ if(single&&method==='GET'){
+  const row=await linkedFile(db,single[1]);
+  if(!row)return fail('EPUB not found',404);
+  const cover=await one(db,"SELECT COUNT(*) AS n FROM edition_images "+
+   "WHERE edition_id=? AND role='cover'",[row.edition_id]);
+  const extracted=unpack(row.metadata_json);
+  const currentTags=await many(db,
+   'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',
+   [row.book_id]);
+  const seen=new Set(currentTags.map(x=>x.label.toLocaleLowerCase()));
+  return json({file_id:row.id,book_id:row.book_id,title:row.title,
+   expected_updated_at:row.updated_at,
+   synopsis:row.synopsis?.trim()?'':extracted.synopsis,
+   subjects:extracted.tags.filter(x=>!seen.has(x.toLocaleLowerCase())),
+   cover_missing:!cover?.n&&row.edition_format==='ebook'&&row.edition_special===0});
+ }
  if(path==='/api/epubs/backfill/preview'&&method==='GET'){
   const url=new URL(request.url);
   const after=url.searchParams.get('after')||'';
