@@ -100,7 +100,14 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    // Download only one bounded owner-private EPUB when a cover is missing.
    const object=await env.BOOK_FILES.get(row.private_object_key);
    if(object){
-    const bytes=await (object.arrayBuffer?object.arrayBuffer():Promise.resolve(object.body));
+    // Real R2 objects expose arrayBuffer(), but test doubles and some
+    // storage adapters expose a ReadableStream body. Never turn the stream
+    // object itself into file bytes.
+    const bytes=object.arrayBuffer?await object.arrayBuffer():
+      object.body instanceof ReadableStream?
+        await new Response(object.body).arrayBuffer():
+        object.body instanceof ArrayBuffer?object.body:
+        ArrayBuffer.isView(object.body)?object.body:new Uint8Array(0);
     if(bytes?.byteLength<=MAX_EPUB_BYTES&&bytes?.byteLength>0){
      const file=new File([bytes],/\\.epub$/i.test(row.original_filename||'')
       ?row.original_filename:'stored.epub',{type:'application/epub+zip'});
