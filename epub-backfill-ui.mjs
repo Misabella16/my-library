@@ -1,3 +1,4 @@
+import {readEpubScanProgress,saveEpubScanProgress,clearEpubScanProgress} from './epub-backfill-checkpoint.mjs';
 import {epubHealthCsv} from './epub-health-report.mjs';
 import {summarizeEpubHealth} from './epub-backfill-health.mjs';
 import {epubRepairCsv} from './epub-repair-report.mjs';
@@ -29,6 +30,20 @@ export function initEpubBackfill(api){
  let bulkCursor='',bulkFinished=false;
  let reportRows=[];
  let healthCursor='',healthFinished=false,healthScanned=0,healthRows=[];
+ const storage=typeof sessionStorage==='undefined'?null:sessionStorage;
+ const saved=readEpubScanProgress(storage);
+ bulkCursor=saved.bulkCursor||'';
+ healthCursor=saved.healthCursor||'';
+ bulkFinished=!!saved.bulkFinished;
+ healthFinished=!!saved.healthFinished;
+ healthScanned=saved.healthScanned||0;
+ const checkpoint=()=>saveEpubScanProgress(storage,{
+  bulkCursor,bulkFinished,healthCursor,healthFinished,healthScanned
+ });
+ if(bulkCursor||healthCursor){
+  status.textContent='Previous repair scan found. Resume where you stopped or restart.';
+  healthStatus.textContent='Previous health scan found. Resume where you stopped or restart.';
+ }
  const update=()=>{
   preview.disabled=busy;
   health.disabled=busy||healthFinished;
@@ -123,11 +138,13 @@ export function initEpubBackfill(api){
      }
      checked++;
      bulkCursor=item.file_id;
+     checkpoint();
     }
     status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
      failed+' need review. Changes are logged for Undo.';
     if(!page.next_cursor||page.files.length===0){
      bulkFinished=true;
+     checkpoint();
      break;
     }
     after=bulkCursor;
@@ -165,13 +182,17 @@ export function initEpubBackfill(api){
     inspected.push(...page.files);
     healthRows.push(...page.files);
     // Advance after each completed page, not before the read completes.
-    if(page.files.length)healthCursor=page.files.at(-1).file_id;
+    if(page.files.length){
+     healthCursor=page.files.at(-1).file_id;
+     healthScanned+=page.files.length;
+     checkpoint();
+    }
     if(!page.next_cursor||page.files.length===0){complete=true;break;}
     after=page.next_cursor;
    }
    const stats=summarizeEpubHealth(inspected);
-   healthScanned+=stats.checked;
    healthFinished=complete;
+   checkpoint();
    health.textContent=complete?'Health scan complete':'Check next 50 EPUBs (no edits)';
    healthStatus.textContent='Scanned '+stats.checked+' saved EPUBs in this batch ('+
     healthScanned+' total) · '+
@@ -189,6 +210,7 @@ export function initEpubBackfill(api){
   healthCursor='';healthFinished=false;healthScanned=0;healthRows=[];
   bulkCursor='';bulkFinished=false;
   items=[];cursor='';nextCursor=null;
+  clearEpubScanProgress(storage);
   results.replaceChildren();
   healthStatus.textContent='Health scan reset. Ready to check saved EPUBs from the beginning.';
   status.textContent='Repair scan reset. Saved changes and Undo history remain unchanged.';
