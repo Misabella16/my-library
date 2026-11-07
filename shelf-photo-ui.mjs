@@ -55,10 +55,13 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  const saveReview=node('button','Save reviewed matches privately','btn mini');
  const loadReview=node('button','View saved shelf review','btn subtle mini');
  const undoSaved=node('button','Undo last saved review','btn subtle mini');
+ const locationHistoryButton=node('button','Recent shelf moves & Undo','btn subtle mini');
+ locationHistoryButton.type='button';
+ const locationHistoryView=node('div',undefined,'photo-location-history');
  const savedView=node('div',undefined,'photo-saved-review');
  saveReview.type=loadReview.type=undoSaved.type='button';
  reviewArea.append(reviewHeading,reviewText,reviewList,exportButton,
-  saveReview,loadReview,undoSaved,savedView);
+  saveReview,loadReview,undoSaved,savedView,locationHistoryButton,locationHistoryView);
  results.after?.(reviewArea);
  let savedRevision=null;
  const showSaved=record=>{
@@ -118,6 +121,40 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    tell('The previous saved shelf review was restored. No catalogue records changed.');
   }catch(error){tell('Unable to undo saved review: '+(error.message||'Request failed'));}
   finally{undoSaved.disabled=false;}
+ });
+ locationHistoryButton.addEventListener('click',async()=>{
+  locationHistoryButton.disabled=true;locationHistoryView.replaceChildren();
+  try{
+   const data=await api('/api/shelf-photos/locations/history');
+   const history=Array.isArray(data.changes)?data.changes:[];
+   if(!history.length)locationHistoryView.append(node('p','No recent shelf moves.','muted'));
+   for(const change of history){
+    const row=node('div',undefined,'photo-location-history-row');
+    row.append(node('span',(change.title||'Book')+' · '+
+     (change.edition_name||'Edition')+
+     (change.vendor?' · '+change.vendor:'')+
+     ' · '+change.created_at,'muted'));
+    if(!change.undone_at){
+     const undo=node('button','Undo shelf move','btn subtle mini');
+     undo.type='button';
+     undo.addEventListener('click',async()=>{
+      undo.disabled=true;
+      try{
+       await api('/api/shelf-photos/copy/'+change.copy_id+'/location/undo',{
+        method:'POST',data:{change_id:change.change_id}});
+       undo.textContent='Undone';
+       tell('Restored the previous shelf location without changing the edition or other copies.');
+      }catch(error){
+       tell('Undo needs review: '+(error.message||'Request failed'));
+       undo.disabled=false;
+      }
+     });
+     row.append(undo);
+    }else row.append(node('span','Already undone','muted'));
+    locationHistoryView.append(row);
+   }
+  }catch(error){tell('Could not load shelf history: '+(error.message||'Request failed'));}
+  finally{locationHistoryButton.disabled=false;}
  });
  exportButton.addEventListener('click',()=>{
   const csv=photoReviewCsv(review);
