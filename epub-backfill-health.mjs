@@ -7,6 +7,6 @@ export function summarizeEpubHealth(rows){
   missingCover:list.filter(x=>x.cover_missing===true).length,
   unavailableCover:list.filter(x=>x.cover_unavailable===true).length,
   missingSubjects:list.filter(x=>Array.isArray(x.subjects)&&x.subjects.length>0).length,
-  ready:list.filter(x=>!x.synopsis&&!x.cover_missing&&!(x.subjects?.length)).length
+  ready:list.filter(x=>!x.synopsis&&!x.cover_missing&&!x.cover_unavailable&&!(x.subjects?.length)).length
  };
 }
