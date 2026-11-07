@@ -136,7 +136,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   // Cache only a verified negative cover inspection. Versioned metadata
   // permits a future improved extractor to retry without replacing books.
   const checkedCoverStmt=()=>db.prepare(
-   "UPDATE epub_files SET metadata_json=json_set(metadata_json,"+
+   "UPDATE epub_files SET metadata_json=json_set("+
+   " CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,"+
    " '$.cover_repair_checked_version',?,"+
    " '$.cover_repair_checked_sha256',?) WHERE id=? AND sha256=?")
    .bind(COVER_CHECK_VERSION,row.sha256,row.id,row.sha256);
