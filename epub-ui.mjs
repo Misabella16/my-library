@@ -240,8 +240,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   if(exportButton)exportButton.disabled=!items.length||running;
   if(pauseButton)pauseButton.disabled=!uploadActive||pauseRequested;
   uploadButton.disabled=running||!previewComplete||eligible===0;
-  uploadButton.textContent='Save next '+Math.min(eligible,SAVE_RUN_LIMIT)+
-   ' of '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
+  uploadButton.textContent='Save '+Math.min(eligible,SAVE_RUN_LIMIT)+
+   ' eligible EPUB'+(eligible===1?'':'s')+' privately'+
+   (eligible>SAVE_RUN_LIMIT?' (next group of '+eligible+' remaining)':'');
  }
  function selectFiles(selection){
   clearCoverPreviews();
