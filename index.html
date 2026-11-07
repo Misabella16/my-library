@@ -239,6 +239,29 @@
   </section>
   <section class="tab-panel" id="imports" hidden>
     <div class="site-section-artwork" data-site-section-image="importsBanner" hidden></div>
+    <section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
+      <p class="section-kicker">✧ CATALOGUE HEALTH</p>
+      <h2>Find books that need attention</h2>
+      <p class="muted">Review missing covers, summaries, tags, editions, and possible same-title duplicates before your next large EPUB import. This checks at most 40 books per click and never changes book records automatically.</p>
+      <div class="collection-health-actions">
+        <button type="button" class="btn" id="collection-health-scan">Scan first 40 books</button>
+        <label>Show
+          <select id="collection-health-filter">
+            <option value="issues">Books needing attention</option>
+            <option value="all">All scanned books</option>
+            <option value="missing_cover">Missing covers</option>
+            <option value="missing_synopsis">Missing summaries</option>
+            <option value="missing_tags">Missing tags</option>
+            <option value="missing_editions">No editions</option>
+            <option value="possible_duplicate">Possible duplicate titles</option>
+          </select>
+        </label>
+        <button type="button" class="btn subtle" id="collection-health-export" disabled>Export scanned report (CSV)</button>
+      </div>
+      <p id="collection-health-status" class="small-status" role="status" aria-live="polite">Start the read-only catalogue scan when you're ready.</p>
+      <div id="collection-health-metrics" class="collection-health-metrics" aria-live="polite"></div>
+      <div id="collection-health-results" class="collection-health-results"></div>
+    </section>
     <div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
     <section class="goodreads-tool" aria-labelledby="goodreads-heading">
       <p class="section-kicker">✧ PHASE 3 · GOODREADS IMPORT & UNDO</p>
