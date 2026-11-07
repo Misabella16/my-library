@@ -34,6 +34,9 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  if(!input||!images||!search||!button||!results||!status)return;
  let currentUrls=[],busy=false;
  const review=createPhotoReview();
+ const barcodeMatches=node('div',undefined,'photo-barcode-matches');
+ isbnStatus?.after?.(barcodeMatches);
+ let selectionGeneration=0;
  const reviewArea=node('section',undefined,'photo-review-area');
  const reviewHeading=node('h3','Photo-by-photo review');
  const reviewText=node('p','Select a photo for each suggested book. These links are temporary and do not create copies or change your catalogue.','muted');
@@ -60,6 +63,8 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  }
  const tell=text=>{status.textContent=text;};
  const clear=()=>{
+  selectionGeneration++;
+  barcodeMatches.replaceChildren();
   for(const url of currentUrls)URL.revokeObjectURL(url);
   currentUrls=[];images.replaceChildren();results.replaceChildren();
   setReviewPhotos(review,[]);renderReview();
@@ -81,20 +86,72 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    ' selected. Images stay on this device; no location or copy is changed.');
   if(!isbnStatus)return;
   isbnStatus.textContent='Checking supported local ISBN barcodes…';
-  const codes=new Set();let supported=false;
-  for(const file of files.slice(0,10)){
-   const result=await scanPhotoBarcodes(file);
+  const generation=selectionGeneration;
+  const codes=new Map();let supported=false;
+  for(let i=0;i<Math.min(files.length,10);i++){
+   const result=await scanPhotoBarcodes(files[i]);
+   if(generation!==selectionGeneration)return;
    supported ||=result.supported;
-   for(const code of result.codes)codes.add(code);
+   for(const code of result.codes.slice(0,2)){
+    if(codes.size>=10&&!codes.has(code))continue;
+    if(!codes.has(code))codes.set(code,review.photos[i]);
+   }
   }
-  if(codes.size){
-   isbnStatus.textContent='Possible printed ISBN barcodes: '+[...codes].join(', ')+
-    '. Compare them with edition ISBNs when opening the matching book.';
-  }else{
+  if(!codes.size){
    isbnStatus.textContent=supported
     ?'No readable ISBN barcode detected. Search for a title below.'
     :'Local barcode detection is unavailable in this browser. Search by title below.';
+   return;
   }
+  isbnStatus.textContent='Checking '+codes.size+' detected ISBN barcode'+
+   (codes.size===1?'':'s')+' against your existing editions. Nothing is saved automatically.';
+  for(const [code,photo] of codes){
+   let response;
+   try{response=await api('/api/shelf-photos/isbn?'+new URLSearchParams({isbn:code}));}
+   catch(error){
+    if(generation!==selectionGeneration)return;
+    barcodeMatches.append(node('p','Could not match ISBN '+code+': '+
+      (error.message||'Request failed'),'muted'));
+    continue;
+   }
+   if(generation!==selectionGeneration)return;
+   const matches=Array.isArray(response.matches)?response.matches:[];
+   if(!matches.length){
+    barcodeMatches.append(node('p','ISBN '+code+' from '+photo.name+
+     ' is not in your library yet. Search by title or add a new book.','muted'));
+    continue;
+   }
+   for(const match of matches){
+    if(!match?.book_id||!match.title)continue;
+    const row=node('article',undefined,'photo-match-result');
+    row.append(node('strong',match.title),node('span',
+      'ISBN '+code+' · '+photo.name+' · '+(match.edition_name||'Edition')+
+      (match.vendor?' · '+match.vendor:'')+
+      (matches.length>1?' · Check edition identity':'') ,'muted'));
+    const associate=node('button','Associate this photo (review only)','btn subtle mini');
+    associate.type='button';
+    associate.addEventListener('click',()=>{
+     try{
+      assignPhotoMatch(review,photo.id,{
+       id:match.book_id,title:match.title,author:match.author
+      });
+      renderReview();
+      tell('ISBN suggestion associated with '+photo.name+
+       '. Confirm edition and physical copy on the book page.');
+     }catch(error){tell(error.message||'Could not record photo suggestion');}
+    });
+    const open=node('button','Open book and editions','btn subtle mini');
+    open.type='button';
+    open.addEventListener('click',async()=>{
+     open.disabled=true;
+     try{await onSelectBook(match.book_id);}
+     catch(error){tell('Could not open book: '+(error.message||'Request failed'));}
+     finally{open.disabled=false;}
+    });
+    row.append(associate,open);barcodeMatches.append(row);
+   }
+  }
+  isbnStatus.textContent='ISBN lookup complete. Matches are suggestions only; no books, editions, or copies were modified.';
  });
  button.addEventListener('click',async()=>{
   if(busy)return;
