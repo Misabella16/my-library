@@ -86,6 +86,11 @@
       <div id="photo-preview" class="preview-pictures"></div>
       <p id="photo-isbn-status" class="small-status" aria-live="polite">ISBN barcode detection is optional and browser-dependent.</p>
       <div class="photo-search-controls">
+        <label for="photo-isbn-input">Or enter a physical book ISBN manually (works without barcode scanning)</label>
+        <input id="photo-isbn-input" type="text" inputmode="numeric" maxlength="30" placeholder="9780306406157">
+        <button id="photo-isbn-search" type="button" class="btn subtle">Find this ISBN in My Library</button>
+      </div>
+      <div class="photo-search-controls">
         <label for="photo-book-search">Find a pictured book by title or author</label>
         <input id="photo-book-search" type="search" maxlength="150" placeholder="Search the collection…">
         <button class="btn subtle" id="photo-match-search" type="button">Find book matches</button>
