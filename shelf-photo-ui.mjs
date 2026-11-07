@@ -106,6 +106,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    return;
   }
   await displayIsbnMatches(codes,generation);
+ });
 
  async function displayIsbnMatches(codes,generation){
   isbnStatus.textContent='Checking '+codes.size+' ISBN'+
