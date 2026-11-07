@@ -144,3 +144,15 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
 .visual-shelf-books.spines-view .visual-shelf-book.dragging{cursor:grabbing}
 @media(max-width:620px){.visual-shelf-batch-tools{align-items:stretch}
  .visual-shelf-batch-tools label{flex:1 1 100%}}
+
+/* More owner-editable site sections, without touching edition artwork. */
+.site-studio-expand{border:1px solid var(--line);border-radius:11px;margin:10px 0;padding:14px;min-width:0}
+.site-studio-expand legend{font:600 15px Georgia,serif;padding:0 8px}
+.site-studio-expand label{display:grid;gap:6px;margin:8px 0}
+.site-studio-expand input,.site-studio-expand textarea{width:100%;min-width:0;max-width:100%}
+.site-section-artwork{margin-bottom:18px;max-height:260px;overflow:hidden;border-radius:12px;
+ border:1px solid var(--line);background:#f4f0e9}
+.site-section-artwork[hidden]{display:none}
+.site-section-artwork img{display:block;width:100%;max-height:260px;object-fit:cover;object-position:center}
+.site-studio-images{grid-template-columns:repeat(auto-fit,minmax(225px,1fr))}
+@media(max-width:620px){.site-studio-expand{padding:10px}.site-studio-images{grid-template-columns:1fr}}

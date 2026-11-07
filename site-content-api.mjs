@@ -10,19 +10,37 @@ export const SITE_TEXT_DEFAULTS=Object.freeze({
  collectionTitle:"The Collection",
  shelvesDescription:"Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.",
  photosDescription:"Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.",
+ collectionEyebrow:"❧ THE READING GARDEN ❧",
+ navBooks:"My Books",
+ navShelves:"My Shelves",
+ navPhotos:"Shelf Photos",
+ navImports:"Imports & Undo",
+ navStudio:"Customize Site",
+ shelvesTitle:"My Shelves",
+ shelvesTip:"Browse owned physical books by room, bookcase and shelf. Search by title, author or tag, filter special editions, switch between covers and spines, and hover or tap Details for summaries. Drag spines or use Move left / right, save your preferred display, and export the visible shelf inventory without changing physical-copy locations.",
+ photosTitle:"Shelf Photos",
+ photosTip:"Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Some browsers can detect visible text locally; others require typing the titles. Cover-art image matching is not yet supported. You can review multiple books found in one photo. No photo or copy information is saved automatically.",
+ importsTitle:"Imports & Undo",
+ importsDescription:"Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.",
+ studioTitle:"Customize My Library",
+ studioDescription:"Change the wording, upload your own logo, swap the decorative hero artwork, or add a gentle background image. Preview changes directly on your site. Changes are private, and your books, covers, and EPUBs remain untouched.",
  footer:"My Library · every beloved story deserves a place to bloom"
 });
 const LIMITS={brand:70,tagline:110,eyebrow:110,heroTitle:90,heroAccent:110,
  heroDescription:450,collectionTitle:100,shelvesDescription:700,
- photosDescription:700,footer:180};
-const SLOTS=new Set(['logo','hero','background']);
+ photosDescription:700,footer:180,collectionEyebrow:100,
+ navBooks:70,navShelves:70,navPhotos:70,navImports:70,navStudio:70,
+ shelvesTitle:120,shelvesTip:900,photosTitle:120,photosTip:900,
+ importsTitle:120,importsDescription:650,studioTitle:120,studioDescription:750};
+const SLOTS=new Set(['logo','hero','background',
+ 'booksBanner','shelvesBanner','photosBanner','importsBanner']);
 const CONFIG_KEY='site-studio/v1/settings.json';
 const MAX_IMAGE=5*1024*1024;
 const headers={'content-type':'application/json; charset=utf-8',
  'cache-control':'private, no-store','x-content-type-options':'nosniff'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers});
 const fail=(message,status=400)=>json({error:message},status);
-const empty=()=>({revision:'original',text:{},images:{},updated_at:null});
+const empty=()=>({revision:'original',text:{},images:{},previous_text:null,updated_at:null});
 async function load(bucket){
  const object=await bucket.get(CONFIG_KEY);
  if(!object)return empty();
@@ -32,7 +50,7 @@ async function load(bucket){
  if(!data||typeof data!=='object'||typeof data.revision!=='string')
   throw Error('Invalid saved site settings');
  return {revision:data.revision,text:data.text||{},images:data.images||{},
-  updated_at:data.updated_at||null};
+  previous_text:data.previous_text||null,updated_at:data.updated_at||null};
 }
 async function store(bucket,data){
  await bucket.put(CONFIG_KEY,JSON.stringify(data),{
@@ -46,7 +64,8 @@ function publicView(saved){
  }
  const images={};
  for(const slot of SLOTS)images[slot]=!!saved.images[slot];
- return {revision:saved.revision,text,images,updated_at:saved.updated_at};
+ return {revision:saved.revision,text,images,updated_at:saved.updated_at,
+  can_undo_text:!!saved.previous_text};
 }
 function correctRevision(payload,saved){
  return payload===saved.revision;
@@ -91,12 +110,26 @@ export async function handleSiteContentApi(request,env,path){
   for(const key of Object.keys(LIMITS)){
    if(updates[key]!==SITE_TEXT_DEFAULTS[key])text[key]=updates[key];
   }
-  const next={...saved,text,revision:crypto.randomUUID(),
-   updated_at:new Date().toISOString()};
+  if(JSON.stringify(text)===JSON.stringify(saved.text))
+   return json(publicView(saved));
+  const next={...saved,text,previous_text:saved.text,
+   revision:crypto.randomUUID(),updated_at:new Date().toISOString()};
   await store(bucket,next);
   return json(publicView(next));
  }
- const image=/^\/api\/site-content\/image\/(logo|hero|background)(?:\/(remove))?$/.exec(path);
+ if(path==='/api/site-content/undo-text'){
+  if(method!=='POST')return fail('Method not allowed',405);
+  let payload;try{payload=await request.json();}catch{return fail('Invalid Undo request');}
+  const saved=await load(bucket);
+  if(!correctRevision(payload?.expected_revision,saved))
+   return fail('Site wording changed. Refresh before undoing.',409);
+  if(!saved.previous_text)return fail('No previous wording to restore',409);
+  const next={...saved,text:saved.previous_text,previous_text:saved.text,
+   revision:crypto.randomUUID(),updated_at:new Date().toISOString()};
+  await store(bucket,next);
+  return json(publicView(next));
+ }
+ const image=/^\/api\/site-content\/image\/(logo|hero|background|booksBanner|shelvesBanner|photosBanner|importsBanner)(?:\/(remove))?$/.exec(path);
  if(!image)return fail('Unknown site editor route',404);
  const [,slot,action]=image;
  if(action==='remove'){

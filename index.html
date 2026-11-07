@@ -52,16 +52,17 @@
 </section>
 <main class="main">
   <nav class="tabs" aria-label="Library sections">
-    <button class="tab active" type="button" data-tab="library" aria-current="page"><span aria-hidden="true">❦</span> My Books</button>
-    <button class="tab" type="button" data-tab="shelves"><span aria-hidden="true">▥</span> My Shelves</button>
-    <button class="tab" type="button" data-tab="photos"><span aria-hidden="true">✧</span> Shelf Photos</button>
-    <button class="tab" type="button" data-tab="imports"><span aria-hidden="true">↺</span> Imports & Undo</button>
-    <button class="tab" type="button" data-tab="studio"><span aria-hidden="true">✎</span> Customize Site</button>
+    <button class="tab active" type="button" data-tab="library" aria-current="page"><span aria-hidden="true">❦</span> <span data-site-text="navBooks">My Books</span></button>
+    <button class="tab" type="button" data-tab="shelves"><span aria-hidden="true">▥</span> <span data-site-text="navShelves">My Shelves</span></button>
+    <button class="tab" type="button" data-tab="photos"><span aria-hidden="true">✧</span> <span data-site-text="navPhotos">Shelf Photos</span></button>
+    <button class="tab" type="button" data-tab="imports"><span aria-hidden="true">↺</span> <span data-site-text="navImports">Imports & Undo</span></button>
+    <button class="tab" type="button" data-tab="studio"><span aria-hidden="true">✎</span> <span data-site-text="navStudio">Customize Site</span></button>
   </nav>
   <div class="notice" id="notice" role="status" hidden></div>
   <section class="tab-panel active" id="library">
+    <div class="site-section-artwork" data-site-section-image="booksBanner" hidden></div>
     <div class="library-header">
-      <div><p class="section-kicker">❧ THE READING GARDEN ❧</p><h2><span data-site-text="collectionTitle">The Collection</span> <span class="heading-flower" aria-hidden="true">✧</span></h2><p class="muted" id="count">Your books will appear here.</p></div>
+      <div><p class="section-kicker" data-site-text="collectionEyebrow">❧ THE READING GARDEN ❧</p><h2><span data-site-text="collectionTitle">The Collection</span> <span class="heading-flower" aria-hidden="true">✧</span></h2><p class="muted" id="count">Your books will appear here.</p></div>
       <button class="btn" type="button" id="add-book">＋ Add to collection</button>
     </div>
     <div class="toolbar">
@@ -77,7 +78,8 @@
     <div class="loadmore"><button class="btn subtle" id="load-more" type="button" hidden>Load more books</button></div>
   </section>
   <section class="tab-panel" id="shelves" hidden>
-    <div class="surface"><h2>My Shelves</h2><p data-site-text="shelvesDescription">Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.</p><div class="tip">Browse owned physical books by room, bookcase and shelf. Search by title, author or tag, filter special editions, switch between covers and spines, and hover or tap Details for summaries. Drag spines or use Move left / right, save your preferred display, and export the visible shelf inventory without changing physical-copy locations.</div></div>
+    <div class="site-section-artwork" data-site-section-image="shelvesBanner" hidden></div>
+    <div class="surface"><h2 data-site-text="shelvesTitle">My Shelves</h2><p data-site-text="shelvesDescription">Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.</p><div class="tip" data-site-text="shelvesTip">Browse owned physical books by room, bookcase and shelf. Search by title, author or tag, filter special editions, switch between covers and spines, and hover or tap Details for summaries. Drag spines or use Move left / right, save your preferred display, and export the visible shelf inventory without changing physical-copy locations.</div></div>
     <div class="surface visual-shelf-browser" aria-label="Physical library by location">
       <div class="visual-shelf-toolbar">
         <div><p class="section-kicker">❦ THE PHYSICAL COLLECTION ❦</p><h3>Browse my bookcases</h3></div>
@@ -91,8 +93,9 @@
     </div>
   </section>
   <section class="tab-panel" id="photos" hidden>
-    <div class="surface"><h2>Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
-      <div class="tip"><strong>Privacy-first helper:</strong> Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Some browsers can detect visible text locally; others require typing the titles. Cover-art image matching is not yet supported. You can review multiple books found in one photo. No photo or copy information is saved automatically.</div>
+    <div class="site-section-artwork" data-site-section-image="photosBanner" hidden></div>
+    <div class="surface"><h2 data-site-text="photosTitle">Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
+      <div class="tip"><strong>Privacy-first helper:</strong> <span data-site-text="photosTip">Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Some browsers can detect visible text locally; others require typing the titles. Cover-art image matching is not yet supported. You can review multiple books found in one photo. No photo or copy information is saved automatically.</span></div>
       <label class="upload">Choose shelf photos <input id="photo-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
       <p id="photo-status" class="small-status" role="status">Choose a shelf photo to preview privately.</p>
       <div id="photo-preview" class="preview-pictures"></div>
@@ -136,8 +139,8 @@
   <section class="tab-panel" id="studio" hidden>
     <div class="surface site-studio">
       <p class="section-kicker">✧ YOUR LIBRARY, YOUR DESIGN</p>
-      <h2>Customize My Library</h2>
-      <p>Change the wording, upload your own logo, swap the decorative hero artwork, or add a gentle background image. Preview changes directly on your site. Changes are private, and your books, covers, and EPUBs remain untouched.</p>
+      <h2 data-site-text="studioTitle">Customize My Library</h2>
+      <p data-site-text="studioDescription">Change the wording, upload your own logo, swap the decorative hero artwork, or add a gentle background image. Preview changes directly on your site. Changes are private, and your books, covers, and EPUBs remain untouched.</p>
       <form id="site-studio-form" class="edit-form">
         <div class="two-columns">
           <label>Site name<input name="brand" maxlength="70" required></label>
@@ -151,10 +154,33 @@
         <label>My Shelves explanation<textarea name="shelvesDescription" maxlength="700" rows="3" required></textarea></label>
         <label>Shelf Photos explanation<textarea name="photosDescription" maxlength="700" rows="3" required></textarea></label>
         <label>Footer wording<input name="footer" maxlength="180" required></label>
+        <fieldset class="site-studio-expand">
+          <legend>Page headings and navigation</legend>
+          <div class="two-columns">
+            <label>Collection eyebrow<input name="collectionEyebrow" maxlength="100" required></label>
+            <label>My Books tab<input name="navBooks" maxlength="70" required></label>
+            <label>My Shelves tab<input name="navShelves" maxlength="70" required></label>
+            <label>Shelf Photos tab<input name="navPhotos" maxlength="70" required></label>
+            <label>Imports &amp; Undo tab<input name="navImports" maxlength="70" required></label>
+            <label>Customize Site tab<input name="navStudio" maxlength="70" required></label>
+            <label>My Shelves heading<input name="shelvesTitle" maxlength="120" required></label>
+            <label>Shelf Photos heading<input name="photosTitle" maxlength="120" required></label>
+            <label>Imports heading<input name="importsTitle" maxlength="120" required></label>
+            <label>Customize heading<input name="studioTitle" maxlength="120" required></label>
+          </div>
+        </fieldset>
+        <fieldset class="site-studio-expand">
+          <legend>Explanations and section introductions</legend>
+          <label>Shelves introduction<textarea name="shelvesTip" maxlength="900" rows="3" required></textarea></label>
+          <label>Shelf Photos privacy explanation<textarea name="photosTip" maxlength="900" rows="3" required></textarea></label>
+          <label>Imports introduction<textarea name="importsDescription" maxlength="650" rows="3" required></textarea></label>
+          <label>Customize introduction<textarea name="studioDescription" maxlength="750" rows="3" required></textarea></label>
+        </fieldset>
         <div class="goodreads-actions">
           <button type="submit" class="btn" id="site-studio-save">Save wording</button>
           <button type="button" class="btn subtle" id="site-studio-defaults">Restore original wording</button>
           <button type="button" class="btn subtle" id="site-studio-reload">Discard unsaved wording</button>
+          <button type="button" class="btn subtle" id="site-studio-undo">Undo last saved wording</button>
         </div>
       </form>
       <h3>Site images</h3>
@@ -179,12 +205,41 @@
           <button class="btn subtle mini" type="button" data-site-image-remove="background">Restore original background</button>
         </div>
       </div>
+      <h3>Section banners</h3>
+      <p class="muted">Add optional decorative banners to your Books, Shelves, Shelf Photos, and Imports pages. These never replace a book's real cover or uploaded shelf photos.</p>
+      <div class="site-studio-images">
+        <div class="site-studio-image-slot">
+          <strong>My Books banner</strong>
+          <div data-site-preview="booksBanner" data-site-alt="My Books banner preview" hidden></div>
+          <input type="file" data-site-image-input="booksBanner" accept="image/png,image/jpeg,image/webp">
+          <button class="btn subtle mini" type="button" data-site-image-remove="booksBanner">Restore original banner</button>
+        </div>
+        <div class="site-studio-image-slot">
+          <strong>My Shelves banner</strong>
+          <div data-site-preview="shelvesBanner" data-site-alt="My Shelves banner preview" hidden></div>
+          <input type="file" data-site-image-input="shelvesBanner" accept="image/png,image/jpeg,image/webp">
+          <button class="btn subtle mini" type="button" data-site-image-remove="shelvesBanner">Restore original banner</button>
+        </div>
+        <div class="site-studio-image-slot">
+          <strong>Shelf Photos banner</strong>
+          <div data-site-preview="photosBanner" data-site-alt="Shelf Photos banner preview" hidden></div>
+          <input type="file" data-site-image-input="photosBanner" accept="image/png,image/jpeg,image/webp">
+          <button class="btn subtle mini" type="button" data-site-image-remove="photosBanner">Restore original banner</button>
+        </div>
+        <div class="site-studio-image-slot">
+          <strong>Imports banner</strong>
+          <div data-site-preview="importsBanner" data-site-alt="Imports banner preview" hidden></div>
+          <input type="file" data-site-image-input="importsBanner" accept="image/png,image/jpeg,image/webp">
+          <button class="btn subtle mini" type="button" data-site-image-remove="importsBanner">Restore original banner</button>
+        </div>
+      </div>
       <p id="site-studio-status" class="small-status" role="status" aria-live="polite">Loading your private site settings…</p>
       <p class="goodreads-private-note">Only your account can edit this site. These controls update site wording and decorative images without modifying your book records, EPUB files, special editions, or existing edition covers. A refresh shows the saved changes.</p>
     </div>
   </section>
   <section class="tab-panel" id="imports" hidden>
-    <div class="surface"><h2>Imports & Undo</h2><p>Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
+    <div class="site-section-artwork" data-site-section-image="importsBanner" hidden></div>
+    <div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
     <section class="goodreads-tool" aria-labelledby="goodreads-heading">
       <p class="section-kicker">✧ PHASE 3 · GOODREADS IMPORT & UNDO</p>
       <h3 id="goodreads-heading">Bring your Goodreads shelves into view</h3>

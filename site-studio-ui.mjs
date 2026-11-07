@@ -1,7 +1,7 @@
 import {SITE_TEXT_DEFAULTS} from './site-content-api.mjs';
 
 const FIELDS=Object.keys(SITE_TEXT_DEFAULTS);
-const SLOTS=['logo','hero','background'];
+const SLOTS=['logo','hero','background','booksBanner','shelvesBanner','photosBanner','importsBanner'];
 const imageUrl=(slot,revision)=>'/api/site-content/image/'+slot+'?v='+encodeURIComponent(revision);
 const el=selector=>document.querySelector(selector);
 const children=(selector)=>[...document.querySelectorAll(selector)];
@@ -37,9 +37,21 @@ function updateImage(slot,exists,revision){
    img.src=url;img.className='site-custom-hero';img.alt='';
    art.append(img);
   }
- }else{
+ }else if(slot==='background'){
   const hero=el('.hero');
   if(hero)hero.classList.toggle('site-custom-background',exists);
+ }else{
+  for(const region of children('[data-site-section-image="'+slot+'"]')){
+   region.replaceChildren();
+   region.hidden=!exists;
+   if(exists){
+    const img=document.createElement('img');
+    img.src=url;
+    img.alt='Decorative site banner';
+    img.loading='lazy';
+    region.append(img);
+   }
+  }
  }
 }
 function applyText(text){
@@ -63,7 +75,7 @@ export function initSiteStudio(api){
  const message=(value)=>{status.textContent=value;};
  const setBusy=flag=>{
   busy=flag;
-  for(const control of [save,el('#site-studio-defaults'),el('#site-studio-reload'),
+  for(const control of [save,el('#site-studio-defaults'),el('#site-studio-reload'),el('#site-studio-undo'),
    ...children('[data-site-image-input]'),...children('[data-site-image-remove]')]){
    if(control)control.disabled=flag;
   }
@@ -74,6 +86,8 @@ export function initSiteStudio(api){
  };
  const repaint=(data)=>{
   applyText(data.text);
+  const undo=el('#site-studio-undo');
+  if(undo)undo.disabled=!data.can_undo_text;
   for(const slot of SLOTS)updateImage(slot,data.images?.[slot],data.revision);
  };
  const reload=async()=>{
@@ -95,6 +109,17 @@ export function initSiteStudio(api){
   if(busy||!saved)return;
   setForm(saved.text);repaint(saved);
   message('Unsaved wording discarded.');
+ });
+ el('#site-studio-undo')?.addEventListener('click',async()=>{
+  if(busy||!saved||!saved.can_undo_text)return;
+  setBusy(true);
+  try{
+   const updated=await api('/api/site-content/undo-text',{
+    method:'POST',data:{expected_revision:saved.revision}});
+   saved=updated;setForm(saved.text);repaint(saved);
+   message('Previous saved wording restored. Images remain unchanged.');
+  }catch(error){message('Could not undo wording: '+(error.message||'Request failed'));}
+  finally{setBusy(false);}
  });
  form.addEventListener('submit',async event=>{
   event.preventDefault();

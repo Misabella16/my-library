@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {SITE_TEXT_DEFAULTS,handleSiteContentApi} from '../site-content-api.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 function fixture(){
@@ -93,4 +94,77 @@ test('Image upload rejects spoofed types, mismatched revisions and oversized dat
   'POST',new Uint8Array(5*1024*1024+1),
   {'content-type':'image/png'})).status,413);
  assert.equal(f.objects.size,0);
+});
+
+test('Owner can edit section titles, navigation, and descriptions with one click and Undo',async()=>{
+ const f=fixture();
+ const first=await (await f.run('/api/site-content')).json();
+ const updatedText={...first.text,
+  navShelves:'My Bookcases',navPhotos:'Photo Catalogue',
+  shelvesTitle:'The Book Rooms',photosTitle:'Photograph the Shelves',
+  shelvesTip:'My books in their rooms and on their shelves.',
+  studioTitle:'My Design Atelier',
+  studioDescription:'Arrange my library visually.'};
+ const applied=await f.run('/api/site-content','POST',{
+  expected_revision:first.revision,text:updatedText},{'content-type':'application/json'});
+ assert.equal(applied.status,200,await applied.clone().text());
+ const saved=await applied.json();
+ assert.equal(saved.text.navShelves,'My Bookcases');
+ assert.equal(saved.text.studioTitle,'My Design Atelier');
+ assert.equal(saved.can_undo_text,true);
+ const stale=await f.run('/api/site-content/undo-text','POST',
+  {expected_revision:'original'},{'content-type':'application/json'});
+ assert.equal(stale.status,409);
+ const undo=await f.run('/api/site-content/undo-text','POST',
+  {expected_revision:saved.revision},{'content-type':'application/json'});
+ assert.equal(undo.status,200,await undo.clone().text());
+ const restored=await undo.json();
+ assert.equal(restored.text.navShelves,first.text.navShelves);
+ assert.equal(restored.text.studioTitle,first.text.studioTitle);
+ assert.equal((await (await f.run('/api/site-content')).json()).text.navShelves,
+  first.text.navShelves);
+ assert.equal(f.objects.size,1);
+});
+test('Section banners use separate private image slots and can be restored',async()=>{
+ const f=fixture();
+ const first=await (await f.run('/api/site-content')).json();
+ const png=Uint8Array.from([137,80,78,71,13,10,26,10,0,0,0,1]);
+ for(const slot of ['booksBanner','shelvesBanner','photosBanner','importsBanner']){
+  const current=await (await f.run('/api/site-content')).json();
+  const uploaded=await f.run('/api/site-content/image/'+slot+'?revision='+
+   encodeURIComponent(current.revision),'POST',png,{'content-type':'image/png'});
+  assert.equal(uploaded.status,200,slot+': '+await uploaded.clone().text());
+  const data=await uploaded.json();
+  assert.equal(data.images[slot],true);
+  const image=await f.run('/api/site-content/image/'+slot);
+  assert.equal(image.headers.get('content-type'),'image/png');
+ }
+ const now=await (await f.run('/api/site-content')).json();
+ assert.equal(Object.values(now.images).filter(Boolean).length,4);
+ const removed=await f.run('/api/site-content/image/booksBanner/remove','POST',
+  {expected_revision:now.revision},{'content-type':'application/json'});
+ assert.equal(removed.status,200);
+ const final=await removed.json();
+ assert.equal(final.images.booksBanner,false);
+ assert.equal(final.images.photosBanner,true);
+ assert.equal(final.text.brand,'My Library');
+ assert.equal(f.objects.size,4);
+});
+test('Page copy and decorative banners are actually wired to editable DOM targets',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../site-studio-ui.mjs',import.meta.url),'utf8');
+ for(const key of ['navBooks','navShelves','navPhotos','navImports','navStudio',
+  'shelvesTitle','photosTitle','importsTitle','studioTitle','shelvesTip',
+  'photosTip','importsDescription','studioDescription','collectionEyebrow']){
+  assert.match(html,new RegExp('name="'+key+'"'));
+  assert.match(html,new RegExp('data-site-text="'+key+'"'));
+ }
+ for(const slot of ['booksBanner','shelvesBanner','photosBanner','importsBanner']){
+  assert.match(html,new RegExp('data-site-preview="'+slot+'"'));
+  assert.match(html,new RegExp('data-site-image-input="'+slot+'"'));
+  assert.match(html,new RegExp('data-site-section-image="'+slot+'"'));
+ }
+ assert.match(html,/id="site-studio-undo"/);
+ assert.match(ui,/site-content\/undo-text/);
+ assert.match(ui,/data-site-section-image/);
 });
