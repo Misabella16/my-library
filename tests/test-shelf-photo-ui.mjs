@@ -104,7 +104,7 @@ test('Shelf-photo ISBN barcode finds an existing edition without creating a book
   const review=nodes.get('photo-match-results').afterNodes[0];
   assert.ok(review);
   const reviewRows=review.children.find(x=>x.className==='photo-review-rows');
-  assert.match(reviewRows.children[0].textContent,/shelf.jpg → Babel/);
+  assert.match(reviewRows.children[0].children[0].textContent,/shelf.jpg → Babel/);
   const open=result.children.find(x=>x.textContent==='Open book and editions');
   await open.dispatch('click');
   assert.deepEqual(opened,['11111111-1111-4111-8111-111111111111']);
@@ -191,8 +191,8 @@ test('Manual list of shelf spine titles suggests two existing books for one phot
   const review=nodes.get('photo-match-results').afterNodes[0];
   const rows=review.children.find(x=>x.className==='photo-review-rows');
   assert.equal(rows.children.length,2);
-  assert.match(rows.children[0].textContent,/Babel/);
-  assert.match(rows.children[1].textContent,/Piranesi/);
+  assert.match(rows.children[0].children[0].textContent,/Babel/);
+  assert.match(rows.children[1].children[0].textContent,/Piranesi/);
  }finally{
   globalThis.document=oldDocument;globalThis.BarcodeDetector=oldDetector;
   globalThis.createImageBitmap=oldBitmap;

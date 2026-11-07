@@ -55,10 +55,13 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  const saveReview=node('button','Save reviewed matches privately','btn mini');
  const loadReview=node('button','View saved shelf review','btn subtle mini');
  const undoSaved=node('button','Undo last saved review','btn subtle mini');
+ const locationHistoryButton=node('button','Recent shelf moves & Undo','btn subtle mini');
+ locationHistoryButton.type='button';
+ const locationHistoryView=node('div',undefined,'photo-location-history');
  const savedView=node('div',undefined,'photo-saved-review');
  saveReview.type=loadReview.type=undoSaved.type='button';
  reviewArea.append(reviewHeading,reviewText,reviewList,exportButton,
-  saveReview,loadReview,undoSaved,savedView);
+  saveReview,loadReview,undoSaved,savedView,locationHistoryButton,locationHistoryView);
  results.after?.(reviewArea);
  let savedRevision=null;
  const showSaved=record=>{
@@ -119,6 +122,40 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   }catch(error){tell('Unable to undo saved review: '+(error.message||'Request failed'));}
   finally{undoSaved.disabled=false;}
  });
+ locationHistoryButton.addEventListener('click',async()=>{
+  locationHistoryButton.disabled=true;locationHistoryView.replaceChildren();
+  try{
+   const data=await api('/api/shelf-photos/locations/history');
+   const history=Array.isArray(data.changes)?data.changes:[];
+   if(!history.length)locationHistoryView.append(node('p','No recent shelf moves.','muted'));
+   for(const change of history){
+    const row=node('div',undefined,'photo-location-history-row');
+    row.append(node('span',(change.title||'Book')+' · '+
+     (change.edition_name||'Edition')+
+     (change.vendor?' · '+change.vendor:'')+
+     ' · '+change.created_at,'muted'));
+    if(!change.undone_at){
+     const undo=node('button','Undo shelf move','btn subtle mini');
+     undo.type='button';
+     undo.addEventListener('click',async()=>{
+      undo.disabled=true;
+      try{
+       await api('/api/shelf-photos/copy/'+change.copy_id+'/location/undo',{
+        method:'POST',data:{change_id:change.change_id}});
+       undo.textContent='Undone';
+       tell('Restored the previous shelf location without changing the edition or other copies.');
+      }catch(error){
+       tell('Undo needs review: '+(error.message||'Request failed'));
+       undo.disabled=false;
+      }
+     });
+     row.append(undo);
+    }else row.append(node('span','Already undone','muted'));
+    locationHistoryView.append(row);
+   }
+  }catch(error){tell('Could not load shelf history: '+(error.message||'Request failed'));}
+  finally{locationHistoryButton.disabled=false;}
+ });
  exportButton.addEventListener('click',()=>{
   const csv=photoReviewCsv(review);
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
@@ -129,7 +166,73 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  function renderReview(){
   reviewList.replaceChildren();
   for(const row of photoReviewRows(review)){
-   const entry=node('p',row.photoName+' → '+(row.title||'Not matched yet'),'muted');
+   const entry=node('article',undefined,'photo-match-result');
+   entry.append(node('p',row.photoName+' → '+(row.title||'Not matched yet'),'muted'));
+   if(row.bookId){
+    const placement=node('button','Review physical shelf location','btn subtle mini');
+    placement.type='button';
+    const detail=node('div',undefined,'photo-location-review');
+    placement.addEventListener('click',async()=>{
+     placement.disabled=true;detail.replaceChildren();
+     try{
+      const data=await api('/api/shelf-photos/book/'+encodeURIComponent(row.bookId)+'/physical-copies');
+      const copies=Array.isArray(data.copies)?data.copies:[];
+      if(!copies.length){
+       detail.append(node('p','No owned physical copy is recorded. Open the book to confirm the correct edition and add your copy first.','muted'));
+      }else{
+       if(data.truncated)detail.append(node('p','Showing 20 copies. Open the book to see any additional copies.','muted'));
+       for(const copy of copies){
+        const wrap=node('section',undefined,'photo-location-copy');
+        const location=[copy.room,copy.bookcase,copy.shelf,copy.shelf_position].filter(Boolean).join(' / ');
+        wrap.append(node('strong',(copy.edition_name||'Edition')+
+         (copy.vendor?' · '+copy.vendor:'')+
+         (copy.is_special?' · Special edition':'')+
+         ' · '+(location||'Location unknown')));
+        const inputs={};
+        const names=[['room','Room'],['bookcase','Bookcase'],['shelf','Shelf'],['shelf_position','Position']];
+        for(const [field,label] of names){
+         const lab=node('label',label);
+         const input=node('input');
+         input.type='text';input.maxLength=field==='shelf_position'?100:150;
+         input.value=copy[field]||'';
+         inputs[field]=input;lab.append(input);wrap.append(lab);
+        }
+        const save=node('button','Save this copy location','btn mini');
+        save.type='button';
+        save.addEventListener('click',async()=>{
+         const desired=Object.fromEntries(names.map(([field])=>[field,inputs[field].value.trim()]));
+         const previous=Object.fromEntries(names.map(([field])=>[field,copy[field]||'']));
+         if(names.every(([field])=>desired[field]===previous[field])){
+          tell('No shelf location changes needed.');return;
+         }
+         let replace_existing=false;
+         if(names.some(([field])=>previous[field]&&previous[field]!==desired[field])){
+          if(!globalThis.confirm?.('Replace this physical copy\'s existing shelf location?'))return;
+          replace_existing=true;
+         }
+         save.disabled=true;
+         try{
+          const outcome=await api('/api/shelf-photos/copy/'+copy.copy_id+'/location',{
+           method:'POST',data:{location:desired,confirm:true,
+            replace_existing,expected_updated_at:copy.updated_at}});
+          if(outcome.status==='updated'){
+           wrap.append(node('p','Location saved. You can undo it using Shelf location history.','muted'));
+           placement.disabled=false;
+          }
+          tell('Shelf placement saved for the selected physical edition only.');
+         }catch(error){
+          wrap.append(node('p','No location changed: '+(error.message||'Request failed'),'muted'));
+         }finally{save.disabled=false;}
+        });
+        wrap.append(save);detail.append(wrap);
+       }
+      }
+     }catch(error){
+      detail.append(node('p','Could not load copies: '+(error.message||'Request failed'),'muted'));
+     }finally{placement.disabled=false;}
+    });
+    entry.append(placement,detail);
+   }
    reviewList.append(entry);
   }
   exportButton.disabled=review.photos.length===0;
