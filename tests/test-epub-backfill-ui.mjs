@@ -168,8 +168,8 @@ test('Health CSV summarizes missing fields and neutralizes spreadsheet formulas'
  ]);
  assert.match(csv,/Missing ebook cover/);
  assert.ok(csv.includes('"\'=HYPERLINK(""bad"")"'));
- assert.match(csv,/"true","true","false","true"/);
- assert.match(csv,/"false","false","false","false"/);
+ assert.match(csv,/"true","true","false","false","true"/);
+ assert.match(csv,/"false","false","false","false","false"/);
  assert.equal(csv.includes('private_notes'),false);
  assert.equal(csv.includes('private_object_key'),false);
 });
@@ -214,4 +214,20 @@ test('Owner can pause repair between saved EPUB files and resume without process
   assert.equal(f.get('epub-backfill-bulk').disabled,true);
   assert.equal(pause.disabled,true);
  }finally{f.restore();}
+});
+
+test('Verified EPUBs without embedded covers are not mistaken for complete books',()=>{
+ const rows=[
+  {file_id:'a',title:'Cover missing but checked',synopsis:'',subjects:[],
+   cover_missing:false,cover_unavailable:true},
+  {file_id:'b',title:'Complete',synopsis:'',subjects:[],
+   cover_missing:false,cover_unavailable:false}
+ ];
+ const stats=summarizeEpubHealth(rows);
+ assert.equal(stats.unavailableCover,1);
+ assert.equal(stats.ready,1);
+ const csv=epubHealthCsv(rows);
+ assert.match(csv,/No embedded cover \(verified\)/);
+ assert.match(csv,/"false","false","false","true","false"/);
+ assert.match(csv,/"false","false","false","false","false"/);
 });
