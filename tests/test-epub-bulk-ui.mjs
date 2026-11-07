@@ -441,3 +441,40 @@ test('Embedded EPUB cover previews load locally only when clicked, with no extra
   assert.equal(f.calls.length,before);
  }finally{f.restore();}
 });
+
+test('A collection of 10,000 EPUBs may be selected; larger selections are held safely',async()=>{
+ const f=fixture(1);
+ try{
+  const input=f.get('epub-folder');
+  input.files=Array(10000).fill(f.files[0]);
+  await input.dispatch('change');
+  assert.equal(f.get('preview-epubs').disabled,false);
+  assert.match(f.get('epub-preview-status').textContent,/10000 EPUBs selected/);
+  input.files=Array(10001).fill(f.files[0]);
+  await input.dispatch('change');
+  assert.equal(f.get('preview-epubs').disabled,true);
+  assert.match(f.get('epub-preview-status').textContent,/10000 at a time/);
+  assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+test('A 502-file EPUB selection saves 500 first, then remaining two without duplicates',async()=>{
+ const f=fixture(502);
+ try{
+  const folder=f.get('epub-folder');
+  folder.files=f.files;
+  await folder.dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.equal(f.get('upload-epubs').disabled,false);
+  assert.match(f.get('upload-epubs').textContent,/Save 500 eligible/);
+  const before=f.calls.filter(x=>x.path==='/api/epubs/preview').length;
+  assert.equal(before,11,'50-row bounded previews for 502 files');
+  await f.get('upload-epubs').dispatch('click');
+  assert.equal(f.stats().uploads,500);
+  assert.match(f.get('upload-epubs').textContent,/Save 2 eligible/);
+  assert.match(f.get('epub-preview-status').textContent,/2 eligible files remain/);
+  await f.get('upload-epubs').dispatch('click');
+  assert.equal(f.stats().uploads,502);
+  assert.equal(f.get('upload-epubs').disabled,true);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,before);
+ }finally{f.restore();}
+});
