@@ -437,8 +437,13 @@ document.addEventListener('DOMContentLoaded',async()=>{
   // reachable even if the database is temporarily out of daily allowance.
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
-    initEpubImport(api,{onImported:async()=>{await listBooks();
-  initEpubBackfill(api);if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
+    initEpubImport(api,{onImported:async()=>{
+      await listBooks();
+      if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});
+    }});
+    // Repair controls must be available on the first authenticated visit,
+    // including when no new EPUB has been uploaded in this session.
+    initEpubBackfill(api);
     initShelfPhotoAssistant(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);
