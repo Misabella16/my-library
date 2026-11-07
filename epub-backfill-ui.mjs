@@ -42,7 +42,8 @@ export function initEpubBackfill(api){
    section.append(el('strong',item.title||'Untitled'));
    section.append(el('p',(item.synopsis?'Missing synopsis · ':'')+
     (item.subjects?.length||0)+' EPUB subjects available · '+
-    (item.cover_missing?'Ebook cover check available':'Ebook cover already present'),'muted'));
+    (item.cover_unavailable?'No embedded EPUB cover found (checked)':
+      item.cover_missing?'Ebook cover check available':'Ebook cover already present'),'muted'));
    if(item.synopsis)section.append(el('p',item.synopsis.slice(0,240),'muted'));
    if(item.subjects?.length)section.append(el('p',item.subjects.join(' · '),'muted'));
    results.append(section);
