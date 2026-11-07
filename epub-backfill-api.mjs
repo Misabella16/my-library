@@ -150,9 +150,10 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
       const imageBytes=new Uint8Array(await inspected.cover.arrayBuffer());
       const mime=inspected.coverType;
       if(imageBytes.length>0&&imageBytes.length<=5*1024*1024&&
-       ['image/png','image/jpeg','image/webp'].includes(mime))
+       ['image/png','image/jpeg','image/webp'].includes(mime)){
        coverInfo={bytes:imageBytes,mime};
        checkedNoCover=false;
+      }
      }
     }
    }
