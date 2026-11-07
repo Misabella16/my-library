@@ -782,3 +782,44 @@ test('Single EPUB repair preview never exposes archived book or nonexistent file
   assert.equal(hidden.status,404);
  }finally{f.sqlite.close();}
 });
+
+test('A prior tag repair does not block a newly available embedded EPUB cover',async()=>{
+ const f=fixture();
+ try{
+  const bytes=epubArchiveWithCover();
+  const sha=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis) VALUES(?,?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer','Do not replace me');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(editionId,bookId,'Standard');
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(fileId,sha,'novel.epub','epubs/private/compl.epub',
+    JSON.stringify({subjects:['Fantasy']}),bookId,editionId);
+  await f.env.BOOK_FILES.put('epubs/private/compl.epub',bytes);
+  const stamp=f.sqlite.prepare('SELECT updated_at FROM books WHERE id=?').get(bookId).updated_at;
+  const request=()=>new Request('https://books.example.com/api/epubs/backfill/apply',
+    {method:'POST',body:JSON.stringify({file_id:fileId,expected_updated_at:stamp})});
+  // Simulate an early repair run without private R2 available.
+  const first=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',{});
+  assert.equal(first.status,200,await first.clone().text());
+  const firstResult=await first.json();
+  assert.equal(firstResult.tags_added,1);
+  assert.equal(firstResult.cover_added,false);
+  const second=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(second.status,200,await second.clone().text());
+  const result=await second.json();
+  assert.equal(result.status,'applied');
+  assert.equal(result.tags_added,0);
+  assert.equal(result.cover_added,true);
+  assert.equal(count(f.sqlite,'edition_images'),1);
+  assert.equal(count(f.sqlite,'epub_files'),1);
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(bookId).synopsis,'Do not replace me');
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM change_log WHERE action='epub_backfill'").get().n,2);
+  const third=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal((await third.json()).status,'already_processed');
+  assert.equal(count(f.sqlite,'edition_images'),1);
+ }finally{f.sqlite.close();}
+});
