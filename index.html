@@ -186,6 +186,7 @@
         <p class="muted">Find missing descriptions and source-backed subjects from saved EPUB records. No file reuploads, no changes until you click Apply.</p>
         <div class="goodreads-actions">
           <button type="button" class="btn subtle" id="epub-backfill-preview">Preview stored metadata</button>
+          <button type="button" class="btn subtle" id="epub-backfill-health">Check next 50 EPUBs (no edits)</button>
           <button type="button" class="btn subtle" id="epub-backfill-next" disabled>Next 10</button>
           <button type="button" class="btn" id="epub-backfill-apply" disabled>Fill missing metadata on this page</button>
           <button type="button" class="btn" id="epub-backfill-bulk">Repair next 50 saved EPUBs</button>
@@ -193,6 +194,7 @@
           <button type="button" class="btn subtle" id="epub-backfill-undo" disabled>Undo last repair</button>
           <button type="button" class="btn subtle" id="epub-backfill-history">Recent repair history</button>
         </div>
+        <p class="small-status" id="epub-backfill-health-status" aria-live="polite">Metadata health check has not been run.</p>
         <p class="small-status" id="epub-backfill-status" role="status">No repairs have been applied.</p>
         <div id="epub-backfill-results" class="epub-preview-list"></div>
         <div id="epub-backfill-history-list" class="epub-preview-list" aria-live="polite"></div>
