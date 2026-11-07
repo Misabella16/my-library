@@ -52,12 +52,26 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    'LEFT JOIN editions e ON e.id=f.edition_id '+
    'WHERE b.archived_at IS NULL AND f.id>? ORDER BY f.id LIMIT ?',[after,limit+1]);
   const page=rows.slice(0,limit);
+  // The preview must display missing subjects, not every subject in an EPUB.
+  // This single bounded query covers all ten books instead of a D1 query per
+  // EPUB, and avoids offering metadata already applied to the catalogue.
+  const ids=[...new Set(page.map(row=>row.book_id))];
+  const savedTags=ids.length?await many(db,
+   'SELECT bt.book_id,t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id '+
+   'WHERE bt.book_id IN ('+ids.map(()=>'?').join(',')+')',ids):[];
+  const tagsByBook=new Map();
+  for(const tag of savedTags){
+   if(!tagsByBook.has(tag.book_id))tagsByBook.set(tag.book_id,new Set());
+   tagsByBook.get(tag.book_id).add(tag.label.toLocaleLowerCase());
+  }
   return json({files:page.map(row=>{
    const extracted=unpack(row.metadata_json);
+   const current=tagsByBook.get(row.book_id)||new Set();
    return {file_id:row.id,book_id:row.book_id,title:row.title,
     expected_updated_at:row.updated_at,
     synopsis:row.synopsis?.trim()?'':extracted.synopsis,
-    subjects:extracted.tags,cover_missing:!row.cover_count&&
+    subjects:extracted.tags.filter(tag=>!current.has(tag.toLocaleLowerCase())),
+    cover_missing:!row.cover_count&&
      row.edition_format==='ebook'&&row.edition_special===0};
   }),next_cursor:rows.length>limit?page[page.length-1].id:null});
  }
@@ -86,7 +100,14 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    // Download only one bounded owner-private EPUB when a cover is missing.
    const object=await env.BOOK_FILES.get(row.private_object_key);
    if(object){
-    const bytes=await (object.arrayBuffer?object.arrayBuffer():Promise.resolve(object.body));
+    // Real R2 objects expose arrayBuffer(), but test doubles and some
+    // storage adapters expose a ReadableStream body. Never turn the stream
+    // object itself into file bytes.
+    const bytes=object.arrayBuffer?await object.arrayBuffer():
+      object.body instanceof ReadableStream?
+        await new Response(object.body).arrayBuffer():
+        object.body instanceof ArrayBuffer?object.body:
+        ArrayBuffer.isView(object.body)?object.body:new Uint8Array(0);
     if(bytes?.byteLength<=MAX_EPUB_BYTES&&bytes?.byteLength>0){
      const file=new File([bytes],/\\.epub$/i.test(row.original_filename||'')
       ?row.original_filename:'stored.epub',{type:'application/epub+zip'});
