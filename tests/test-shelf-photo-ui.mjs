@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import {scanPhotoBarcodes,initShelfPhotoAssistant} from '../shelf-photo-ui.mjs';
 
 class FakeNode{
- constructor(){this.listeners={};this.children=[];this.textContent='';this.value='';this.files=[];this.disabled=false;}
+ constructor(){this.listeners={};this.children=[];this.textContent='';this.value='';this.files=[];this.disabled=false;this.afterNodes=[];}
  addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}
  async dispatch(type){for(const fn of this.listeners[type]||[])await fn({target:this});}
  append(...items){this.children.push(...items);}
+ after(...items){this.afterNodes.push(...items);}
  replaceChildren(...items){this.children=[...items];}
  setAttribute(){}
 }
@@ -56,4 +57,62 @@ test('Shelf-photo assistant only reads bounded title matches and never creates c
   assert.deepEqual(opened,['11111111-1111-4111-8111-111111111111']);
   assert.ok(calls.every(path=>path.startsWith('/api/books?')));
  }finally{globalThis.document=prior;}
+});
+
+test('Shelf-photo ISBN barcode finds an existing edition without creating a book or physical copy',async()=>{
+ const previousDocument=globalThis.document;
+ const previousDetector=globalThis.BarcodeDetector;
+ const previousBitmap=globalThis.createImageBitmap;
+ const oldUrl=globalThis.URL.createObjectURL;
+ const oldRevoke=globalThis.URL.revokeObjectURL;
+ const nodes=new Map(names.map(name=>[name,new FakeNode()]));
+ const calls=[],opened=[];
+ try{
+  globalThis.document={
+   getElementById:id=>nodes.get(id)||null,createElement:()=>new FakeNode()
+  };
+  globalThis.URL.createObjectURL=()=> 'blob:private-shelf-photo';
+  globalThis.URL.revokeObjectURL=()=>{};
+  globalThis.BarcodeDetector=class{
+   static async getSupportedFormats(){return ['ean_13'];}
+   async detect(){return [{rawValue:'9780306406157'}];}
+  };
+  globalThis.createImageBitmap=async()=>({close(){}});
+  initShelfPhotoAssistant(async path=>{
+   calls.push(path);
+   if(path.startsWith('/api/shelf-photos/isbn?'))return {
+    isbn:'9780306406157',matches:[{
+     book_id:'11111111-1111-4111-8111-111111111111',
+     edition_id:'22222222-2222-4222-8222-222222222222',
+     title:'Babel',author:'R. F. Kuang',edition_name:'Hardcover',format:'hardcover'
+    }],ambiguous:false
+   };
+   throw new Error('Unexpected API request: '+path);
+  },{onSelectBook:async id=>opened.push(id)});
+  nodes.get('photo-files').files=[new File(['fake image'],'shelf.jpg',{type:'image/jpeg'})];
+  await nodes.get('photo-files').dispatch('change');
+  assert.equal(calls.length,1);
+  assert.match(calls[0],/^\/api\/shelf-photos\/isbn\?/);
+  const list=nodes.get('photo-isbn-status').afterNodes[0];
+  assert.ok(list);
+  assert.equal(list.children.length,1);
+  const result=list.children[0];
+  const suggestion=result.children.find(x=>x.textContent==='Associate this photo (review only)');
+  assert.ok(suggestion);
+  await suggestion.dispatch('click');
+  const review=nodes.get('photo-match-results').afterNodes[0];
+  assert.ok(review);
+  const reviewRows=review.children.find(x=>x.className==='photo-review-rows');
+  assert.match(reviewRows.children[0].textContent,/shelf.jpg → Babel/);
+  const open=result.children.find(x=>x.textContent==='Open book and editions');
+  await open.dispatch('click');
+  assert.deepEqual(opened,['11111111-1111-4111-8111-111111111111']);
+  assert.ok(calls.every(x=>x.startsWith('/api/shelf-photos/isbn?')));
+ }finally{
+  globalThis.document=previousDocument;
+  globalThis.BarcodeDetector=previousDetector;
+  globalThis.createImageBitmap=previousBitmap;
+  globalThis.URL.createObjectURL=oldUrl;
+  globalThis.URL.revokeObjectURL=oldRevoke;
+ }
 });
