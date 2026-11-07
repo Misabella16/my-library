@@ -1,7 +1,7 @@
 import {normalizeEpubTitle,normalizeEpubAuthor} from './epub-metadata.mjs';
 // Pure, browser-and-Node-friendly helpers for large personal EPUB collections.
 // Never infer ownership, a special edition, or a trustworthy author from a filename.
-export const MAX_BULK_FILES=3000;
+export const MAX_BULK_FILES=10000;
 export const IDENTITY_PAGE_SIZE=50;
 const squash=text=>String(text||'').normalize('NFKC').replace(/\s+/g,' ').trim();
 export function cleanEpubTitle(value){
