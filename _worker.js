@@ -8,6 +8,7 @@ import {handleShelfInventoryApi} from './shelf-photo-inventory-api.mjs';
 import {handleShelfPlacementApi} from './shelf-photo-placement-api.mjs';
 import {handleShelfBulkLocationApi} from './shelf-photo-bulk-location-api.mjs';
 import {handleVisualShelvesApi} from './visual-shelves-api.mjs';
+import {handleShelfLayoutApi} from './visual-shelf-layout-api.mjs';
 import {handleSiteContentApi} from './site-content-api.mjs';
 import {handleShelfSavedReviewApi} from './shelf-saved-review-api.mjs';
 import {classifyDatabaseError} from './database-errors.mjs';
@@ -267,6 +268,8 @@ async function serveApi(request,env,path){
   if(savedReviewResponse)return savedReviewResponse;
   const siteContentResponse=await handleSiteContentApi(request,env,path);
   if(siteContentResponse)return siteContentResponse;
+  const shelfLayoutResponse=await handleShelfLayoutApi(request,db,env,path);
+  if(shelfLayoutResponse)return shelfLayoutResponse;
   const visualShelvesResponse=await handleVisualShelvesApi(request,db,path);
   if(visualShelvesResponse)return visualShelvesResponse;
   const bulkShelfLocationResponse=await handleShelfBulkLocationApi(request,db,path);
