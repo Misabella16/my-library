@@ -681,6 +681,6 @@ test('Recovering ebook cover keeps an existing manually chosen jacket as display
     body:JSON.stringify({change_id:data.change_id})}),f.db,'/api/epubs/backfill/undo',f.env);
   assert.equal(undo.status,200,await undo.clone().text());
   const surviving=f.sqlite.prepare('SELECT id,display_cover FROM edition_images').all();
-  assert.deepEqual(surviving,[{id:jacketId,display_cover:1}]);
+  assert.deepEqual(surviving.map(row=>({...row})),[{id:jacketId,display_cover:1}]);
  }finally{f.sqlite.close();}
 });
