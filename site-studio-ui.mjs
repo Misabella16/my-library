@@ -9,8 +9,12 @@ function updateImage(slot,exists,revision){
  const url=exists?imageUrl(slot,revision):'';
  for(const preview of children('[data-site-preview="'+slot+'"]')){
   preview.hidden=!exists;
-  if(exists)preview.src=url;
-  else preview.removeAttribute('src');
+  preview.replaceChildren();
+  if(exists){
+   const image=document.createElement('img');
+   image.src=url;image.alt=preview.dataset.siteAlt||'Site image';
+   image.loading='lazy';preview.append(image);
+  }
  }
  const remove=el('[data-site-image-remove="'+slot+'"]');
  if(remove)remove.disabled=!exists;
