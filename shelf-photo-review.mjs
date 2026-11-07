@@ -5,16 +5,41 @@ export function setReviewPhotos(state,files){
  state.matches.clear();
  return state.photos;
 }
-export function assignPhotoMatch(state,photoId,book){
- const photo=state.photos.find(x=>x.id===String(photoId));
+const matchRow=(photo,book)=>({
+ photoId:photo.id,photoName:photo.name,
+ bookId:book.id,title:String(book.title),author:String(book.author||'')
+});
+const photoById=(state,id)=>{
+ const photo=state.photos.find(x=>x.id===String(id));
  if(!photo)throw Error('Select a photograph first.');
- if(!book||typeof book.id!=='string'||!book.title)throw Error('Invalid book selection.');
- state.matches.set(photo.id,{photoId:photo.id,photoName:photo.name,
-  bookId:book.id,title:String(book.title),author:String(book.author||'')});
+ return photo;
+};
+const validateBook=book=>{
+ if(!book||typeof book.id!=='string'||!book.id||!book.title)
+  throw Error('Invalid book selection.');
+};
+// Existing single-match controls retain their original replace behavior.
+export function assignPhotoMatch(state,photoId,book){
+ const photo=photoById(state,photoId);
+ validateBook(book);
+ state.matches.set(photo.id,[matchRow(photo,book)]);
+}
+// A single shelf photograph may depict many books. Add only after explicit
+// user review; never infer ownership, edition or number of physical copies.
+export function addPhotoBookMatch(state,photoId,book){
+ const photo=photoById(state,photoId);
+ validateBook(book);
+ const existing=state.matches.get(photo.id)||[];
+ if(existing.some(row=>row.bookId===book.id))return false;
+ state.matches.set(photo.id,[...existing,matchRow(photo,book)]);
+ return true;
 }
 export function photoReviewRows(state){
- return state.photos.map(photo=>({photoName:photo.name,
-  ...(state.matches.get(photo.id)||{bookId:'',title:'',author:''})}));
+ return state.photos.flatMap(photo=>{
+  const matches=state.matches.get(photo.id)||[];
+  return matches.length?matches.map(row=>({...row})):
+   [{photoId:photo.id,photoName:photo.name,bookId:'',title:'',author:''}];
+ });
 }
 export function photoReviewCsv(state){
  const escape=s=>'"'+String(s??'').replaceAll('"','""').replace(/^[=+\-@\t\r]/,'\'$&')+'"';
