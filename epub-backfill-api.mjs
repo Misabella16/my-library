@@ -113,8 +113,10 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   // A prior metadata repair must not block newly recoverable cover art.
   // The already-processed response remains idempotent when no additional
   // cover, synopsis or OPF subjects can be applied.
-  if(row.updated_at!==data.expected_updated_at)
+  if(row.updated_at!==data.expected_updated_at){
+   if(previous)return json({status:'already_processed',file_id:row.id});
    return fail('Book changed since preview. Refresh the repair preview.',409);
+  }
   const {synopsis,tags,coverCheckedVersion,coverCheckedHash}=unpack(row.metadata_json);
   const description=!row.synopsis?.trim()?synopsis:'';
   const existing=await many(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',[row.book_id]);
