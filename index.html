@@ -103,6 +103,18 @@
         <div id="photo-title-suggestions" class="photo-match-results" aria-live="polite"></div>
       </div>
       <div class="photo-search-controls">
+        <h3>Compare a photographed cover to saved edition artwork</h3>
+        <p class="muted">Select a photo, drag a rectangle around one complete cover, then enter a title or author hint. My Library compares only a few stored covers from that search. Similar artwork is not proof of an edition or ownership. All comparison happens locally in your browser.</p>
+        <label for="photo-cover-source">Photograph containing the book cover</label>
+        <select id="photo-cover-source"></select>
+        <canvas id="photo-cover-canvas" class="photo-cover-canvas" aria-label="Shelf photo. Drag a rectangle to select a book cover."></canvas>
+        <label for="photo-cover-hint">Title or author hint for narrowing candidates</label>
+        <input id="photo-cover-hint" type="search" maxlength="150" placeholder="e.g. Babel">
+        <button class="btn" id="photo-cover-compare" type="button">Compare with my saved covers</button>
+        <p id="photo-cover-status" class="small-status" role="status"></p>
+        <div id="photo-cover-results" class="photo-match-results" aria-live="polite"></div>
+      </div>
+      <div class="photo-search-controls">
         <label for="photo-book-search">Find a pictured book by title or author</label>
         <input id="photo-book-search" type="search" maxlength="150" placeholder="Search the collection…">
         <button class="btn subtle" id="photo-match-search" type="button">Find book matches</button>

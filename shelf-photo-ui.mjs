@@ -1,5 +1,6 @@
 import {extractIsbn13} from './epub-isbn.mjs';
 import {scanShelfTextLocal,shelfTitleLines} from './shelf-photo-text.mjs';
+import {initShelfCoverComparison} from './shelf-cover-ui.mjs';
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
 import {createPhotoReview,setReviewPhotos,assignPhotoMatch,addPhotoBookMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
@@ -43,6 +44,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  const barcodeMatches=node('div',undefined,'photo-barcode-matches');
  isbnStatus?.after?.(barcodeMatches);
  let selectionGeneration=0;
+ let coverComparison=null;
  const reviewArea=node('section',undefined,'photo-review-area');
  const reviewHeading=node('h3','Photo-by-photo review');
  const reviewText=node('p','A shelf photo can contain multiple books. Add as many reviewed matches as you can identify. These temporary links never create physical copies or edit the library.','muted');
@@ -80,6 +82,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   const files=[...(input.files||[])].filter(x=>
    ['image/jpeg','image/png','image/webp'].includes(x.type)&&x.size<=8*1024*1024).slice(0,50);
   setReviewPhotos(review,files);renderReview();
+  coverComparison?.refreshPhotos();
   if(titlePhoto){
    titlePhoto.replaceChildren();
    for(const record of review.photos){
@@ -365,6 +368,19 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    tell('Showing '+order.length+' bounded catalogue suggestions. No photographs were uploaded and no copies were created.');
   }catch(e){tell('Shelf-photo matching unavailable: '+(e.message||'Request failed'));}
   finally{busy=false;button.disabled=false;}
+ });
+ coverComparison=initShelfCoverComparison(api,{
+  getPhotos:()=>[...(input.files||[])].filter(file=>
+   ['image/jpeg','image/png','image/webp'].includes(file.type)&&file.size<=8*1024*1024).slice(0,50),
+  onReview:(photo,match)=>{
+   const reviewed=review.photos.find(row=>row.name===photo.name);
+   if(!reviewed)throw Error('Shelf photograph changed; reselect a photo.');
+   addPhotoBookMatch(review,reviewed.id,{
+    id:match.bookId,title:match.title,author:match.author
+   });
+   renderReview();
+  },
+  onSelectBook
  });
  return {clear};
 }
