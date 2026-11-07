@@ -1,6 +1,6 @@
 import {extractIsbn13} from './epub-isbn.mjs';
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
-import {createPhotoReview,setReviewPhotos,assignPhotoMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
+import {createPhotoReview,setReviewPhotos,assignPhotoMatch,addPhotoBookMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
 // A privacy-first shelf-photo helper. Images never leave the browser.
 // Native BarcodeDetector is optional and cannot identify cover art or text.
@@ -41,7 +41,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  let selectionGeneration=0;
  const reviewArea=node('section',undefined,'photo-review-area');
  const reviewHeading=node('h3','Photo-by-photo review');
- const reviewText=node('p','Select a photo for each suggested book. These links are temporary and do not create copies or change your catalogue.','muted');
+ const reviewText=node('p','A shelf photo can contain multiple books. Add as many reviewed matches as you can identify. These temporary links never create physical copies or edit the library.','muted');
  const reviewList=node('div',undefined,'photo-review-rows');
  const exportButton=node('button','Download photo match review CSV','btn subtle mini');
  exportButton.type='button';
@@ -138,7 +138,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
     associate.type='button';associate.disabled=!review.photos.length;
     associate.addEventListener('click',()=>{
      try{
-      assignPhotoMatch(review,photo.id,{
+      addPhotoBookMatch(review,photo.id,{
        id:match.book_id,title:match.title,author:match.author
       });
       renderReview();
@@ -271,7 +271,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
     assign.disabled=!review.photos.length;
     assign.addEventListener('click',()=>{
      try{
-      assignPhotoMatch(review,select.value,book);renderReview();
+      addPhotoBookMatch(review,select.value,book);renderReview();
       tell('Suggested match recorded for photo review only. Open the book to verify edition and physical copy.');
      }catch(error){tell(error.message||'Choose a photo first.');}
     });
