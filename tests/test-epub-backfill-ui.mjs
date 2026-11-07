@@ -9,7 +9,7 @@ class FakeNode {
  append(...nodes){this.children.push(...nodes);}
  replaceChildren(...nodes){this.children=[...nodes];}
 }
-function fixture(rows=55){
+function fixture(rows=55,{failOnceAt=-1}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list'];
@@ -27,6 +27,7 @@ function fixture(rows=55){
   title:'Novel '+i,synopsis:'',subjects:['Fantasy'],cover_missing:false
  }));
  const calls=[],applied=[];
+ let failedQuota=false;
  const api=async(path,opts)=>{
   calls.push(path);
   if(path.startsWith('/api/epubs/backfill/preview?')){
@@ -37,6 +38,13 @@ function fixture(rows=55){
    return {files:page,next_cursor:start+10<records.length?page.at(-1).file_id:null};
   }
   if(path==='/api/epubs/backfill/apply'){
+   const index=records.findIndex(item=>item.file_id===opts.data.file_id);
+   if(!failedQuota&&index===failOnceAt){
+    failedQuota=true;
+    const error=new Error('D1 quota exhausted');
+    error.payload={code:'database_read_quota'};
+    throw error;
+   }
    applied.push(opts.data.file_id);
    return {status:'applied',change_id:opts.data.file_id};
   }
@@ -87,5 +95,20 @@ test('History can restore Undo controls after a new visit without leaking EPUB d
   await undo.click();
   assert.ok(f.calls.includes('/api/epubs/backfill/undo'));
   assert.equal(undo.textContent,'Undone');
+ }finally{f.restore();}
+});
+
+test('Quota interruption halfway through a page resumes at failed EPUB rather than skipping it',async()=>{
+ const f=fixture(18,{failOnceAt:6});
+ try{
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,6);
+  assert.match(f.get('epub-backfill-status').textContent,/stopped safely/i);
+  assert.equal(f.get('epub-backfill-bulk').disabled,false);
+  await f.get('epub-backfill-bulk').click();
+  assert.equal(f.applied.length,18);
+  assert.equal(new Set(f.applied).size,18);
+  assert.equal(f.applied[6],String(6).padStart(36,'0'));
+  assert.equal(f.get('epub-backfill-bulk').disabled,true);
  }finally{f.restore();}
 });
