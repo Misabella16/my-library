@@ -92,3 +92,39 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
  .visual-shelf-books.spines-view .visual-shelf-spine{transition:none}
  .visual-shelf-books.spines-view .visual-shelf-spine:hover{transform:none}
 }
+
+/* Hover/focus shelf details. Touch users may press Details to pin the panel. */
+.visual-shelf-book{position:relative}
+.visual-shelf-hover{display:none;position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);
+ transform:translateX(-50%);width:min(340px,calc(100vw - 44px));max-height:330px;overflow:auto;
+ background:#fffaf0;color:#263b31;padding:15px;border:1px solid #bfa98b;border-radius:10px;
+ box-shadow:0 12px 32px #231d1944;overflow-wrap:anywhere;text-align:left}
+.visual-shelf-hover strong{display:block;font-family:Georgia,serif;font-size:15px}
+.visual-shelf-hover p{margin:5px 0;font-size:12px;line-height:1.45}
+.visual-shelf-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.visual-shelf-tags .badge{font-size:10px;padding:4px 7px}
+.visual-shelf-book:hover .visual-shelf-hover,
+.visual-shelf-book:focus-within .visual-shelf-hover,
+.visual-shelf-book.details-open .visual-shelf-hover{display:block}
+.visual-shelf-details-toggle{margin-top:4px}
+.visual-shelf-order-buttons{display:flex;gap:3px}
+.visual-shelf-order-buttons .btn{min-width:26px;min-height:30px}
+.visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-order-buttons{position:absolute;
+ top:-34px;left:50%;transform:translateX(-50%);display:none;z-index:6}
+.visual-shelf-books.spines-view .visual-shelf-book:hover>.visual-shelf-order-buttons,
+.visual-shelf-books.spines-view .visual-shelf-book:focus-within>.visual-shelf-order-buttons{display:flex}
+.visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-hover{bottom:calc(100% + 45px)}
+.visual-shelf-layout-editor{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:13px 0 4px}
+.visual-shelf-layout-editor label{display:grid;gap:4px;min-width:min(250px,100%);font-size:12px}
+.visual-shelf-layout-editor input{padding:8px 10px;border:1px solid #b7ab9c;border-radius:7px}
+.visual-shelf-layout-editor p{flex-basis:100%;margin:0;font-size:12px}
+@media(hover:none){
+ .visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-order-buttons{display:flex;
+  position:static;transform:none;justify-content:center;margin-top:4px}
+ .visual-shelf-books.spines-view .visual-shelf-book{display:flex;flex-direction:column;align-items:center}
+ .visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-hover{bottom:calc(100% + 4px)}
+}
+@media(max-width:600px){
+ .visual-shelf-hover{max-height:260px}
+ .visual-shelf-layout-editor{align-items:stretch}
+}
