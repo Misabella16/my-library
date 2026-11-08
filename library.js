@@ -1,5 +1,6 @@
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
+import {initEpubTitleCleanup} from './epub-title-cleanup-ui.mjs';
 import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
@@ -450,6 +451,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
     // including when no new EPUB has been uploaded in this session.
     initEpubBackfill(api);
     initSiteStudio(api);
+    initEpubTitleCleanup(api,{
+      onUpdated:()=>refreshCurrent(),
+      onSelectBook:async bookId=>{
+        document.querySelector('[data-tab="library"]')?.click();
+        await selectBook(bookId);
+        document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
+      }
+    });
     initCollectionHealth(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);

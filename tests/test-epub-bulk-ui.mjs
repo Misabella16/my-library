@@ -536,3 +536,25 @@ test('New EPUB bulk controls and repair-all are exposed in Imports without repla
   assert.match(html,new RegExp('id="'+id+'"'));
  }
 });
+
+test('Oversized EPUB still displays a cleaned title, stays blocked, and preserves original filename',async()=>{
+ const f=fixture(0);
+ try{
+  const filename='Textual Poachers (z-library.sk, ilib.sk, z-lib.sk).epub';
+  const file=new File([new Uint8Array(24*1024*1024+1)],filename,
+   {type:'application/epub+zip'});
+  f.get('epub-files').files=[file];
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  const card=f.get('epub-preview-list').children[0];
+  assert.equal(card.children[0].textContent,'Textual Poachers');
+  assert.match(card.children[1].textContent,/Textual Poachers \(z-library.sk, ilib.sk, z-lib.sk\)\.epub/);
+  assert.match(card.children[2].textContent,/Too large/);
+  assert.match(card.children.find(x=>x.className==='epub-preview-note').textContent,/24 MB/);
+  assert.equal(f.get('upload-epubs').disabled,true);
+  assert.equal(f.get('epub-save-all').disabled,true);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,0);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/upload').length,0);
+  assert.equal(file.name,filename,'The EPUB filename must not be changed');
+ }finally{f.restore();}
+});

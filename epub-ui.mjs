@@ -1,5 +1,5 @@
 import {inspectEpub,MAX_EPUB_BYTES} from './epub-reader.mjs';
-import {suggestEpubMetadata} from './epub-metadata.mjs';
+import {suggestEpubMetadata,cleanEpubTitle} from './epub-metadata.mjs';
 import {bulkEpubReport,flagPossibleEpubDuplicates} from './epub-bulk.mjs';
 
 const PREVIEW_BATCH=50;
@@ -12,7 +12,8 @@ const labels={
  new:'New book',match:'Matches existing book',
  already_uploaded:'Already uploaded',needs_review:'Needs review',
  same_file:'Duplicate in this selection',uploaded:'Saved',
- upload_failed:'Upload failed',possible_duplicate:'Possible duplicate EPUB'
+ upload_failed:'Upload failed',possible_duplicate:'Possible duplicate EPUB',
+ oversized:'Too large (over 24 MB)',unreadable:'Could not inspect EPUB'
 };
 const canImport=x=>!x?.excluded&&['new','match','upload_failed'].includes(x?.match?.status);
 const create=(tag,className,text)=>{
@@ -70,6 +71,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      ' · '+(entry.file.webkitRelativePath||entry.file.name)));
    card.append(create('span','epub-preview-label',labels[entry.match?.status]||'Not checked'));
    const notes=[];
+   if(entry.cleanedFromName)notes.push('Removed download-site label from the displayed title. The original file remains unchanged.');
    if(meta.description)notes.push('Description extracted');
    if(meta.coverPath)notes.push('Embedded cover detected (extracted on upload)');
    if(meta.subjects?.length)notes.push(meta.subjects.length+' EPUB subject tags');
@@ -325,14 +327,28 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     if(previewPauseRequested)break;
     const batch=files.slice(start,start+PREVIEW_BATCH),toMatch=[],pending=[];
     for(const file of batch){
-     const entry={file,metadata:null,match:{status:'needs_review'},error:null};
+     // Show a safe title suggestion even when file bytes cannot be inspected
+    // (for example the file exceeds the upload limit).
+    const fileTitle=cleanEpubTitle(file.name);
+    const entry={file,metadata:{title:fileTitle,author:''},
+     match:{status:'needs_review'},error:null,
+     cleanedFromName:fileTitle!==file.name.replace(/\.epub$/i,'').trim()};
      try{
-      if(!file.size||file.size>MAX_EPUB_BYTES)throw Error('EPUB must be smaller than 24 MB');
+      if(!file.size){
+       entry.match={status:'unreadable'};
+       throw Error('The file is empty and cannot be imported.');
+      }
+      if(file.size>MAX_EPUB_BYTES){
+       entry.match={status:'oversized'};
+       throw Error('This EPUB is '+(file.size/1048576).toFixed(1)+
+        ' MB. Current upload limit: 24 MB. Name cleanup is preview-only.');
+      }
       // Inspect sequentially: no persistent file bytes or cover blobs
       // held in memory during thousand-book previews.
       const raw=await inspectEpub(file,{includeCover:false});
       const suggested=suggestEpubMetadata(raw,file.name);
       entry.metadata={...raw,cover:null,...suggested};
+      entry.cleanedFromName=!!suggested.cleanedSourceStamp||entry.cleanedFromName;
       if(seen.has(raw.sha256)){
        entry.match={status:'same_file'};
       }else{
@@ -344,7 +360,11 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
        entry.reviewReason=suggested.reviewReason||'';
        toMatch.push(entry);
       }
-     }catch(error){entry.error=error.message||'Could not inspect EPUB';}
+     }catch(error){
+      entry.error=error.message||'Could not inspect EPUB';
+      if(entry.match?.status==='needs_review'&&!entry.metadata?.sha256)
+       entry.match={status:'unreadable'};
+     }
      pending.push(entry);
     }
     if(toMatch.length){

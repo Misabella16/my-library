@@ -29,3 +29,34 @@ test('Clean Unicode without stripping culturally significant characters',()=>{
  assert.equal(meta.author,'墨香铜臭');
  assert.equal(meta.reviewReason,null);
 });
+
+test('Clean grouped download-site labels from imported title and filename',()=>{
+ const raw='Textual Poachers (z-library.sk, ilib.sk, z-lib.sk).epub';
+ assert.equal(cleanEpubTitle(raw),'Textual Poachers');
+ assert.equal(cleanEpubTitle('Textual Poachers (z-library.sk, ilib.sk, z-lib.sk)'),
+  'Textual Poachers');
+ assert.equal(cleanEpubTitle('[Z-Library] Textual Poachers.epub'),'Textual Poachers');
+ assert.equal(cleanEpubTitle('Textual Poachers [lib.sk, z-lib.sk] (2).epub'),'Textual Poachers');
+ assert.equal(cleanEpubTitle('Textual Poachers - z-library.sk'),'Textual Poachers');
+ assert.equal(cleanEpubTitle('The World after the Fall V2.epub'),'The World after the Fall V2');
+ const suggested=suggestEpubMetadata({title:'',author:''},raw);
+ assert.equal(suggested.title,'Textual Poachers');
+ assert.equal(suggested.guessedTitle,true);
+ assert.equal(suggested.cleanedSourceStamp,true);
+ assert.match(suggested.reviewReason,/Missing author/);
+});
+test('Preserve legitimate title text and never invent author or merge distinct works',()=>{
+ for(const title of ['The Library of Babel','Library Genesis: An Essay','The Z-Library Scandal',
+  'The Night Circus (Anniversary Edition)','World after the Fall (Vol. 2)',
+  '天官赐福 第一卷','A Library of Secrets - A Novel']){
+  assert.equal(cleanEpubTitle(title),title,title);
+ }
+ assert.equal(suggestEpubMetadata({
+  title:'Textual Poachers (z-library.sk, ilib.sk, z-lib.sk)',
+  author:'Lena Reader'
+ }).title,'Textual Poachers');
+ assert.equal(suggestEpubMetadata({
+  title:'Textual Poachers (z-library.sk, ilib.sk, z-lib.sk)',
+  author:'Lena Reader'
+ }).author,'Lena Reader');
+});
