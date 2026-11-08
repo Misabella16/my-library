@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     initEpubBackfill(api);
     initSiteStudio(api);
     initEpubTitleCleanup(api,{
-      onUpdated:()=>loadPage(state.offset),
+      onUpdated:()=>refreshCurrent(),
       onSelectBook:async bookId=>{
         document.querySelector('[data-tab="library"]')?.click();
         await selectBook(bookId);
