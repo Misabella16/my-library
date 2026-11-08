@@ -1,7 +1,7 @@
 // Conservative EPUB/catalogue title cleanup. Only well-known download
 // source labels in isolated prefix/suffix positions are discarded.
 // Actual EPUB content and the original filename are never rewritten.
-const sourceAtom=/^(?:z[\s._-]?library|z[\s._-]?lib|zlib|libgen|library[\s._-]?genesis|lib[\s._-]?sk|[0-9]{1,2}lib|b[\s._-]?ok|bookzz)(?:\.[a-z0-9-]{2,16})*$/i;
+const sourceAtom=/^(?:z[\s._-]?library|z[\s._-]?lib|zlib|libgen|library[\s._-]?genesis|i?lib[\s._-]?sk|[0-9]{1,2}lib|b[\s._-]?ok|bookzz)(?:\.[a-z0-9-]{2,16})*$/i;
 const compact=value=>String(value??'').normalize('NFKC').replace(/\s+/g,' ').trim();
 function isDownloadSource(value){
  const text=compact(value).replace(/^https?:\/\//i,'').replace(/^www\./i,'')
