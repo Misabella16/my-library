@@ -170,3 +170,13 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
 .health-result-details strong{font:600 15px Georgia,serif}
 .health-result-details p{font-size:12px;margin:5px 0}
 @media(max-width:590px){.collection-health-actions{align-items:stretch}.collection-health-actions label{width:100%}.collection-health-results{grid-template-columns:1fr}}
+
+/* Existing-name cleanup is preview-first and never touches stored EPUB bytes. */
+.epub-title-cleanup-result{display:flex;align-items:start;gap:12px;
+ padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--paper)}
+.epub-title-cleanup-result>input{flex-shrink:0;width:18px;height:18px;margin-top:5px}
+.epub-title-cleanup-result .epub-title-cleanup-labels{display:grid;gap:5px;flex:1;min-width:0;overflow-wrap:anywhere}
+.epub-title-cleanup-labels strong{font:600 15px Georgia,serif}
+.epub-title-cleanup-labels span{font-size:12px}
+@media(max-width:650px){.epub-title-cleanup-result{flex-wrap:wrap}
+ .epub-title-cleanup-result>.btn{margin-left:30px}}
