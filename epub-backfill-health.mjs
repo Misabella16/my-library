@@ -5,8 +5,9 @@ export function summarizeEpubHealth(rows){
   checked:list.length,
   missingSynopsis:list.filter(x=>!!x.synopsis).length,
   missingCover:list.filter(x=>x.cover_missing===true).length,
+  unselectedCover:list.filter(x=>x.cover_unselected===true).length,
   unavailableCover:list.filter(x=>x.cover_unavailable===true).length,
   missingSubjects:list.filter(x=>Array.isArray(x.subjects)&&x.subjects.length>0).length,
-  ready:list.filter(x=>!x.synopsis&&!x.cover_missing&&!x.cover_unavailable&&!(x.subjects?.length)).length
+  ready:list.filter(x=>!x.synopsis&&!x.cover_missing&&!x.cover_unavailable&&!x.cover_unselected&&!(x.subjects?.length)).length
  };
 }

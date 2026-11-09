@@ -120,3 +120,40 @@ test('Unlabeled UUID stays available when no valid ISBN exists',()=>{
  const details=parsePackageXml(container,onlyUuid,'OPS/content.opf');
  assert.equal(details.identifier,'urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
 });
+
+test('EPUB2 guide-marked cover.xhtml retrieves its one linked image',async()=>{
+ const legacyOpf=opf.replace(/<manifest>[\s\S]*<\/manifest>/,
+  '<manifest><item id="coverPage" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>'+
+  '<item id="art" href="images/cover.png" media-type="image/png"/></manifest>'+
+  '<guide><reference type="cover" href="Text/cover.xhtml"/></guide>');
+ const bookFiles={...content(),'OPS/content.opf':legacyOpf,
+  'OPS/Text/cover.xhtml':'<html xmlns="http://www.w3.org/1999/xhtml">'+
+   '<body><img src="../images/cover.png"/></body></html>'};
+ const epub=await inspectEpub(new File([fixtureZip(bookFiles)],'legacy.epub'));
+ assert.equal(epub.coverDocumentPath,'OPS/Text/cover.xhtml');
+ assert.equal(epub.coverPath,'OPS/images/cover.png');
+ assert.equal(epub.coverType,'image/png');
+ assert.equal(epub.cover.size,png.length);
+});
+test('EPUB2 ambiguous cover page does not select chapter illustrations',async()=>{
+ const legacyOpf=opf.replace(/<manifest>[\s\S]*<\/manifest>/,
+  '<manifest><item id="coverPage" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>'+
+  '<item id="art" href="images/cover.png" media-type="image/png"/></manifest>'+
+  '<guide><reference type="cover" href="Text/cover.xhtml"/></guide>');
+ const bookFiles={...content(),'OPS/content.opf':legacyOpf,
+  'OPS/Text/cover.xhtml':'<html><body><img src="../images/cover.png"/>'+
+   '<img src="../images/cover.png"/></body></html>'};
+ const epub=await inspectEpub(new File([fixtureZip(bookFiles)],'ambiguous.epub'));
+ assert.equal(epub.cover,null);
+ assert.equal(epub.coverPath,'');
+});
+test('EPUB2 cover.xhtml refuses remote image URLs',async()=>{
+ const legacyOpf=opf.replace(/<manifest>[\s\S]*<\/manifest>/,
+  '<manifest><item id="coverPage" href="Text/cover.xhtml" media-type="application/xhtml+xml"/></manifest>'+
+  '<guide><reference type="cover" href="Text/cover.xhtml"/></guide>');
+ const bookFiles={...content(),'OPS/content.opf':legacyOpf,
+  'OPS/Text/cover.xhtml':'<html><body><img src="https://example.com/cover.png"/></body></html>'};
+ const epub=await inspectEpub(new File([fixtureZip(bookFiles)],'remote.epub'));
+ assert.equal(epub.cover,null);
+ assert.equal(epub.coverPath,'');
+});

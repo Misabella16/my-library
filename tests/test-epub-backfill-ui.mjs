@@ -145,7 +145,7 @@ test('Health summary does not count complete books as needing repair',()=>{
   {synopsis:'',subjects:[],cover_missing:false},
   {synopsis:'Missing',subjects:['Fantasy'],cover_missing:true},
   {synopsis:'',subjects:[],cover_missing:true}
- ]),{checked:3,missingSynopsis:1,missingCover:2,unavailableCover:0,missingSubjects:1,ready:1});
+ ]),{checked:3,missingSynopsis:1,missingCover:2,unselectedCover:0,unavailableCover:0,missingSubjects:1,ready:1});
 });
 
 test('Health export captures all inspected records and never writes metadata',async()=>{
@@ -168,8 +168,8 @@ test('Health CSV summarizes missing fields and neutralizes spreadsheet formulas'
  ]);
  assert.match(csv,/Missing ebook cover/);
  assert.ok(csv.includes('"\'=HYPERLINK(""bad"")"'));
- assert.match(csv,/"true","true","false","false","true"/);
- assert.match(csv,/"false","false","false","false","false"/);
+ assert.match(csv,/"true","true","false","false","false","true"/);
+ assert.match(csv,/"false","false","false","false","false","false"/);
  assert.equal(csv.includes('private_notes'),false);
  assert.equal(csv.includes('private_object_key'),false);
 });
@@ -228,7 +228,7 @@ test('Verified EPUBs without embedded covers are not mistaken for complete books
  assert.equal(stats.ready,1);
  const csv=epubHealthCsv(rows);
  assert.match(csv,/No embedded cover \(verified\)/);
- assert.match(csv,/"false","false","false","true","false"/);
+ assert.match(csv,/"false","false","false","false","true","false"/);
  assert.match(csv,/"false","false","false","false","false"/);
 });
 
@@ -256,4 +256,15 @@ test('Repair-all stops at a quota failure and resumes safely without skipping th
   assert.equal(new Set(f.applied).size,53);
   assert.equal(f.get('epub-backfill-all').disabled,true);
  }finally{f.restore();}
+});
+
+test('Unselected saved EPUB cover is a repairable issue in health report',()=>{
+ const item={file_id:'epub-1',title:'Hidden cover',synopsis:'',subjects:[],
+  cover_missing:false,cover_unselected:true,cover_unavailable:false};
+ const stats=summarizeEpubHealth([item]);
+ assert.equal(stats.unselectedCover,1);
+ assert.equal(stats.ready,0);
+ const csv=epubHealthCsv([item]);
+ assert.match(csv,/Cover saved but not displayed/);
+ assert.match(csv,/"false","false","false","true","false","true"/);
 });
