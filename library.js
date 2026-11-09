@@ -27,11 +27,12 @@ function showMessage(msg,isError=false){
   const n=$('#notice');n.hidden=false;n.textContent=msg;n.classList.toggle('error',isError);
   n.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
-async function api(path,{method='GET',data,raw,contentType,formData}={}){
+async function api(path,{method='GET',data,raw,contentType,formData,headers={}}={}){
   const opts={method,credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}};
   if(formData){opts.body=formData;} // Browser sets multipart boundary automatically.
   else if(raw){opts.headers['content-type']=contentType;opts.body=raw;}
   else if(data!==undefined){opts.headers['content-type']='application/json';opts.body=JSON.stringify(data);}
+  for(const [key,value] of Object.entries(headers))opts.headers[key]=value;
   const response=await fetch(path,opts);
   let payload;
   try {payload=await response.json();}catch {payload={error:'The private server sent an unexpected response.'};}
