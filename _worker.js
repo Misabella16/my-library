@@ -1,6 +1,7 @@
 import {handleGoodreadsApi} from './goodreads-import-api.mjs';
 import {handleGoodreadsSyncApi} from './goodreads-sync-api.mjs';
 import {handleEpubApi} from './epub-import-api.mjs';
+import {handleDigitalFilesApi} from './digital-files-api.mjs';
 import {handleEpubTitleCleanupApi} from './epub-title-cleanup-api.mjs';
 import {handleIsbnTitleLookup} from './isbn-title-lookup-api.mjs';
 import {handleAutoTitleRepairApi} from './auto-title-repair-api.mjs';
@@ -302,6 +303,8 @@ async function serveApi(request,env,path){
   if(isbnTitleResponse)return isbnTitleResponse;
   const titleCleanupResponse=await handleEpubTitleCleanupApi(request,db,path);
   if(titleCleanupResponse)return titleCleanupResponse;
+  const digitalFilesResponse=await handleDigitalFilesApi(request,db,env,path);
+  if(digitalFilesResponse)return digitalFilesResponse;
   const epubResponse=await handleEpubApi(request,db,env,path);
   if(epubResponse)return epubResponse;
   if(path==='/api/books'&&method==='GET') {
