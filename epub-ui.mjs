@@ -574,4 +574,8 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  uploadButton.addEventListener('click',()=>saveEligible(false));
  saveAllButton?.addEventListener('click',()=>saveEligible(true));
  render();
+ // Allows a selected Calibre folder to reuse every existing SHA/identity,
+ // duplicate, private-R2 and guarded-upload check instead of inventing a
+ // second EPUB importer. The owner still reviews before Save all.
+ return {selectFiles};
 }

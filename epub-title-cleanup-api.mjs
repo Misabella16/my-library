@@ -1,4 +1,5 @@
 import {cleanEpubTitle,machineTitleReason,normalizeEpubAuthor} from './epub-metadata.mjs';
+import {filenameTitleCandidate} from './epub-filename-recovery.mjs';
 // Owner-only catalogue title recovery. Every scan uses bounded primary-key
 // pages and only reads metadata already stored in the private library.
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{
@@ -28,7 +29,7 @@ export async function handleEpubTitleCleanupApi(request,db,path){
  // unindexed epub_files.book_id query is required for large libraries.
  // The EPUB's stored OPF metadata is a *proposal*, never a merge key.
  const response=await db.prepare(
-  'SELECT f.id AS source_file_id,f.book_id,f.metadata_json,'+
+  'SELECT f.id AS source_file_id,f.book_id,f.original_filename,f.metadata_json,'+
   'b.title,b.author,b.updated_at FROM epub_files f '+
   'JOIN books b ON b.id=f.book_id WHERE b.archived_at IS NULL AND f.id>? '+
   'ORDER BY f.id LIMIT 101').bind(after).all();
@@ -39,20 +40,28 @@ export async function handleEpubTitleCleanupApi(request,db,path){
    sources.push({id:row.book_id,source_file_id:row.source_file_id});
 
   if(!machineTitleReason(row.title))continue;
-  let metadata;
-  try{metadata=JSON.parse(row.metadata_json||'{}');}catch{continue;}
-  if(!metadata||typeof metadata!=='object'||Array.isArray(metadata))continue;
-  if(typeof metadata.title!=='string')continue;
-  const proposed=cleanEpubTitle(metadata.title);
-  if(!proposed||proposed===row.title||machineTitleReason(proposed))continue;
+  let metadata={};
+  try{metadata=JSON.parse(row.metadata_json||'{}')||{};}catch{}
+  const opfTitle=cleanEpubTitle(metadata.title||'');
+  const fileTitle=filenameTitleCandidate(row.original_filename);
+  const goodOpf=!!opfTitle&&!machineTitleReason(opfTitle);
+  const consistent=goodOpf&&(!fileTitle||
+   normalizeEpubAuthor(opfTitle)===normalizeEpubAuthor(fileTitle));
+  // The original filename is recoverable even when the OPF contains a hash
+  // or lacks authors, as seen with saved Revolutionary Princess Eve.epub.
+  const proposed=consistent?opfTitle:fileTitle;
+  if(!proposed||proposed===row.title)continue;
   const oldAuthor=normalizeEpubAuthor(row.author);
   const epubAuthor=normalizeEpubAuthor(metadata.author);
-  const verified=oldAuthor&&oldAuthor!=='unknown'&&oldAuthor!=='unknown author'&&
-    epubAuthor&&oldAuthor===epubAuthor;
+  const verified=consistent&&oldAuthor&&oldAuthor!=='unknown'&&
+   oldAuthor!=='unknown author'&&epubAuthor&&oldAuthor===epubAuthor;
   candidates.push({id:row.book_id,title:row.title,author:row.author,
    updated_at:row.updated_at,proposed_title:proposed,
-   source:'stored_epub_opf',source_file_id:row.source_file_id,
-   reason:verified?'matched_epub_author':'author_needs_review',
+   source:consistent?'stored_epub_opf':'stored_epub_filename',
+   source_file_id:row.source_file_id,
+   reason:goodOpf&&fileTitle&&!consistent?'epub_sources_disagree':
+    verified?'matched_epub_author':goodOpf&&!fileTitle?
+     'author_needs_review':'saved_epub_filename_needs_review',
    safe_match:!!verified});
  }
  const more=raw.length>100;

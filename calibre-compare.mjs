@@ -1,3 +1,5 @@
+import {filenameTitleCandidate} from './epub-filename-recovery.mjs';
+import {machineTitleReason} from './epub-metadata.mjs';
 // Calibre CSV (catalogue) and calibredb --for-machine JSON metadata stays in
 // the browser. The site catalogue is fetched via owner-authenticated GET only.
 const norm=s=>String(s||'').normalize('NFKC').toLocaleLowerCase()
@@ -101,9 +103,15 @@ const add=(map,key,value)=>{
  if(!map.has(key))map.set(key,[]);
  map.get(key).push(value);
 };
-export function compareCalibre(books,libraryBooks,editions){
+export function compareCalibre(books,libraryBooks,editions,epubFiles=[]){
  const byId=new Map(libraryBooks.map(x=>[x.id,x]));
- const isbnIndex=new Map(),workIndex=new Map(),titleIndex=new Map();
+ const isbnIndex=new Map(),workIndex=new Map(),titleIndex=new Map(),fileIndex=new Map();
+ for(const file of epubFiles){
+  const linked=byId.get(file.book_id);
+  if(!linked||!machineTitleReason(linked.title))continue;
+  const title=filenameTitleCandidate(file.original_filename);
+  if(title)add(fileIndex,norm(title),{book:linked,file_id:file.id});
+ }
  for(const b of libraryBooks){
   add(workIndex,norm(b.title)+'|'+norm(b.author),b);
   add(titleIndex,norm(b.title),b);
@@ -125,9 +133,15 @@ export function compareCalibre(books,libraryBooks,editions){
   const byIsbn=calibre.isbn?uniq((isbnIndex.get(calibre.isbn)||[]).map(x=>x.id)).map(id=>byId.get(id)):[];
   const byWork=workIndex.get(titleAuthors(calibre))||[];
   const byTitle=titleIndex.get(norm(calibre.title))||[];
-  let choices=[],method='';
+  const fileEntries=fileIndex.get(norm(calibre.title))||[];
+  const byFile=[...new Map(fileEntries.map(e=>[e.book.id,e.book])).values()];
+  let choices=[],method='',source_file_id='';
   if(byIsbn.length){choices=byIsbn;method='isbn';}
   else if(byWork.length){choices=byWork;method='title_author';}
+  else if(byFile.length){
+   choices=byFile;method='linked_epub_filename';
+   if(byFile.length===1)source_file_id=fileEntries.find(e=>e.book.id===byFile[0].id)?.file_id||'';
+  }
   else if(byTitle.length){choices=byTitle;method='title_only';}
   if(choices.length!==1||method==='title_only'){
    const status=choices.length?'needs_review':'calibre_only';
@@ -139,14 +153,20 @@ export function compareCalibre(books,libraryBooks,editions){
   const book=choices[0];
   // ISBN is edition-specific; when the author differs substantially, do not
   // silently assume that this edition belongs to the same intellectual work.
-  const authorMismatch=method==='isbn'&&norm(book.author)&&norm(calibre.authors)&&
-   norm(book.author)!==norm(calibre.authors);
+  const authorMismatch=(method==='isbn'||method==='linked_epub_filename')&&
+   norm(book.author)&&!['unknown','unknown author','n a'].includes(norm(book.author))&&
+   norm(calibre.authors)&&norm(book.author)!==norm(calibre.authors);
   if(authorMismatch){
    results.push({status:'needs_review',calibre,book:null,issues:[],
     notes:'ISBN matches, but authors differ; check this edition'});continue;
   }
   seen.add(book.id);
   const issues=[];
+  if(machineTitleReason(book.title)&&
+   (method==='isbn'||method==='linked_epub_filename'))
+   issues.push('Filename/title needs repair');
+  if((!book.author||['unknown','unknown author'].includes(norm(book.author)))&&calibre.authors)
+   issues.push('Missing author');
   if(!book.has_synopsis&&hasText(calibre.description))issues.push('Missing synopsis');
   if(!book.has_tags&&calibre.tags.length)issues.push('Missing tags');
   if(!book.has_cover&&calibre.cover)issues.push('Calibre has a cover; My Library does not display one');
@@ -157,7 +177,8 @@ export function compareCalibre(books,libraryBooks,editions){
     if(!issues.includes('Digital format not recorded'))issues.push('Digital format not recorded');
   }
   if(norm(book.title)!==norm(calibre.title))issues.push('Different title on matching ISBN');
-  results.push({status:issues.length?'metadata_gaps':'matched',calibre,book,method,issues,notes:''});
+  results.push({status:issues.length?'metadata_gaps':'matched',calibre,book,method,
+   source_file_id,issues,notes:''});
  }
  const siteOnly=libraryBooks.filter(book=>!seen.has(book.id));
  return {results,siteOnly,counts:{

@@ -1,4 +1,5 @@
 import {cleanEpubTitle,machineTitleReason,normalizeEpubAuthor} from './epub-metadata.mjs';
+import {filenameTitleCandidate} from './epub-filename-recovery.mjs';
 import {isbnFromBrokenTitle,titleFromOpenLibrary} from './isbn-title-lookup-api.mjs';
 
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{
@@ -28,11 +29,20 @@ export function findVerifiedTitle(row,linkedEpubs,linkedEditions,remote={}){
   proposals.push({title:clean,source:'filename_cleanup'});
  for(const file of linkedEpubs){
   let meta;
-  try{meta=JSON.parse(file.metadata_json||'{}');}catch{continue;}
+  try{meta=JSON.parse(file.metadata_json||'{}');}catch{meta={};}
   const title=cleanEpubTitle(meta?.title);
+  const filenameTitle=filenameTitleCandidate(file.original_filename);
+  if(filenameTitle&&titleKey(filenameTitle)!==titleKey(row.title))
+   proposals.push({title:filenameTitle,source:'linked_epub_filename',source_id:file.id});
   if(!validTitle(title)||!title||titleKey(title)===titleKey(row.title))continue;
+  // Filename is linked to this exact private EPUB; a conflicting meaningful
+  // OPF title must be reviewed rather than silently accepted.
+  if(filenameTitle&&titleKey(title)!==titleKey(filenameTitle)){
+   issues.push('EPUB filename and OPF metadata disagree');continue;
+  }
   if(!knownAuthor(exactAuthor)||author(meta.author)!==exactAuthor){
-   issues.push('EPUB author unconfirmed');continue;
+   if(!filenameTitle)issues.push('EPUB author unconfirmed');
+   continue;
   }
   proposals.push({title,source:'linked_epub',source_id:file.id});
  }
@@ -53,13 +63,16 @@ export function findVerifiedTitle(row,linkedEpubs,linkedEditions,remote={}){
  }
  if(!proposals.length)return {status:'review',reason:issues[0]||'No reliable title source'};
  const keys=[...new Set(proposals.map(x=>titleKey(x.title)))];
- if(keys.length!==1||issues.some(x=>x==='ISBN author mismatch'||x==='Multiple edition ISBNs need review'))
+ if(keys.length!==1||issues.some(x=>x==='ISBN author mismatch'||x==='Multiple edition ISBNs need review'||
+  x==='EPUB filename and OPF metadata disagree'))
   return {status:'review',reason:'Sources disagree or an author needs review',
    proposals:proposals.slice(0,4).map(x=>({title:x.title,source:x.source}))};
  if(broken&&proposals.every(p=>p.source==='filename_cleanup'))
   return {status:'review',reason:'Machine-generated title requires independent identification'};
  const winner=proposals.find(p=>p.source==='open_library_isbn')||
   proposals.find(p=>p.source==='linked_epub')||proposals[0];
+ // A unique readable filename linked to the actual saved EPUB is enough to
+ // repair the display title, but never invents a missing author.
  return {status:'verified',title:winner.title,source:winner.source,
   evidence:proposals.map(x=>x.source+(x.source_id?':'+x.source_id:''))};
 }
@@ -86,7 +99,7 @@ async function resolveBatch(request,db,lookupFetch){
  const editionRows=await get(db,'SELECT book_id,isbn FROM editions WHERE book_id IN ('+
   place+') LIMIT 101',...ids);
  const files=[...new Set(items.flatMap(x=>x.source_file_ids))];
- const fileRows=files.length?await get(db,'SELECT id,book_id,metadata_json FROM epub_files '+
+ const fileRows=files.length?await get(db,'SELECT id,book_id,original_filename,metadata_json FROM epub_files '+
   'WHERE id IN ('+files.map(()=>'?').join(',')+')',...files):[];
  const linked=new Map(),editionMap=new Map();
  for(const f of fileRows){if(!linked.has(f.book_id))linked.set(f.book_id,[]);linked.get(f.book_id).push(f);}
@@ -141,8 +154,10 @@ async function resolveBatch(request,db,lookupFetch){
   // Never merge or rename onto another active work's title+author.
   const nextNorm=norm(resolved.title);
   const existing=await first(db,'SELECT id FROM books WHERE archived_at IS NULL '+
-   'AND normalized_title=? AND normalized_author=? AND id<>? LIMIT 1',
-   nextNorm,row.normalized_author,item.id);
+   'AND normalized_title=? AND '+(resolved.source==='linked_epub_filename'?'1=1':'normalized_author=?')+
+   ' AND id<>? LIMIT 1',
+   ...(resolved.source==='linked_epub_filename'?
+    [nextNorm,item.id]:[nextNorm,row.normalized_author,item.id]));
   if(existing){
    out.push({id:item.id,status:'review',reason:'A book already has this title and author'});
    continue;
