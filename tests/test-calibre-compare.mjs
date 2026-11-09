@@ -152,6 +152,9 @@ test('Comparison is wired into authenticated My Library and does not POST any Ca
  assert.match(html,/id="calibre-compare-run"/);
  assert.match(ui,/selected\.text\(\)/);
  assert.match(ui,/\/api\/calibre\/catalogue/);
- assert.doesNotMatch(ui,/method:\s*['"]POST['"]/);
+ // Comparison scans stay GET-only; user-initiated repair intentionally
+ // posts owner-approved Calibre cover and metadata updates.
+ assert.match(ui,/\/api\/calibre\/enrich/);
+ assert.match(ui,/\/api\/calibre\/cover/);
  assert.doesNotMatch(ui,/\/api\/books\//);
 });
