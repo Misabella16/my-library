@@ -12,7 +12,7 @@ works. A scan alone makes no edits.
 2. Relink already stored, uniquely identified private cover images where
    they weren't selected for display. Ambiguous artwork is never guessed.
 3. Scan the entire book catalogue with existing keyset pagination, selecting
-   only entries missing descriptions, tags or display covers.
+   only entries missing descriptions or display covers.
 4. Check these remaining entries against Open Library's public catalogue,
    verifying ISBN + author or exact title + author before writing anything.
    The single-request `repair-auto` route avoids looking up each book twice.
@@ -23,21 +23,24 @@ works. A scan alone makes no edits.
 ## Source limits and progress
 
 This does **not** download Open Library's works, editions or author dumps.
-The whole catalogue is scanned locally, but online checks stop after **40
-book entries per UTC day**. An individual entry may require a search,
-a work record and, if relevant, a cover download. The client paces requests
-and the server respects 429/503 source limits. This is deliberately not a
-mass API harvester and does not guarantee all missing books have matches.
+Online repair continues through remaining missing covers and synopses in paced
+batches, without an application-imposed daily book cap. Saved EPUB recovery
+runs first. Compatible ISBN searches share a request, and public responses are
+cached. Uncached source requests are spaced at least 1.1 seconds apart within
+each Worker instance; this is not an account-wide distributed rate limiter.
+Source limits and temporary errors pause the run, preserving completed work.
+Open Library discourages bulk harvesting; this workflow only repairs existing
+owner records with missing fields, and does not guarantee a match for every book.
 
 The owner can **Pause** between books. The last completed book ID and
 aggregate counts are saved in browser localStorage for resuming after a
 refresh. The checkpoint contains no book titles, EPUBs, reviews, summaries,
 or private file contents. Click **Restart scan from beginning** if the
 catalogue changes and older IDs need checking, or to redo previously
-unresolved items. The 40/day limit does not reset with this button.
+unresolved items.
 
 Leave the tab open during active work. The website does **not** automatically
-run daily in the background. Retry the next day from the same browser.
+run daily in the background. Resume from the same browser when ready.
 If the site or source reaches a quota, completed changes remain saved;
 the current unfinished book is not marked complete.
 
@@ -70,10 +73,9 @@ https://openlibrary.org/developers/api
 - On source errors, the batch returns already completed result statuses
   without falsely advancing the browser's last-completed cursor. Previously
   applied changes remain protected by their existing Undo logs.
-- The daily budget remains **40 book entries per UTC day** and is not
-  enlarged or reset by restarting a scan. It is an application precaution,
-  **not** an official Open Library daily quota. This is targeted maintenance,
-  not a method to harvest thousands of catalogue records via the API.
+- There is no artificial daily book quota. The daily count is informational.
+  A source throttle pauses processing; it does not advance the unfinished book.
 - Multiple editions belonging to one existing book entry are already matched
   as one book; duplicate active title/author identities are constrained by the
   book database. We do not merge ambiguous works or special editions.
+

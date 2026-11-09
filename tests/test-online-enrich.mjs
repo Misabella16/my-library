@@ -177,7 +177,7 @@ test('UI and authenticated worker include online owner repair without Goodreads 
  assert.match(worker,/handleOnlineEnrichApi\(request,db,env,path\)/);
  assert.match(lib,/initOnlineEnrich\(api/);
  assert.match(html,/id="online-apply"/);
- assert.match(ui,/MAX_LOOKUPS_PER_DAY=40/);
+ assert.doesNotMatch(ui,/MAX_LOOKUPS_PER_DAY|Daily online limit reached/);
  assert.match(ui,/repair-batch/);
  assert.match(html,/id="online-reset"/);
  assert.doesNotMatch(ui,/goodreads\.com\/api/);
@@ -278,3 +278,4 @@ test('Public metadata is reused from edge cache without exposing user records',a
   f.close();
  }
 });
+
