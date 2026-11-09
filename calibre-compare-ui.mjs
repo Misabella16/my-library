@@ -71,6 +71,12 @@ export function initCalibreCompare(api){
    if(entry.book&&entry.calibre)
     details.append(node('span','My Library: '+entry.book.title+' · Match: '+(entry.method||'n/a'),'muted'));
    if(entry.calibre?.isbn)details.append(node('span','ISBN '+entry.calibre.isbn,'muted'));
+   if(entry.issues?.includes('Missing synopsis')&&entry.calibre.description)
+    details.append(node('span','Calibre synopsis: '+
+     entry.calibre.description.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').slice(0,220)+
+     (entry.calibre.description.length>220?'…':''),'muted'));
+   if(entry.issues?.includes('Missing tags')&&entry.calibre.tags.length)
+    details.append(node('span','Calibre tags: '+entry.calibre.tags.slice(0,12).join(', '),'muted'));
    if(entry.issues?.length)details.append(node('span',entry.issues.join(' · '),'muted'));
    else if(entry.notes)details.append(node('span',entry.notes,'muted'));
    card.append(details);results.append(card);
