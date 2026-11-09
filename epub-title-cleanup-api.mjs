@@ -33,8 +33,11 @@ export async function handleEpubTitleCleanupApi(request,db,path){
   'JOIN books b ON b.id=f.book_id WHERE b.archived_at IS NULL AND f.id>? '+
   'ORDER BY f.id LIMIT 101').bind(after).all();
  const raw=response.results||[],page=raw.slice(0,100);
- const candidates=[];
+ const candidates=[],sources=[];
  for(const row of page){
+  if(machineTitleReason(row.title))
+   sources.push({id:row.book_id,source_file_id:row.source_file_id});
+
   if(!machineTitleReason(row.title))continue;
   let metadata;
   try{metadata=JSON.parse(row.metadata_json||'{}');}catch{continue;}
@@ -53,6 +56,6 @@ export async function handleEpubTitleCleanupApi(request,db,path){
    safe_match:!!verified});
  }
  const more=raw.length>100;
- return reply({scanned:page.length,candidates,has_more:more,
+ return reply({scanned:page.length,candidates,sources,has_more:more,
   next_cursor:more?page.at(-1).source_file_id:null});
 }
