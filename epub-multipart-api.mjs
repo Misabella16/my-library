@@ -104,12 +104,14 @@ export async function handleMultipartEpubApi(request,db,env,path,{match,persist}
    // against the local file, and all parts have to be present in order.
    // The complete-file hash comes from the browser, so only the owner's
    // authenticated browser can supply it.
-   const result=await persist(db,env,{
+   const savedResponse=await persist(db,env,{
     metadata,originalFilename:filename,actual:metadata.sha256,
     coverBytes,ctype,preuploadedKey:key
    });
+   if(!savedResponse.ok){await env.BOOK_FILES.delete(key);return savedResponse;}
+   const result=await savedResponse.clone().json();
    if(!result.uploaded)await env.BOOK_FILES.delete(key);
-   return response(result,result.uploaded?201:200);
+   return savedResponse;
   }catch(e){
    if(completed){try{await env.BOOK_FILES.delete(key);}catch{}}
    throw e;
