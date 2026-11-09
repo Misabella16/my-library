@@ -437,7 +437,8 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',await chunk.arrayBuffer()));
     const sha256=Array.from(hash,x=>x.toString(16).padStart(2,'0')).join('');
     const query=new URLSearchParams({
-     key:start.key,upload_id:start.upload_id,part_number:String(number),sha256
+     key:start.key,upload_id:start.upload_id,part_number:String(number),
+     size:String(entry.file.size),sha256
     });
     const uploaded=await api('/api/epubs/multipart/part?'+query,{method:'POST',
      raw:chunk,contentType:'application/octet-stream'});
