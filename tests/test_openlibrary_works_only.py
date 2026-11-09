@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "local-mac"))
-from openlibrary_works_only import match_works_only, save_matched_cache  # noqa: E402
+from openlibrary_works_only import match_works_only, save_matched_cache, report_from_cache  # noqa: E402
 
 
 def dump(path, entries):
@@ -130,6 +130,27 @@ class WorksOnlyTests(unittest.TestCase):
         save_matched_cache(filename, self.run_match())
         with sqlite3.connect(filename) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM openlibrary_work_matches").fetchone()[0], 0)
+
+    def test_cached_report_reuses_verified_work_without_dump_scan(self):
+        report = self.run_match()
+        cache = Path(self.temp.name) / "matched.sqlite"
+        save_matched_cache(cache, report)
+        self.books[0]["updated_at"] = "2026-11-10T12:00:00Z"
+        self.catalogue.write_text(json.dumps({
+            "format": "my-library-bulk-catalogue-v1", "books": self.books
+        }), encoding="utf-8")
+        restored = report_from_cache(self.catalogue, cache)
+        self.assertEqual(restored["counts"]["works_scanned"], 0)
+        self.assertEqual(restored["counts"]["verified_matches"], 1)
+        self.assertEqual(restored["items"][0]["expected_updated_at"],
+                         "2026-11-10T12:00:00Z")
+        self.books[0]["title"] = "Completely Different Title"
+        self.catalogue.write_text(json.dumps({
+            "format": "my-library-bulk-catalogue-v1", "books": self.books
+        }), encoding="utf-8")
+        unsafe = report_from_cache(self.catalogue, cache)
+        self.assertEqual(unsafe["counts"]["verified_matches"], 0)
+        self.assertEqual(unsafe["counts"]["unmatched"], 1)
 
     def test_missing_cover_or_description_does_not_invent_them(self):
         self.work_records[0][2].pop("covers")
