@@ -124,5 +124,8 @@ test('My Library UI wires full saved-cover relink and owner-authenticated API',(
  assert.match(read('_worker.js'),/handleExistingCoverRelinkApi\(request,db,env,path\)/);
  assert.match(read('library.js'),/initExistingCoverRelink\(api/);
  assert.match(read('index.html'),/id="relink-existing-start"/);
+ assert.match(read('index.html'),/id="collection-health-smart-repair"/);
+ assert.match(read('library.js'),/storedEpubRepair\.repairAll\(\)/);
+ assert.match(read('library.js'),/savedCoverRepair\.runAll\(\)/);
  assert.match(read('existing-cover-relink-ui.mjs'),/while\(!stop&&!complete\)/);
 });
