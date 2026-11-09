@@ -60,7 +60,8 @@ export async function handleEpubTitleCleanupApi(request,db,path){
    source:consistent?'stored_epub_opf':'stored_epub_filename',
    source_file_id:row.source_file_id,
    reason:goodOpf&&fileTitle&&!consistent?'epub_sources_disagree':
-    verified?'matched_epub_author':'saved_epub_filename_needs_review',
+    verified?'matched_epub_author':goodOpf&&!fileTitle?
+     'author_needs_review':'saved_epub_filename_needs_review',
    safe_match:!!verified});
  }
  const more=raw.length>100;
