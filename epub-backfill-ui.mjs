@@ -158,7 +158,8 @@ export function initEpubBackfill(api){
    status.textContent=(pauseRequested?'Paused safely. Press Repair next 50 to resume. ':'')+
     'Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
     unchanged+' unchanged · '+failed+' need refresh or review · '+
-     recovered+' covers extracted · '+selected+' existing covers displayed.'+
+     recovered+' covers extracted · '+selected+' existing covers displayed. '+
+     'Run Catalogue Health scan again to refresh its earlier counts.'+
     (bulkFinished?' Entire saved EPUB catalogue scanned.':
      repairEntireCatalogue?' You can resume the next group of saved EPUBs.':
      ' Use Repair next 50 to continue.');
@@ -238,7 +239,8 @@ export function initEpubBackfill(api){
     healthScanned+' total) · '+
     stats.missingSynopsis+' missing synopses · '+stats.missingSubjects+
     ' with missing subject tags · '+stats.missingCover+
-    ' needing cover checks · '+stats.unavailableCover+
+    ' needing cover checks · '+stats.unselectedCover+
+    ' saved covers not displayed · '+stats.unavailableCover+
     ' confirmed without embedded covers · '+stats.ready+' needing no changes.'+
     (complete?' End of saved EPUBs reached.':' Click again to inspect the next 50.');
   }catch(error){
