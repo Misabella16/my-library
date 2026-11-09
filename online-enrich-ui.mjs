@@ -99,7 +99,8 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
    for(const row of data.books){
     if(seen.has(row.book_id))continue;
     seen.add(row.book_id);
-    if(row.missing_synopsis===1||row.missing_cover===1||row.missing_tags===1)
+    // The targeted online pass is for missing synopses/covers only.
+    if(row.missing_synopsis===1||row.missing_cover===1)
      candidates.push(row);
    }
    pages++;
