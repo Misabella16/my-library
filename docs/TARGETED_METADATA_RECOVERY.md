@@ -1,7 +1,7 @@
 # My Library: targeted missing-metadata repair (no large downloads)
 
-Open **Imports & Undo → Repair missing covers, summaries and tags**.
-Select **Repair missing data (no downloads)**. Keep the tab open while it
+Open **Imports & Undo → Repair my library** at the top of the tab.
+Select **Repair my library** (or **Resume repair**). Keep the tab open while it
 works. A scan alone makes no edits.
 
 ## What the single repair action does
@@ -50,7 +50,7 @@ review instead of being guessed or overwritten.
 ## Optional giant-dump workflow
 
 The older offline bulk matcher and its export/import tools remain available
-below the new section for people who already have the official source dumps.
+inside collapsed **Advanced tools** for people who already have the official source dumps.
 They are **not required** for normal targeted repair.
 
 Open Library developer guidance:
@@ -79,3 +79,22 @@ https://openlibrary.org/developers/api
   as one book; duplicate active title/author identities are constrained by the
   book database. We do not merge ambiguous works or special editions.
 
+
+## Consolidated imports workspace
+
+The tab now starts with **Repair my library**, followed by **Add books**,
+**Review & Undo**, and collapsed **Advanced tools**. Goodreads uses one file
+selection flow with steps for adding new books and updating existing records.
+Individual EPUB, cover, catalogue-health, title and offline-snapshot tools are
+kept under Advanced. Legacy partial-batch action aliases are hidden.
+
+Saved EPUB repair and read-only inspection continue automatically through
+small server pages; they no longer stop at 50 or 10,000 records. The main
+repair reports each saved-file stage and its Pause control reaches those stages.
+Competing panels are unavailable while the main repair is active. Inspection
+already in progress must be paused or finished before starting the main repair.
+
+Known transient database reads retry twice, after 1.5 and 4 seconds. Writes,
+source limits, and daily database quotas are not automatically replayed.
+Unfinished EPUBs remain at the resume cursor on database overload, and a pause
+partway through the final page does not falsely mark the scan complete.

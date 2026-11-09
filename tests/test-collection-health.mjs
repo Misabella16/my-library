@@ -106,8 +106,9 @@ test('Health UI connects to Imports, one paginated request per click, and openin
  const worker=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
  for(const id of ['collection-health','collection-health-scan','collection-health-filter',
   'collection-health-export','collection-health-results'])assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(lib,/initCollectionHealth\(api/);
+ assert.match(lib,/initCollectionHealth\(repairApi/);
  assert.match(worker,/handleCollectionHealthApi\(request,db,path\)/);
  assert.match(ui,/onSelectBook\(row.book_id\)/);
  assert.match(ui,/if\(cursor\)params.set\('cursor',cursor\)/);
 });
+

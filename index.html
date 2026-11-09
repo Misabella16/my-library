@@ -238,95 +238,68 @@
     </div>
   </section>
   <section class="tab-panel" id="imports" hidden>
-    <div class="site-section-artwork" data-site-section-image="importsBanner" hidden></div>
-
-
-    <section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
-      <p class="section-kicker">✧ CATALOGUE HEALTH</p>
-      <h2>Find books that need attention</h2>
-      <p class="muted">Scan your entire catalogue in one click to find missing covers, summaries, tags, editions, and possible duplicates. The scan uses small, low-cost requests automatically and never edits book records. For existing EPUB files, use the separate safe repair button below.</p>
+<div class="site-section-artwork" data-site-section-image="importsBanner" hidden></div>
+<header class="surface"><h2 data-site-text="importsTitle">Imports &amp; repairs</h2><p data-site-text="importsDescription">Repair existing books, add new ones, or review previous changes.</p><nav class="collection-health-actions" aria-label="Import and repair sections"><a href="#online-enrich">Repair my library</a><a href="#add-library-books">Add books</a><a href="#repair-review">Review &amp; Undo</a><a href="#repair-advanced">Advanced tools</a></nav></header>
+<section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
+      <p class="section-kicker">✧ START HERE</p>
+      <h2 id="online-enrich-heading">Repair my library</h2>
+      <p>One click recovers missing covers and summaries from saved EPUBs, reconnects existing cover images, then checks remaining gaps online. Your edits and verified special-edition artwork are protected. No database download needed.</p>
       <div class="collection-health-actions">
-        <button type="button" class="btn" id="collection-health-scan">Scan entire library</button>
-        <button type="button" class="btn subtle" id="collection-health-pause" disabled>Pause scan</button>
-        <label>Show
-          <select id="collection-health-filter">
-            <option value="issues">Books needing attention</option>
-            <option value="all">All scanned books</option>
-            <option value="missing_cover">Missing covers</option>
-            <option value="missing_synopsis">Missing summaries</option>
-            <option value="missing_tags">Missing tags</option>
-            <option value="missing_editions">No editions</option>
-            <option value="possible_duplicate">Possible duplicate titles</option>
-          </select>
-        </label>
-        <button type="button" class="btn subtle" id="collection-health-export" disabled>Export scanned report (CSV)</button>
-        <button type="button" class="btn" id="collection-health-smart-repair">Repair ALL from saved EPUBs &amp; covers</button>
-        <button type="button" class="btn subtle" id="collection-health-repair">Repair saved EPUB metadata &amp; covers</button>
-      </div>
-      <p id="collection-health-smart-status" class="small-status" role="status" aria-live="polite">Recover missing summaries, subject tags and existing cover images across your saved EPUBs and private artwork, without replacing your own changes.</p>
-      <p id="collection-health-status" class="small-status" role="status" aria-live="polite">Start the read-only catalogue scan when you're ready.</p>
-      <div id="collection-health-metrics" class="collection-health-metrics" aria-live="polite"></div>
-      <div id="collection-health-results" class="collection-health-results"></div>
-      <p id="collection-health-shown" class="small-status" aria-live="polite"></p>
-      <button type="button" class="btn subtle" id="collection-health-more" hidden>Show next 100 matching books</button>
-      <p class="muted">Missing information isn't always in the source file. EPUB repair only fills safe gaps from saved EPUB metadata. Goodreads-only and other entries without usable metadata can still need separate matching. Possible duplicates are never automatically merged.</p>
-    </section>
-    <section class="surface collection-health" id="existing-cover-relink" aria-labelledby="relink-existing-heading">
-      <p class="section-kicker">✧ AUTOMATIC COVER RECOVERY</p>
-      <h3 id="relink-existing-heading">Recover covers you already have</h3>
-      <p>Some private cover images were saved correctly but never selected for display. Recover all uniquely identified, non-special artwork in one scan, without reuploading a single image. Books with multiple candidate images, missing R2 files, or special editions are skipped for review.</p>
-      <div class="collection-health-actions">
-        <button class="btn" type="button" id="relink-existing-start">Recover ALL existing covers</button>
-        <button class="btn subtle" type="button" id="relink-existing-stop" disabled>Pause</button>
-        <button class="btn subtle" type="button" id="relink-existing-history">Cover repair history &amp; Undo</button>
-      </div>
-      <p class="small-status" id="relink-existing-status" role="status" aria-live="polite">Ready. This scans eligible cover records automatically in low-cost batches. No file is uploaded or deleted.</p>
-      <div id="relink-existing-history-list" class="epub-preview-list" aria-live="polite"></div>
-      <p class="muted">This repairs missing display selections only. Use saved EPUB repair, Calibre repair, or verified online matching for books with no usable cover image.</p>
-    </section>
-    <section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
-      <p class="section-kicker">✧ RECOMMENDED · NO BIG DOWNLOADS</p>
-      <h2 id="online-enrich-heading">Repair missing covers, summaries and tags</h2>
-      <p>No Open Library dump required. One click first rechecks saved EPUBs for actual missing cover images and descriptions, then scans the library and looks up <strong>only missing covers and synopses</strong> online. Compatible ISBNs share a source-friendly search, and public metadata is cached when available. Existing notes, descriptions, tags and owned special-edition artwork stay intact. Verified saved special-edition covers take priority in book displays.</p>
-      <div class="collection-health-actions">
-        <button class="btn" id="online-apply" type="button">Repair missing data (no downloads)</button>
-        <button class="btn subtle" id="online-scan" type="button">Scan gaps only</button>
+        <button class="btn" id="online-apply" type="button">Repair my library</button>
+        
         <button class="btn subtle" id="online-pause" type="button" disabled>Pause</button>
-        <button class="btn subtle" id="online-reset" type="button">Restart scan from beginning</button>
-        <button class="btn subtle" id="online-history-btn" type="button">Online repair history &amp; Undo</button>
+        
+        
       </div>
       <p class="small-status" id="online-status" role="status" aria-live="polite">Ready. Select Repair to recover saved EPUBs and artwork first, then scan every book and check missing records online. Keep the tab open while working. Pause or resume without losing completed edits.</p>
       <p class="small-status" id="online-summary" aria-live="polite"></p>
-      <div id="online-results" class="collection-health-results"></div>
-      <div id="online-history-list" class="epub-preview-list"></div>
-      <p class="muted">An EPUB that contains no description cannot supply a synopsis on its own. The saved-file scan now verifies the original file once, reports true source gaps and avoids repeated negative checks. Online repair continues through remaining gaps in paced batches, with no daily book cap; up to four ISBN-bearing books can share a search. Source limits or temporary errors pause the run safely. Resume from the last completed book, or restart the scan to revisit missing books. Keep this tab open while processing. Uncertain book identities and cover editions remain for review.</p>
-    </section>
-    <section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
-      <p class="section-kicker">✧ FULL LIBRARY REPAIR · START HERE</p>
-      <h2 id="offline-bulk-heading">Repair your entire library: missing covers and synopses</h2>
-      <p>Use a locally downloaded Open Library data snapshot to match your entire collection by ISBN, title and author. This avoids the 12-books-per-click online lookup. The Mac matcher never uploads your catalogue to Open Library. Only verified, missing-field changes are sent back to your private site.</p>
-      <div class="collection-health-actions">
-        <button class="btn subtle" id="offline-export" type="button">1. Export my full library catalogue (JSON)</button>
-        <label class="goodreads-file-label" for="offline-file">3. Choose offline matches JSON
-          <input id="offline-file" type="file" accept=".json,application/json">
+      
+      
+      <p class="muted">The whole repair continues automatically in small batches. There is no 50-book stopping point or daily book cap. Keep this tab open. Pause finishes the current item safely; source or database errors stop the run with an explanation. Uncertain matches are left for review.</p>
+    <details class="repair-options"><summary>Scan and restart options</summary><div class="collection-health-actions"><button class="btn subtle" id="online-scan" type="button">Scan gaps only</button><button class="btn subtle" id="online-reset" type="button">Restart scan from beginning</button></div></details>
+<p><a href="#repair-review">Review results &amp; Undo</a></p></section>
+<section class="surface" id="add-library-books"><h2>Add books</h2><p>Choose what you want to bring in. Already uploaded your books? Use Repair my library above.</p><details class="imports-disclosure" id="add-epubs"><summary>EPUB files or folders</summary><section class="epub-tool surface" aria-labelledby="epub-heading">
+      <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
+      <h3 id="epub-heading">Import EPUB files or an entire folder</h3>
+      <p>Select up to 10,000 EPUBs per selection, including nested folders. Metadata is inspected on your Mac, then matches are checked in small automatic batches. Originals remain on your computer. Embedded covers and source-backed subject tags are saved privately only for eligible books, and existing notes, physical copies and special-edition covers are preserved.</p>
+      <div class="goodreads-actions">
+        <label class="goodreads-file-label" for="epub-files">Choose EPUB files
+          <input id="epub-files" type="file" accept=".epub,application/epub+zip" multiple>
         </label>
-        <button class="btn" id="offline-apply" type="button" disabled>Apply ALL verified matches</button>
-        <button class="btn subtle" id="offline-pause" type="button" disabled>Pause</button>
-        <button class="btn subtle" id="offline-history" type="button">Repair history &amp; Undo</button>
+        <label class="goodreads-file-label" for="epub-folder">Choose an EPUB folder
+          <input id="epub-folder" type="file" accept=".epub,application/epub+zip" webkitdirectory directory multiple>
+        </label>
+        <button class="btn subtle" id="preview-epubs" type="button" disabled>Preview selected books</button>
+        <button class="btn subtle" id="pause-epub-preview" type="button" disabled>Pause preview after current group</button>
+        <button class="btn subtle" id="epub-download-report" type="button" disabled>Download EPUB match report</button>
+        <button class="btn" hidden id="upload-epubs" type="button" disabled>Save eligible EPUBs privately</button>
+        <button class="btn" id="epub-save-all" type="button" disabled>Save all eligible EPUBs</button>
+        <button class="btn subtle" id="epub-recheck-failures" type="button" disabled>Recheck failed files before retry</button>
+        <button class="btn subtle" id="epub-issues-report" type="button" disabled>Download issues-only report</button>
+        <button class="btn subtle" id="pause-epub-upload" type="button" disabled>Pause after current EPUB</button>
       </div>
-      <p class="muted">2. On your Mac, download the official Open Library editions, works and authors compressed dumps (openlibrary.org/developers/dumps), and run the <code>openlibrary_dump_match.py</code> helper in the My Library GitHub repository. It reads those large files directly from their compressed form. You'll get a small <code>my-library-matches.json</code> file to choose in Step 3.</p>
-      <p class="muted">Large source downloads can be many gigabytes. The processing may take considerable time, so use a drive with ample free space and avoid simultaneously overloading your separate Fic Annex indexing drive.</p>
-      <p class="small-status" id="offline-status" role="status" aria-live="polite">Export the catalogue first. Nothing in your library will be modified until you select Apply ALL.</p>
-      <p class="small-status" id="offline-metrics" aria-live="polite"></p>
-      <div id="offline-results" class="collection-health-results"></div>
-      <div id="offline-history-list" class="epub-preview-list"></div>
-      <p class="muted">Existing descriptions, tags, notes, ratings, special-edition images, copies and EPUBs are preserved. New standard artwork uses Open Library's public cover-ID image links when displayed, not thousands of bulk image downloads. All proposed covers are unverified until reviewed and may be unavailable if Open Library lacks the image. You can pause and resume the import in the same browser tab.</p>
-    </section>
-    
-<div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
-    <section class="goodreads-tool" aria-labelledby="goodreads-heading">
-      <p class="section-kicker">✧ PHASE 3 · GOODREADS IMPORT & UNDO</p>
-      <h3 id="goodreads-heading">Bring your Goodreads shelves into view</h3>
+      <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files or a folder to begin. Download-site suffixes are removed from title suggestions, even for files too large to upload. Maximum 24 MB per EPUB; 10,000 EPUBs per selection. Choose Save all to process the entire eligible selection in one click while keeping the tab open, without repeating a batch button. You can pause previews/uploads and resume safely.</p>
+      <p class="small-status" id="epub-import-summary" aria-live="polite">No EPUBs previewed yet.</p>
+      <progress id="epub-import-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="EPUB upload progress"></progress>
+      <label class="epub-filter-label" for="epub-review-filter">Show EPUB results
+        <select id="epub-review-filter">
+          <option value="all">All results</option>
+          <option value="needs_review">Needs review</option>
+          <option value="possible_duplicate">Possible duplicates</option>
+          <option value="match">Existing book matches</option>
+          <option value="new">New books</option>
+          <option value="already_uploaded">Already uploaded</option>
+          <option value="uploaded">Saved</option>
+          <option value="upload_failed">Upload failures</option>
+        </select>
+      </label>
+      <div id="epub-preview-list" class="epub-preview-list" aria-live="polite"></div>
+      
+      
+      <p class="goodreads-private-note"><strong>Private storage.</strong> EPUB files, embedded covers, and explicit OPF subject tags are saved only to your owner-protected library after you select Save. Uncertain or missing metadata is held for review; you can correct titles/authors without changing the original file. Upload failures can be retried without restarting the entire folder. Imported EPUBs never create physical owned copies or overwrite special-edition artwork.</p>
+    </section></details><details class="imports-disclosure" id="add-goodreads"><summary>Goodreads shelves: add new books or update existing ones</summary><section class="goodreads-tool" aria-labelledby="goodreads-heading">
+      <p class="section-kicker">✧ STEP 1 · CHOOSE YOUR FILE</p>
+      <h3 id="goodreads-heading">Add or update from Goodreads</h3>
       <p>Choose a Goodreads <strong>Library Export CSV</strong>. Preview it on this device, then explicitly confirm which safely identified new books to import. Ambiguous matches and existing titles will not be changed.</p>
       <div class="goodreads-actions">
         <label class="goodreads-file-label" for="goodreads-file">Choose a Goodreads CSV
@@ -336,8 +309,8 @@
         <button class="btn subtle" id="download-goodreads-report" type="button" disabled>Download full match report (CSV)</button>
       </div>
       <p class="small-status" id="goodreads-status" role="status">Choose your Goodreads export to begin.</p>
-      <p class="muted goodreads-report-note">Every CSV book will be accounted for, including books already in My Library, duplicates, missing metadata, and books requiring review. To fill missing fields on existing books, use the Phase 4 sync preview below.</p>
-      <section class="goodreads-confirm" aria-label="Goodreads import controls">
+      <p class="muted goodreads-report-note">Every CSV book will be accounted for, including books already in My Library, duplicates, missing metadata, and books requiring review. To fill missing fields on existing books, continue to Update existing books below.</p>
+      <section class="goodreads-confirm" aria-label="Goodreads import controls"><h4>Step 2 · Add new books</h4>
         <div class="goodreads-primary-action">
           <button class="btn" id="import-goodreads" type="button" disabled>Import new Goodreads books</button>
           <p class="small-status" id="goodreads-import-hint">Preview a Goodreads file to see how many new books can be imported.</p>
@@ -354,8 +327,8 @@
         <progress id="goodreads-progress" class="goodreads-progress" max="100" value="0" aria-label="Goodreads import progress" hidden></progress>
       </section>
       <section class="goodreads-sync-panel" aria-labelledby="goodreads-sync-heading">
-        <p class="section-kicker">✧ PHASE 4 · GOODREADS METADATA SYNC & UNDO</p>
-        <h3 id="goodreads-sync-heading">Complete your existing book records</h3>
+        <p class="section-kicker">✧ STEP 3 · UPDATE EXISTING BOOKS</p>
+        <h3 id="goodreads-sync-heading">Update existing books</h3>
         <p>After previewing the Goodreads CSV above, check which of your existing books are missing ratings, reviews, reading dates, or shelf links. Existing values and personal notes are preserved. Repeated or uncertain matches are excluded.</p>
         <div class="goodreads-actions">
           <button class="btn subtle" id="goodreads-sync-preview" type="button" disabled>Preview missing Goodreads metadata</button>
@@ -371,14 +344,33 @@
         <p id="goodreads-sync-feedback" class="small-status" role="status" aria-live="polite">Preview your Goodreads CSV first. No changes made.</p>
         <progress id="goodreads-sync-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="Goodreads metadata sync progress"></progress>
         <div id="goodreads-sync-results" class="goodreads-sync-results"></div>
-        <section id="goodreads-sync-history" class="goodreads-history" aria-label="Goodreads metadata sync Undo history"></section>
+        
         <p class="goodreads-private-note">Syncs are saved in small, reversible batches. Undo stops if you subsequently edit a synced book. No cover images, EPUBs, owned copies, or special editions will be changed.</p>
       </section>
       <div id="goodreads-preview-results" aria-live="polite"></div>
-      <section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
+      
       <p class="goodreads-private-note" id="goodreads-privacy"><strong>Private by design.</strong> Preview stays on your device. Only after you confirm an import are the newly selected book details sent to your protected My Library database. Undo archives unchanged books created by that batch. It never deletes EPUBs, owned copies, or special editions.</p>
-    </section>
-    <section class="epub-tool surface" id="calibre-compare" aria-labelledby="calibre-compare-heading">
+    </section></details><details class="imports-disclosure" id="add-digital"><summary>PDF, AZW3 or MOBI files</summary><section class="epub-tool surface" id="digital-import" aria-labelledby="digital-heading">
+      <p class="section-kicker">✧ PRIVATE DIGITAL FORMATS</p>
+      <h3 id="digital-heading">Import PDF, AZW3 and MOBI files</h3>
+      <p>Choose files directly or select them from your Calibre library folder above. My Library checks SHA-256 hashes and reliable book identities before saving. Existing EPUBs use their original importer. PDF, AZW3 and MOBI stay private, attached to standard ebook editions, and never overwrite your covers, physical copies, reviews or reading notes.</p>
+      <div class="goodreads-actions">
+        <label class="goodreads-file-label" for="digital-files">Choose PDF/AZW3/MOBI files
+          <input id="digital-files" type="file" accept=".pdf,.azw3,.mobi,application/pdf" multiple>
+        </label>
+        <label class="goodreads-file-label" for="digital-folder">Choose a folder of digital books
+          <input id="digital-folder" type="file" accept=".pdf,.azw3,.mobi" webkitdirectory directory multiple>
+        </label>
+        <button class="btn subtle" id="digital-preview" type="button" disabled>Preview &amp; check duplicates</button>
+        <button class="btn" id="digital-save" type="button" disabled>Save all eligible files privately</button>
+        <button class="btn subtle" id="digital-pause" type="button" disabled>Pause after current file</button>
+      </div>
+      <p id="digital-status" class="small-status" role="status" aria-live="polite">Select files to begin. Maximum 96 MiB per file and 10,000 files per selection. Larger files use private 8 MiB transfer chunks. Uncertain book identities remain in review.</p>
+      <p id="digital-summary" class="small-status" aria-live="polite"></p>
+      <div id="digital-results" class="epub-preview-list" aria-live="polite"></div>
+      <button class="btn subtle" id="digital-show-more" type="button" hidden>Show more results</button>
+      <p class="goodreads-private-note">Removing a private file from its book page hides it without deleting its stored original. You can restore it from that book's file history. To upload a Calibre EPUB, continue using the EPUB import section below.</p>
+    </section></details><details class="imports-disclosure" id="add-calibre"><summary>Compare or import from Calibre</summary><section class="epub-tool surface" id="calibre-compare" aria-labelledby="calibre-compare-heading">
       <p class="section-kicker">✧ MY LIBRARIES · CROSS-CHECK</p>
       <h3 id="calibre-compare-heading">Compare your Calibre library</h3>
       <p>Use a Calibre catalogue CSV, or the richer JSON made with <code>calibredb list --for-machine</code>. The file stays in your browser. Choose your Calibre library folder to read its metadata.opf and cover.jpg files, or use a CSV/JSON catalogue if you only want metadata. Compare everything, then use Repair matched books to safely fill missing information and transfer real covers. The separate EPUB action uses My Library's existing private uploader with duplicate checks. Automatic changes have Undo and never replace your existing artwork, notes, or collector editions.</p>
@@ -416,92 +408,82 @@
       <div id="calibre-compare-results" class="epub-preview-list"></div>
       <button class="btn subtle" id="calibre-compare-more" type="button" hidden>Show next 80 matches</button>
       <p class="goodreads-private-note">Selecting the actual Calibre folder enables real cover uploads and EPUB imports. CSV/JSON exports alone can fill descriptions, tags, and verified titles but do not contain image or ebook bytes. No special-edition covers or personal notes are overwritten, and ambiguous matches remain for review.</p>
-    </section>
-    <section class="epub-tool surface" id="digital-import" aria-labelledby="digital-heading">
-      <p class="section-kicker">✧ PRIVATE DIGITAL FORMATS</p>
-      <h3 id="digital-heading">Import PDF, AZW3 and MOBI files</h3>
-      <p>Choose files directly or select them from your Calibre library folder above. My Library checks SHA-256 hashes and reliable book identities before saving. Existing EPUBs use their original importer. PDF, AZW3 and MOBI stay private, attached to standard ebook editions, and never overwrite your covers, physical copies, reviews or reading notes.</p>
-      <div class="goodreads-actions">
-        <label class="goodreads-file-label" for="digital-files">Choose PDF/AZW3/MOBI files
-          <input id="digital-files" type="file" accept=".pdf,.azw3,.mobi,application/pdf" multiple>
+    </section></details></section><section class="surface" id="repair-review"><h2>Review &amp; Undo</h2><p>Uncertain matches and failed items stay available for review. Completed repairs have their existing Undo safeguards.</p><details class="imports-disclosure"><summary>Online matches &amp; repairs</summary><button class="btn subtle" id="online-history-btn" type="button">Online repair history &amp; Undo</button>
+<div id="online-history-list" class="epub-preview-list"></div>
+<div id="online-results" class="collection-health-results"></div></details><details class="imports-disclosure"><summary>Saved EPUB repairs &amp; reports</summary><button type="button" class="btn subtle" id="epub-backfill-report" disabled>Download repair report</button>
+<button type="button" class="btn subtle" id="epub-backfill-retry" disabled>Retry failed EPUB repairs (up to 10)</button>
+<button type="button" class="btn subtle" id="epub-backfill-undo" disabled>Undo last repair</button>
+<button type="button" class="btn subtle" id="epub-backfill-history">Recent repair history</button>
+<div id="epub-backfill-history-list" class="epub-preview-list" aria-live="polite"></div></details><details class="imports-disclosure"><summary>Recovered cover history</summary><button class="btn subtle" type="button" id="relink-existing-history">Cover repair history &amp; Undo</button>
+<div id="relink-existing-history-list" class="epub-preview-list" aria-live="polite"></div></details><details class="imports-disclosure"><summary>Goodreads import &amp; update history</summary><section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
+<section id="goodreads-sync-history" class="goodreads-history" aria-label="Goodreads metadata sync Undo history"></section></details></section><details class="imports-disclosure" id="repair-advanced"><summary>Advanced tools — optional scans and individual repair steps</summary><p>The main repair runs the saved-EPUB, cover-recovery and online steps for you. These tools are optional; run one operation at a time.</p><details class="imports-disclosure"><summary>Inspect library health (no changes)</summary><section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
+      <p class="section-kicker">✧ CATALOGUE HEALTH</p>
+      <h2>Find books that need attention</h2>
+      <p class="muted">Scan your entire catalogue in one click to find missing covers, summaries, tags, editions, and possible duplicates. The scan uses small, low-cost requests automatically and never edits book records. For repairs, use Repair my library at the top of this tab.</p>
+      <div class="collection-health-actions">
+        <button type="button" class="btn" id="collection-health-scan">Scan entire library</button>
+        <button type="button" class="btn subtle" id="collection-health-pause" disabled>Pause scan</button>
+        <label>Show
+          <select id="collection-health-filter">
+            <option value="issues">Books needing attention</option>
+            <option value="all">All scanned books</option>
+            <option value="missing_cover">Missing covers</option>
+            <option value="missing_synopsis">Missing summaries</option>
+            <option value="missing_tags">Missing tags</option>
+            <option value="missing_editions">No editions</option>
+            <option value="possible_duplicate">Possible duplicate titles</option>
+          </select>
         </label>
-        <label class="goodreads-file-label" for="digital-folder">Choose a folder of digital books
-          <input id="digital-folder" type="file" accept=".pdf,.azw3,.mobi" webkitdirectory directory multiple>
-        </label>
-        <button class="btn subtle" id="digital-preview" type="button" disabled>Preview &amp; check duplicates</button>
-        <button class="btn" id="digital-save" type="button" disabled>Save all eligible files privately</button>
-        <button class="btn subtle" id="digital-pause" type="button" disabled>Pause after current file</button>
+        <button type="button" class="btn subtle" id="collection-health-export" disabled>Export scanned report (CSV)</button>
+        <button type="button" class="btn" hidden id="collection-health-smart-repair">Repair ALL from saved EPUBs &amp; covers</button>
+        <button type="button" class="btn subtle" hidden id="collection-health-repair">Repair saved EPUB metadata &amp; covers</button>
       </div>
-      <p id="digital-status" class="small-status" role="status" aria-live="polite">Select files to begin. Maximum 96 MiB per file and 10,000 files per selection. Larger files use private 8 MiB transfer chunks. Uncertain book identities remain in review.</p>
-      <p id="digital-summary" class="small-status" aria-live="polite"></p>
-      <div id="digital-results" class="epub-preview-list" aria-live="polite"></div>
-      <button class="btn subtle" id="digital-show-more" type="button" hidden>Show more results</button>
-      <p class="goodreads-private-note">Removing a private file from its book page hides it without deleting its stored original. You can restore it from that book's file history. To upload a Calibre EPUB, continue using the EPUB import section below.</p>
-    </section>
-    <section class="epub-tool surface" aria-labelledby="epub-heading">
-      <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
-      <h3 id="epub-heading">Import EPUB files or an entire folder</h3>
-      <p>Select up to 10,000 EPUBs per selection, including nested folders. Metadata is inspected on your Mac, then matches are checked in low-D1-read groups of 50. Originals remain on your computer. Embedded covers and source-backed subject tags are saved privately only for eligible books, and existing notes, physical copies and special-edition covers are preserved.</p>
-      <div class="goodreads-actions">
-        <label class="goodreads-file-label" for="epub-files">Choose EPUB files
-          <input id="epub-files" type="file" accept=".epub,application/epub+zip" multiple>
-        </label>
-        <label class="goodreads-file-label" for="epub-folder">Choose an EPUB folder
-          <input id="epub-folder" type="file" accept=".epub,application/epub+zip" webkitdirectory directory multiple>
-        </label>
-        <button class="btn subtle" id="preview-epubs" type="button" disabled>Preview selected books</button>
-        <button class="btn subtle" id="pause-epub-preview" type="button" disabled>Pause preview after current group</button>
-        <button class="btn subtle" id="epub-download-report" type="button" disabled>Download EPUB match report</button>
-        <button class="btn" id="upload-epubs" type="button" disabled>Save eligible EPUBs privately</button>
-        <button class="btn" id="epub-save-all" type="button" disabled>Save all eligible EPUBs</button>
-        <button class="btn subtle" id="epub-recheck-failures" type="button" disabled>Recheck failed files before retry</button>
-        <button class="btn subtle" id="epub-issues-report" type="button" disabled>Download issues-only report</button>
-        <button class="btn subtle" id="pause-epub-upload" type="button" disabled>Pause after current EPUB</button>
-      </div>
-      <p class="small-status" id="epub-preview-status" role="status">Choose EPUB files or a folder to begin. Download-site suffixes are removed from title suggestions, even for files too large to upload. Maximum 24 MB per EPUB; 10,000 EPUBs per selection. Choose Save all to process the entire eligible selection in one click while keeping the tab open, or save groups of 500. You can pause previews/uploads and resume safely.</p>
-      <p class="small-status" id="epub-import-summary" aria-live="polite">No EPUBs previewed yet.</p>
-      <progress id="epub-import-progress" class="goodreads-progress" max="1" value="0" hidden aria-label="EPUB upload progress"></progress>
-      <label class="epub-filter-label" for="epub-review-filter">Show EPUB results
-        <select id="epub-review-filter">
-          <option value="all">All results</option>
-          <option value="needs_review">Needs review</option>
-          <option value="possible_duplicate">Possible duplicates</option>
-          <option value="match">Existing book matches</option>
-          <option value="new">New books</option>
-          <option value="already_uploaded">Already uploaded</option>
-          <option value="uploaded">Saved</option>
-          <option value="upload_failed">Upload failures</option>
-        </select>
-      </label>
-      <div id="epub-preview-list" class="epub-preview-list" aria-live="polite"></div>
-      <section id="epub-backfill" class="epub-tool" aria-label="Repair already uploaded EPUB metadata">
+      <p id="collection-health-smart-status" class="small-status" role="status" aria-live="polite">Recover missing summaries, subject tags and existing cover images across your saved EPUBs and private artwork, without replacing your own changes.</p>
+      <p id="collection-health-status" class="small-status" role="status" aria-live="polite">Start the read-only catalogue scan when you're ready.</p>
+      <div id="collection-health-metrics" class="collection-health-metrics" aria-live="polite"></div>
+      <div id="collection-health-results" class="collection-health-results"></div>
+      <p id="collection-health-shown" class="small-status" aria-live="polite"></p>
+      <button type="button" class="btn subtle" id="collection-health-more" hidden>Show next 100 matching books</button>
+      <p class="muted">Missing information isn't always in the source file. EPUB repair only fills safe gaps from saved EPUB metadata. Goodreads-only and other entries without usable metadata can still need separate matching. Possible duplicates are never automatically merged.</p>
+    </section></details><details class="imports-disclosure"><summary>Saved EPUB inspection and repair</summary><section id="epub-backfill" class="epub-tool" aria-label="Repair already uploaded EPUB metadata">
         <h4>Repair metadata from EPUBs already uploaded</h4>
-        <p class="muted">Find missing descriptions and source-backed subjects from saved EPUB records. No file reuploads, no changes until you click Apply.</p>
+        <p class="muted">Find missing descriptions and source-backed subjects from saved EPUB records. The main repair already includes this step. Use these controls only to inspect or rerun saved EPUB recovery separately.</p>
         <div class="goodreads-actions">
           <button type="button" class="btn subtle" id="epub-backfill-preview">Preview stored metadata</button>
-          <button type="button" class="btn subtle" id="epub-backfill-health">Check next 50 EPUBs (no edits)</button>
+          <button type="button" class="btn subtle" id="epub-backfill-health">Scan all saved EPUBs (no edits)</button>
           <button type="button" class="btn subtle" id="epub-health-report" disabled>Download EPUB health report</button>
           <button type="button" class="btn subtle" id="epub-backfill-next" disabled>Next 10</button>
           <button type="button" class="btn" id="epub-backfill-apply" disabled>Fill missing metadata on this page</button>
-          <button type="button" class="btn" id="epub-backfill-bulk">Repair next 50 saved EPUBs</button>
-          <button type="button" class="btn" id="epub-backfill-all">Repair all saved EPUBs (up to 10,000)</button>
+          <button type="button" class="btn" hidden id="epub-backfill-bulk">Repair saved EPUBs</button>
+          <button type="button" class="btn" id="epub-backfill-all">Repair or resume all saved EPUBs</button>
           <button type="button" class="btn subtle" id="epub-backfill-rescan">Recheck source EPUBs for missing descriptions &amp; covers</button>
           <button type="button" class="btn subtle" id="epub-backfill-pause" disabled>Pause after current EPUB</button>
-          <button type="button" class="btn subtle" id="epub-backfill-report" disabled>Download repair report</button>
-          <button type="button" class="btn subtle" id="epub-backfill-retry" disabled>Retry failed EPUB repairs (up to 10)</button>
-          <button type="button" class="btn subtle" id="epub-backfill-undo" disabled>Undo last repair</button>
-          <button type="button" class="btn subtle" id="epub-backfill-history">Recent repair history</button>
+          
+          
+          
+          
         </div>
         <p class="small-status" id="epub-backfill-health-status" aria-live="polite">Metadata health check has not been run.</p>
         <p class="small-status" id="epub-backfill-status" role="status">No repairs have been applied.</p>
         <div id="epub-backfill-results" class="epub-preview-list"></div>
-        <div id="epub-backfill-history-list" class="epub-preview-list" aria-live="polite"></div>
-      </section>
-      <section id="epub-title-cleanup" class="epub-tool" aria-label="Clean saved book titles">
+        
+      </section></details><details class="imports-disclosure"><summary>Recover stored cover selections only</summary><section class="surface collection-health" id="existing-cover-relink" aria-labelledby="relink-existing-heading">
+      <p class="section-kicker">✧ AUTOMATIC COVER RECOVERY</p>
+      <h3 id="relink-existing-heading">Recover covers you already have</h3>
+      <p>Some private cover images were saved correctly but never selected for display. Recover all uniquely identified, non-special artwork in one scan, without reuploading a single image. Books with multiple candidate images, missing R2 files, or special editions are skipped for review.</p>
+      <div class="collection-health-actions">
+        <button class="btn" type="button" id="relink-existing-start">Recover ALL existing covers</button>
+        <button class="btn subtle" type="button" id="relink-existing-stop" disabled>Pause</button>
+        
+      </div>
+      <p class="small-status" id="relink-existing-status" role="status" aria-live="polite">Ready. This scans eligible cover records automatically in low-cost batches. No file is uploaded or deleted.</p>
+      
+      <p class="muted">This repairs missing display selections only. Use saved EPUB repair, Calibre repair, or verified online matching for books with no usable cover image.</p>
+    </section></details><details class="imports-disclosure"><summary>Clean messy book titles</summary><section id="epub-title-cleanup" class="epub-tool" aria-label="Clean saved book titles">
         <h4>Clean messy titles already saved in My Library</h4>
         <p class="muted">Scan your whole catalogue for download-site labels, ISBNs used as titles, and hexadecimal file IDs. The scanner also checks previously uploaded EPUB metadata. For ISBN-only titles, choose <strong>Find titles from ISBNs</strong> to get Open Library suggestions in low-volume batches. Use Auto-repair to save verified title fixes in bulk with a permanent Undo history; uncertain results remain for review. Covers alone are never used as proof of a book's identity. Original EPUB files, notes, covers, special editions and reading progress remain intact.</p>
         <div class="goodreads-actions">
-          <button class="btn subtle" id="epub-title-scan" type="button">Scan next 50 books</button>
+          <button class="btn subtle" hidden id="epub-title-scan" type="button">Scan next 50 books</button>
           <button class="btn subtle" id="epub-title-scan-all" type="button">Find all messy titles (entire library)</button>
           <button class="btn subtle" id="epub-title-isbn-lookup" type="button" disabled>Find titles from ISBNs (Open Library)</button>
           <button class="btn" id="epub-title-auto-repair" type="button">Auto-repair verified titles (all books)</button>
@@ -516,12 +498,27 @@
         <p class="small-status" id="epub-title-auto-status" role="status" aria-live="polite">The automatic repair checks verified ISBN and saved EPUB matches, preserves edits, and leaves uncertain books for review. Undo is saved permanently.</p>
         <div id="epub-title-auto-history-list" class="epub-preview-list" aria-live="polite"></div>
         <div class="epub-preview-list" id="epub-title-results" aria-live="polite"></div>
-      </section>
-      <p class="goodreads-private-note"><strong>Private storage.</strong> EPUB files, embedded covers, and explicit OPF subject tags are saved only to your owner-protected library after you select Save. Uncertain or missing metadata is held for review; you can correct titles/authors without changing the original file. Upload failures can be retried without restarting the entire folder. Imported EPUBs never create physical owned copies or overwrite special-edition artwork.</p>
-    </section>
-    <div class="two-columns"><div class="tip"><strong>Goodreads</strong><p>Import new books with shelves, ratings, reviews and dates read. See each batch and Undo it safely.</p></div><div class="tip"><strong>EPUBs</strong><p>Preview EPUB metadata and import private digital editions without overwriting existing book records.</p></div><div class="tip"><strong>Special editions</strong><p>Edition-specific FairyLoot, Illumicrate, OwlCrate and other covers.</p></div><div class="tip"><strong>Undo</strong><p>Undo completed Goodreads batches by archiving only unchanged imported books. Any subsequent edits stop reversal safely.</p></div></div>
-  </div>
-  </section>
+      </section></details><details class="imports-disclosure"><summary>Offline Open Library snapshot matching (optional)</summary><section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
+      <p class="section-kicker">✧ OPTIONAL · ADVANCED</p>
+      <h2 id="offline-bulk-heading">Import matches from an existing Open Library snapshot</h2>
+      <p>Use a locally downloaded Open Library data snapshot to match your entire collection by ISBN, title and author. This optional tool is for people who already use large offline snapshots. The main repair above needs no snapshot. The Mac matcher never uploads your catalogue to Open Library. Only verified, missing-field changes are sent back to your private site.</p>
+      <div class="collection-health-actions">
+        <button class="btn subtle" id="offline-export" type="button">1. Export my full library catalogue (JSON)</button>
+        <label class="goodreads-file-label" for="offline-file">3. Choose offline matches JSON
+          <input id="offline-file" type="file" accept=".json,application/json">
+        </label>
+        <button class="btn" id="offline-apply" type="button" disabled>Apply ALL verified matches</button>
+        <button class="btn subtle" id="offline-pause" type="button" disabled>Pause</button>
+        <button class="btn subtle" id="offline-history" type="button">Repair history &amp; Undo</button>
+      </div>
+      <p class="muted">2. On your Mac, download the official Open Library editions, works and authors compressed dumps (openlibrary.org/developers/dumps), and run the <code>openlibrary_dump_match.py</code> helper in the My Library GitHub repository. It reads those large files directly from their compressed form. You'll get a small <code>my-library-matches.json</code> file to choose in Step 3.</p>
+      <p class="muted">Large source downloads can be many gigabytes. The processing may take considerable time, so use a drive with ample free space and avoid simultaneously overloading your separate Fic Annex indexing drive.</p>
+      <p class="small-status" id="offline-status" role="status" aria-live="polite">Export the catalogue first. Nothing in your library will be modified until you select Apply ALL.</p>
+      <p class="small-status" id="offline-metrics" aria-live="polite"></p>
+      <div id="offline-results" class="collection-health-results"></div>
+      <div id="offline-history-list" class="epub-preview-list"></div>
+      <p class="muted">Existing descriptions, tags, notes, ratings, special-edition images, copies and EPUBs are preserved. New standard artwork uses Open Library's public cover-ID image links when displayed, not thousands of bulk image downloads. All proposed covers are unverified until reviewed and may be unavailable if Open Library lacks the image. You can pause and resume the import in the same browser tab.</p>
+    </section></details></details></section>
 </main>
 <footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
 <dialog id="add-book-dialog" aria-labelledby="add-book-title">

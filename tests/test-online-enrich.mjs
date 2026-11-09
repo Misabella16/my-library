@@ -175,7 +175,7 @@ test('UI and authenticated worker include online owner repair without Goodreads 
  const worker=read('_worker.js'),html=read('index.html'),
   ui=read('online-enrich-ui.mjs'),lib=read('library.js');
  assert.match(worker,/handleOnlineEnrichApi\(request,db,env,path\)/);
- assert.match(lib,/initOnlineEnrich\(api/);
+ assert.match(lib,/initOnlineEnrich\(repairApi/);
  assert.match(html,/id="online-apply"/);
  assert.doesNotMatch(ui,/MAX_LOOKUPS_PER_DAY|Daily online limit reached/);
  assert.match(ui,/repair-batch/);

@@ -1,3 +1,4 @@
+import {initImportsWorkspace,openImportSection,withRepairReadRetry} from './imports-workspace.mjs';
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
 import {initDigitalImport} from './digital-files-ui.mjs';
@@ -536,12 +537,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }});
     // Repair controls must be available on the first authenticated visit,
     // including when no new EPUB has been uploaded in this session.
-    const storedEpubRepair=initEpubBackfill(api);
+    const repairApi=withRepairReadRetry(api);
+    const storedEpubRepair=initEpubBackfill(repairApi);
     initSiteStudio(api);
     initCalibreCompare(api,{
       onUpdated:()=>refreshCurrent(),
       onImportDigitalFiles:entries=>{
         if(!digitalImporter?.selectFiles)return;
+        openImportSection('digital-heading');
         digitalImporter.selectFiles(entries);
         document.getElementById('digital-preview')?.click();
         document.getElementById('digital-heading')?.scrollIntoView({
@@ -550,6 +553,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       },
       onImportEpubs:files=>{
         if(!epubImporter?.selectFiles)return;
+        openImportSection('epub-heading');
         epubImporter.selectFiles(files);
         document.getElementById('preview-epubs')?.click();
         document.getElementById('epub-heading')?.scrollIntoView({
@@ -565,17 +569,29 @@ document.addEventListener('DOMContentLoaded',async()=>{
         document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
       }
     });
+    const importsWorkspace=initImportsWorkspace();
+    let healthInspector;
     const savedCoverRepair=initExistingCoverRelink(api,{onUpdated:()=>refreshCurrent()});
-    initOnlineEnrich(api,{
+    initOnlineEnrich(repairApi,{
       onUpdated:()=>refreshCurrent(),
-      prepareSaved:async()=>{
+      onBusy:busy=>importsWorkspace.setRepairBusy(busy),
+      canStart:()=>!storedEpubRepair?.status().busy&&
+        !savedCoverRepair?.getState().running&&!healthInspector?.getState().busy,
+      resetSaved:()=>storedEpubRepair?.restart(),
+      pauseSaved:()=>{storedEpubRepair?.pause();savedCoverRepair?.pause();},
+      prepareSaved:async({onProgress,shouldStop})=>{
         if(!storedEpubRepair?.repairAll||!savedCoverRepair?.runAll)
           throw Error('Saved EPUB and cover recovery is unavailable');
-        const epub=await storedEpubRepair.repairAll({coversAndSynopsesOnly:true});
-        if(!epub?.complete)return {complete:false};
-        const cover=await savedCoverRepair.runAll();
+        const epub=await storedEpubRepair.repairAll({coversAndSynopsesOnly:true,
+          onProgress:state=>onProgress('Step 1 of 3 · Saved EPUBs: '+
+            state.checked+' checked · '+state.applied+' repaired · continuing automatically…')});
+        if(!epub?.complete||shouldStop())return {complete:false,reason:epub?.reason};
+        onProgress('Step 2 of 3 · Reconnecting covers already saved in your library…');
+        const cover=await savedCoverRepair.runAll({onProgress:state=>
+          onProgress('Step 2 of 3 · Saved covers: '+state.checked+' checked · '+
+            state.relinked+' restored · continuing automatically…')});
         if(cover?.complete)await refreshCurrent();
-        return {complete:!!cover?.complete};
+        return {complete:!!cover?.complete,reason:cover?.reason};
       }
     });
     initOfflineBulk(api,{onUpdated:()=>refreshCurrent()});
@@ -607,7 +623,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
           '. Completed changes remain saved. Try again when the issue clears.';
       }finally{combined.disabled=false;}
     });
-    initCollectionHealth(api,{onSelectBook:async bookId=>{
+    healthInspector=initCollectionHealth(repairApi,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);
       document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
@@ -641,3 +657,4 @@ document.addEventListener('DOMContentLoaded',async()=>{
     // Refresh intentionally remains enabled for recovery.
   }
 });
+

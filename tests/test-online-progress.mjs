@@ -14,9 +14,9 @@ test('source requests are paced across concurrent callers and recover after fail
 });
 
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
-async function runUI({checkpoint=null,halt=false}={}){
+async function runUI({checkpoint=null,halt=false,prepareSaved,pauseSaved,canStart}={}){
  const originals={document:globalThis.document,localStorage:globalThis.localStorage,setTimeout:globalThis.setTimeout};
- const nodes=new Map();let stored=checkpoint;const checked=[];
+ const nodes=new Map();let stored=checkpoint;const checked=[],busyStates=[];
  const node=()=>({textContent:'',disabled:false,events:{},append(){},replaceChildren(){},
   addEventListener(name,fn){this.events[name]=fn;}});
  const root={querySelector(selector){if(!nodes.has(selector))nodes.set(selector,node());return nodes.get(selector);}};
@@ -31,9 +31,10 @@ async function runUI({checkpoint=null,halt=false}={}){
    checked.push(...ids);
    return {results:ids.map(book_id=>({book_id,status:'no_changes'})),halt,reason:'Source temporarily unavailable'};
   };
-  const ui=initOnlineEnrich(api);
+  const ui=initOnlineEnrich(api,{prepareSaved:prepareSaved?args=>prepareSaved(args,nodes):undefined,
+   pauseSaved,canStart,onBusy:value=>busyStates.push(value)});
   await nodes.get('#online-apply').events.click();
-  return {checked,stored,state:ui.getState(),status:nodes.get('#online-status').textContent,
+  return {checked,stored,busyStates,state:ui.getState(),status:nodes.get('#online-status').textContent,
    disabled:nodes.get('#online-apply').disabled};
  }finally{Object.assign(globalThis,originals);}
 }
@@ -54,4 +55,22 @@ test('partial source halt preserves reason and resumes at unfinished book',async
  assert.equal(first.disabled,false);
  const second=await runUI({checkpoint:first.stored});
  assert.equal(second.checked[0],id(3));assert.equal(second.checked.length,46);
+});
+
+test('main Pause reaches saved recovery and prevents online lookup',async()=>{
+ let pauses=0;
+ const r=await runUI({pauseSaved:()=>pauses++,prepareSaved:async({onProgress,shouldStop},nodes)=>{
+  onProgress('Step 1 of 3 · 51 EPUBs checked');
+  await nodes.get('#online-pause').events.click();
+  assert.equal(shouldStop(),true);
+  return {complete:false,reason:'Paused after 51 EPUBs.'};
+ }});
+ assert.equal(pauses,1);assert.equal(r.checked.length,0);
+ assert.match(r.status,/Paused after 51 EPUBs/);
+ assert.deepEqual(r.busyStates,[true,false]);
+});
+test('main repair refuses to overlap an active saved-file inspection',async()=>{
+ const r=await runUI({canStart:()=>false});
+ assert.equal(r.checked.length,0);assert.match(r.status,/Another library task is running/);
+ assert.deepEqual(r.busyStates,[]);
 });

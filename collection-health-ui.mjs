@@ -170,5 +170,6 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
    (done?' Entire catalogue was checked.':' Finish the scan to include the remaining books.'));
  });
  render();
- return {refresh:reset};
+ return {refresh:reset,getState:()=>({busy})};
 }
+

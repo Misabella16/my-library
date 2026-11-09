@@ -11,7 +11,7 @@ const CHECKPOINT_KEY='my-library-cover-synopsis-repair-v2';
 const today=()=>new Date().toISOString().slice(0,10);
 const emptyProgress=()=>({lastCompletedId:'',day:today(),todayUsed:0,
  saved:0,synopses:0,covers:0,tags:0,review:0,no_changes:0,
- savedFirstDone:false});
+ savedFirstDone:false,started:false});
 function readProgress(){
  try{
   const raw=JSON.parse(localStorage.getItem(CHECKPOINT_KEY)||'null');
@@ -24,6 +24,7 @@ function readProgress(){
    if(Number.isSafeInteger(raw[k])&&raw[k]>=0)result[k]=raw[k];
   }
   result.savedFirstDone=raw.savedFirstDone===true;
+  result.started=raw.started===true;
   if(raw.day===today()&&Number.isSafeInteger(raw.todayUsed))
    result.todayUsed=Math.max(0,raw.todayUsed);
   return result;
@@ -35,10 +36,11 @@ function saveProgress(progress){
  try{localStorage.setItem(CHECKPOINT_KEY,JSON.stringify(progress));}catch{}
 }
 export function initOnlineEnrich(api,{onUpdated=async()=>{},
- prepareSaved=async()=>({complete:true})}={}){
+ prepareSaved=async()=>({complete:true}),pauseSaved=()=>{},resetSaved=()=>{},
+ onBusy=()=>{},canStart=()=>true}={}){
  const root=document.getElementById('online-enrich');
  if(!root)return null;
- const $=name=>root.querySelector('#online-'+name);
+ const $=name=>root.querySelector('#online-'+name)||document.getElementById('online-'+name);
  const scan=$('scan'),apply=$('apply'),pause=$('pause'),
   reset=$('reset'),status=$('status'),summary=$('summary'),results=$('results'),
   historyBtn=$('history-btn'),historyList=$('history-list');
@@ -61,8 +63,8 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
   pause.disabled=!busy||stop;
   reset.disabled=busy;
   apply.textContent=busy?'Repairing missing metadata…':
-   progress.lastCompletedId?
-   'Resume targeted repair':'Repair missing data (no downloads)';
+   (progress.started||progress.lastCompletedId)?
+   'Resume repair':'Repair my library';
  };
  const refresh=()=>{
   summary.textContent=seen.size.toLocaleString()+' books scanned · '+
@@ -119,19 +121,21 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
  }
  scan.addEventListener('click',async()=>{
   if(busy)return;
-  busy=true;stop=false;controls();
+  if(!canStart()){say('Another library task is running. Pause or finish it first.');return;}
+  busy=true;stop=false;onBusy(true);controls();
   try{
    const complete=await scanLibrary();
    say(complete?'Found '+candidates.length.toLocaleString()+
     ' books with gaps. The repair button will use saved EPUBs first, then continue through the remaining gaps in paced batches.':
     'Scan paused; no changes made. Scan again to restart.');
   }catch(error){say('Scan stopped safely: '+(error.message||'Request failed'));}
-  finally{busy=false;stop=false;refresh();}
+  finally{busy=false;stop=false;onBusy(false);refresh();}
  });
- pause.addEventListener('click',()=>{stop=true;controls();
+ pause.addEventListener('click',()=>{stop=true;pauseSaved();controls();
   say('Pause requested. The current safe repair or page will finish first.');});
  reset.addEventListener('click',()=>{
   if(busy)return;
+  resetSaved();
   // Restart the book cursor while preserving today’s informational counter.
   const priorDay=progress.day,priorUsed=progress.todayUsed;
   progress=emptyProgress();
@@ -143,24 +147,27 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
  });
  apply.addEventListener('click',async()=>{
   if(busy)return;
-  busy=true;stop=false;controls();
+  if(!canStart()){say('Another library task is running. Pause or finish it first.');return;}
+  busy=true;stop=false;onBusy(true);controls();
+  progress.started=true;saveProgress(progress);
   let repairedThisRun=0,checked=0;
   try{
    if(!progress.savedFirstDone){
-    say('First recovering existing EPUB summaries, tags and saved cover images…');
-    const saved=await prepareSaved();
+    say('Step 1 of 3 · Recovering covers and summaries from saved EPUBs…');
+    const saved=await prepareSaved({onProgress:say,shouldStop:()=>stop});
     if(!saved?.complete){
-     say('Saved-file recovery paused. Resume it first; online checks have not started.');
+     say('Saved-file recovery paused. '+(saved?.reason||'Select Resume repair to continue.')+' Online checks have not started.');
      return;
     }
+    if(stop){say('Paused after saved-file recovery. Select Resume repair to continue.');return;}
     progress.savedFirstDone=true;saveProgress(progress);
     // Saved-file operations may have filled missing fields.
     scanned=false;
    }
    if(!scanned){
-    say('Scanning your catalogue for remaining gaps…');
+    say('Step 3 of 3 · Scanning for remaining gaps before online lookup…');
     if(!await scanLibrary()){
-     say('Catalogue scan paused. Click Resume targeted repair to continue.');
+     say('Catalogue scan paused. Click Resume repair to continue.');
      return;
     }
    }
@@ -237,7 +244,7 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
     ' repaired. Any unresolved matches remain in the review list.');
   }catch(error){say('Paused safely: '+(error.message||'Unexpected issue')+
    '. Completed changes are saved; resume when ready.');}
-  finally{busy=false;stop=false;refresh();}
+  finally{busy=false;stop=false;onBusy(false);refresh();}
  });
  const readHistory=async()=>{
   historyList.replaceChildren();
