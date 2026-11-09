@@ -20,7 +20,7 @@ export function healthCsv(rows){
  const headings=['Book ID','Title','Author',...HEALTH_FLAGS.map(([,label])=>label)];
  const data=(rows||[]).map(row=>[row.book_id,row.title,row.author,
   ...HEALTH_FLAGS.map(([key])=>row[key]===1?'Review':'')]);
- return '\ufeff'+[headings,...data].map(line=>line.map(csvCell).join(',')).join('\r\n')+'\\r\\n';
+ return '\ufeff'+[headings,...data].map(line=>line.map(csvCell).join(',')).join('\r\n')+'\r\n';
 }
 export const HEALTH_RESULT_PAGE=100;
 export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
