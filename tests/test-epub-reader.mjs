@@ -79,7 +79,7 @@ test('Missing entries return null and parsed XML remains plain text',async()=>{
 });
 test('Reject oversized and non-EPUB selections',async()=>{
  await assert.rejects(inspectEpub(new File([Buffer.alloc(10)],'test.zip')),/\.epub/);
- await assert.rejects(inspectEpub(new File([],'empty.epub')),/24 MB/);
+ await assert.rejects(inspectEpub(new File([],'empty.epub')),/96 MB/);
 });
 
 test('Fallback extracts a uniquely labeled EPUB2 manifest cover without meta or guide',async()=>{
