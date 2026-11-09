@@ -287,7 +287,7 @@
     <section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
       <p class="section-kicker">✧ RECOMMENDED · NO BIG DOWNLOADS</p>
       <h2 id="online-enrich-heading">Repair missing covers, summaries and tags</h2>
-      <p>No Open Library download required. One click first recovers saved EPUB metadata and artwork, scans the entire library for remaining gaps, then checks only missing books. Compatible ISBN lookups share a single search request (up to four books at a time), and public Open Library responses are cached when available. Every match is still verified by ISBN and author or title and author. Your descriptions, notes, tags and covers stay intact.</p>
+      <p>No Open Library dump required. One click first rechecks saved EPUBs for actual missing cover images and descriptions, then scans the library and looks up <strong>only missing covers and synopses</strong> online. Compatible ISBNs share a source-friendly search, and public metadata is cached when available. Existing notes, descriptions, tags and owned special-edition artwork stay intact. Verified saved special-edition covers take priority in book displays.</p>
       <div class="collection-health-actions">
         <button class="btn" id="online-apply" type="button">Repair missing data (no downloads)</button>
         <button class="btn subtle" id="online-scan" type="button">Scan gaps only</button>
@@ -299,7 +299,7 @@
       <p class="small-status" id="online-summary" aria-live="polite"></p>
       <div id="online-results" class="collection-health-results"></div>
       <div id="online-history-list" class="epub-preview-list"></div>
-      <p class="muted">All books are scanned locally, but online checks are capped at 40 entries per UTC day to respect Open Library's low-volume API guidelines. An ISBN group of up to four books can share one search. Public search and work metadata is cached on a best-effort basis, not guaranteed across every Cloudflare location. Resume the next day from this browser; progress stores only a book-ID cursor and counters. Restart the scan to revisit changed entries without resetting today's limit. Keep this tab open while processing. Uncertain matches go to review, not your library.</p>
+      <p class="muted">An EPUB that contains no description cannot supply a synopsis on its own. The saved-file scan now verifies the original file once, reports true source gaps and avoids repeated negative checks. Online checks are limited to 40 entries per UTC day; up to four ISBN-bearing books can share a search. Restart the scan to revisit missing books without resetting today's limit. Keep this tab open while processing. Uncertain book identities and cover editions remain for review.</p>
     </section>
     <section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
       <p class="section-kicker">✧ FULL LIBRARY REPAIR · START HERE</p>
@@ -485,6 +485,7 @@
           <button type="button" class="btn" id="epub-backfill-apply" disabled>Fill missing metadata on this page</button>
           <button type="button" class="btn" id="epub-backfill-bulk">Repair next 50 saved EPUBs</button>
           <button type="button" class="btn" id="epub-backfill-all">Repair all saved EPUBs (up to 10,000)</button>
+          <button type="button" class="btn subtle" id="epub-backfill-rescan">Recheck source EPUBs for missing descriptions &amp; covers</button>
           <button type="button" class="btn subtle" id="epub-backfill-pause" disabled>Pause after current EPUB</button>
           <button type="button" class="btn subtle" id="epub-backfill-report" disabled>Download repair report</button>
           <button type="button" class="btn subtle" id="epub-backfill-retry" disabled>Retry failed EPUB repairs (up to 10)</button>
