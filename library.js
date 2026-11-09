@@ -7,6 +7,7 @@ import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
 import {initVisualShelves} from './visual-shelves-ui.mjs';
 import {initCollectionHealth} from './collection-health-ui.mjs';
+import {initCalibreCompare} from './calibre-compare-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
@@ -459,6 +460,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     // including when no new EPUB has been uploaded in this session.
     initEpubBackfill(api);
     initSiteStudio(api);
+    initCalibreCompare(api);
     initEpubTitleCleanup(api,{
       onUpdated:()=>refreshCurrent(),
       onSelectBook:async bookId=>{
