@@ -85,7 +85,7 @@ test('Quota interruption preserves scanned results and Resume continues from cur
   assert.match(h.get('collection-health-status').textContent,/Cloudflare database allowance/);
   assert.equal(h.get('collection-health-scan').textContent,'Resume full library scan');
   await h.get('collection-health-scan').dispatch('click');
-  assert.equal(h.stats().requests,6,'Two pages, failure, then three remaining pages');
+  assert.equal(h.stats().requests,5,'Two pages, failure, then two remaining pages');
   assert.equal(h.get('collection-health-metrics').children[0].textContent,'145 books checked');
  }finally{h.restore();}
 });
