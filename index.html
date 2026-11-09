@@ -267,6 +267,22 @@
       <button type="button" class="btn subtle" id="collection-health-more" hidden>Show next 100 matching books</button>
       <p class="muted">Missing information isn't always in the source file. EPUB repair only fills safe gaps from saved EPUB metadata. Goodreads-only and other entries without usable metadata can still need separate matching. Possible duplicates are never automatically merged.</p>
     </section>
+    <section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
+      <p class="section-kicker">✧ VERIFIED ONLINE METADATA REPAIR</p>
+      <h3 id="online-enrich-heading">Find missing book summaries, tags and covers online</h3>
+      <p>My Library can research missing details using Open Library's public catalogue. It requires a verified ISBN and author, or a matching title and author. It only fills blanks and never replaces your own synopsis, tags, notes, special-edition artwork or existing covers. Goodreads CSV sync above remains available for your personal shelves, reviews, ratings and dates.</p>
+      <div class="collection-health-actions">
+        <button class="btn subtle" id="online-scan" type="button">Scan my whole library for gaps</button>
+        <button class="btn" id="online-apply" type="button" disabled>Repair next verified matches online</button>
+        <button class="btn subtle" id="online-pause" type="button" disabled>Pause</button>
+        <button class="btn subtle" id="online-history-btn" type="button">Online repair history &amp; Undo</button>
+      </div>
+      <p class="small-status" id="online-status" role="status" aria-live="polite">First scan your existing library. Online matching is opt-in and paced to respect source limits; it never runs automatically on page load.</p>
+      <p class="small-status" id="online-summary" aria-live="polite"></p>
+      <div id="online-results" class="collection-health-results"></div>
+      <div id="online-history-list" class="epub-preview-list"></div>
+      <p class="muted">Each online repair action processes up to 12 verified candidates, then stops. This is deliberately limited because Open Library does not permit bulk metadata harvesting through its public API. For thousands of books, use your Calibre library and saved EPUB metadata first; large-scale external data should come from permitted data dumps, not thousands of API requests. External covers are marked unverified until reviewed.</p>
+    </section>
     <div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
     <section class="goodreads-tool" aria-labelledby="goodreads-heading">
       <p class="section-kicker">✧ PHASE 3 · GOODREADS IMPORT & UNDO</p>
