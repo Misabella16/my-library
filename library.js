@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   // reachable even if the database is temporarily out of daily allowance.
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
-    initEpubImport(api,{onImported:async()=>{
+    const epubImporter=initEpubImport(api,{onImported:async()=>{
       await listBooks();
       if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});
     }});
@@ -460,7 +460,17 @@ document.addEventListener('DOMContentLoaded',async()=>{
     // including when no new EPUB has been uploaded in this session.
     initEpubBackfill(api);
     initSiteStudio(api);
-    initCalibreCompare(api);
+    initCalibreCompare(api,{
+      onUpdated:()=>refreshCurrent(),
+      onImportEpubs:files=>{
+        if(!epubImporter?.selectFiles)return;
+        epubImporter.selectFiles(files);
+        document.getElementById('preview-epubs')?.click();
+        document.getElementById('epub-heading')?.scrollIntoView({
+          block:'start',behavior:'smooth'
+        });
+      }
+    });
     initEpubTitleCleanup(api,{
       onUpdated:()=>refreshCurrent(),
       onSelectBook:async bookId=>{
