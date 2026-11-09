@@ -180,3 +180,14 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
 .epub-title-cleanup-labels span{font-size:12px}
 @media(max-width:650px){.epub-title-cleanup-result{flex-wrap:wrap}
  .epub-title-cleanup-result>.btn{margin-left:30px}}
+
+/* Keep full scan controls usable while 10k+ records are scanned in small D1 pages. */
+#collection-health-scan[disabled]{opacity:.75;cursor:progress}
+#collection-health-pause{min-width:105px}
+#collection-health-shown{margin:12px 0 6px}
+#collection-health-more{margin-top:8px}
+#collection-health-results .health-result{max-width:100%;min-width:0}
+@media(max-width:590px){
+ #collection-health-scan,#collection-health-pause,#collection-health-repair,
+ #collection-health-export,#collection-health-more{width:100%}
+}
