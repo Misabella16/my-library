@@ -23,9 +23,6 @@ export async function handleCollectionHealthApi(request,db,path){
   'CASE WHEN NOT EXISTS(SELECT 1 FROM edition_images i '+
   'JOIN editions e ON e.id=i.edition_id '+
   'WHERE e.book_id=b.id AND i.display_cover=1) THEN 1 ELSE 0 END AS missing_cover,'+
-  'CASE WHEN EXISTS (SELECT 1 FROM epub_files ef WHERE ef.book_id=b.id) THEN 1 ELSE 0 END AS saved_epub, '+
-  'CASE WHEN EXISTS (SELECT 1 FROM edition_images im JOIN editions e ON e.id=im.edition_id '+
-  'WHERE e.book_id=b.id) THEN 1 ELSE 0 END AS has_artwork, '+
   "CASE WHEN b.normalized_title<>'' AND EXISTS("+
   'SELECT 1 FROM books x WHERE x.normalized_title=b.normalized_title '+
   'AND x.archived_at IS NULL AND x.id<>b.id) THEN 1 ELSE 0 END AS possible_duplicate '+
