@@ -1,5 +1,6 @@
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
+import {initDigitalImport} from './digital-files-ui.mjs';
 import {initEpubTitleCleanup} from './epub-title-cleanup-ui.mjs';
 import {machineTitleReason} from './epub-metadata.mjs';
 import {initEpubBackfill} from './epub-backfill-ui.mjs';
@@ -184,6 +185,10 @@ function renderDetail(){
       '<p class="muted">Original files are kept in private storage. Downloads require your library login.</p>'+
       '<button class="btn mini subtle" type="button" id="load-private-epubs">Show EPUB files</button>'+
       '<div id="private-epub-list" aria-live="polite"></div></details>'+
+    '<details class="collapse"><summary>My Private PDF, AZW3 & MOBI Files</summary>'+
+      '<p class="muted">Your original private files stay in secure storage. Remove hides a file; Restore brings it back without reuploading.</p>'+
+      '<button class="btn mini subtle" type="button" id="load-private-digital">Show digital files &amp; history</button>'+
+      '<div id="private-digital-list" aria-live="polite"></div></details>'+
     '<details class="collapse"><summary>My Editions & Copies ('+(b.editions?.length||0)+' editions)</summary>'+
       '<div class="edition-actions"><button class="btn mini" type="button" id="add-edition">+ Add edition</button></div>'+
       (editionContent||'<p class="muted">Add a standard, digital, ARC or collector’s edition.</p>')+'</details>'+
@@ -197,6 +202,43 @@ function renderDetail(){
       '<label>Synopsis<textarea name="synopsis" rows="5" maxlength="25000">'+safe(b.synopsis)+'</textarea></label>'+
       '<label>Reading status<select name="reading_status">'+options(Object.entries(statuses),b.reading_status)+'</select></label>'+
       '<div class="actions"><button class="btn mini" type="submit">Save book</button></div></form></details>';
+  const loadDigital=target.querySelector('#load-private-digital');
+  loadDigital?.addEventListener('click',async()=>{
+    const dest=target.querySelector('#private-digital-list');
+    if(!dest||loadDigital.disabled)return;
+    loadDigital.disabled=true;
+    dest.textContent='Reading private files…';
+    try{
+      const data=await api('/api/digital-files/history?book_id='+safeId(b.id));
+      if(state.selectedId!==b.id)return;
+      const files=(data.files||[]).filter(f=>safeId(f.id));
+      dest.innerHTML=files.length?files.map(f=>
+       '<p class="epub-file-entry">'+
+       (f.undone_at?'<span class="muted">Removed (recoverable)</span>':
+         '<a class="btn mini subtle" href="/api/digital-files/file/'+safeId(f.id)+'" download>Download '+safe(f.format)+'</a>')+
+       ' <span>'+safe(f.original_filename)+'</span> '+
+       '<button type="button" class="btn mini subtle" data-digital-file="'+safeId(f.id)+'" '+
+       'data-digital-action="'+(f.undone_at?'restore':'undo')+'">'+
+       (f.undone_at?'Restore file':'Remove (Undo available)')+'</button></p>').join(''):
+       '<p class="muted">No PDF, AZW3 or MOBI files stored for this book.</p>';
+      dest.addEventListener('click',async event=>{
+       const button=event.target.closest('[data-digital-action]');
+       if(!button||button.disabled)return;
+       const fileId=safeId(button.dataset.digitalFile);
+       const action=button.dataset.digitalAction;
+       if(!fileId||!['undo','restore'].includes(action))return;
+       button.disabled=true;
+       try{
+        await api('/api/digital-files/'+action,{method:'POST',data:{file_id:fileId}});
+        loadDigital.disabled=false;loadDigital.click();
+       }catch(error){
+        dest.insertAdjacentText('beforeend',' Unable to change file: '+(error.message||'Request failed'));
+        button.disabled=false;
+       }
+      },{once:true});
+    }catch(error){dest.textContent='Could not load private files: '+(error.message||'Request failed');}
+    finally{loadDigital.disabled=false;}
+  });
   const load=target.querySelector('#load-private-epubs');
   load?.addEventListener('click',async()=>{
     const dest=target.querySelector('#private-epub-list');
@@ -481,6 +523,10 @@ document.addEventListener('DOMContentLoaded',async()=>{
   // reachable even if the database is temporarily out of daily allowance.
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
+    const digitalImporter=initDigitalImport(api,{onImported:async()=>{
+      await listBooks();
+      if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});
+    }});
     const epubImporter=initEpubImport(api,{onImported:async()=>{
       await listBooks();
       if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});
@@ -491,6 +537,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
     initSiteStudio(api);
     initCalibreCompare(api,{
       onUpdated:()=>refreshCurrent(),
+      onImportDigitalFiles:entries=>{
+        if(!digitalImporter?.selectFiles)return;
+        digitalImporter.selectFiles(entries);
+        document.getElementById('digital-preview')?.click();
+        document.getElementById('digital-heading')?.scrollIntoView({
+          block:'start',behavior:'smooth'
+        });
+      },
       onImportEpubs:files=>{
         if(!epubImporter?.selectFiles)return;
         epubImporter.selectFiles(files);

@@ -8,7 +8,7 @@ const node=(tag,value,cls)=>{
  if(cls)el.className=cls;
  return el;
 };
-export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>{}}={}){
+export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFiles=()=>{},onUpdated=async()=>{}}={}){
  const root=document.getElementById('calibre-compare');
  if(!root)return null;
  const file=root.querySelector('#calibre-file'),
@@ -16,6 +16,7 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
   apply=root.querySelector('#calibre-apply'),
   applyPause=root.querySelector('#calibre-apply-pause'),
   bridge=root.querySelector('#calibre-import-epubs'),
+  otherBridge=root.querySelector('#calibre-import-other'),
   undoHistory=root.querySelector('#calibre-undo-history'),
   historyList=root.querySelector('#calibre-undo-list'),
   repairStatus=root.querySelector('#calibre-repair-status'),
@@ -37,6 +38,7 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
   if(apply)apply.disabled=busy||saving||!comp;
   if(applyPause)applyPause.disabled=!saving||saveStop;
   if(bridge)bridge.disabled=busy||saving||!comp||!folderData;
+  if(otherBridge)otherBridge.disabled=busy||saving||!comp||!folderData;
   if(undoHistory)undoHistory.disabled=busy||saving;
   pause.disabled=!busy||stop;
   filter.disabled=!comp;
@@ -312,6 +314,32 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
    'private importer. Review matches, then select Save all eligible EPUBs. '+
    'The importer checks file hashes and duplicates before upload.'+
    (files.length>10000?' More than 10,000 candidates; import another selection later.':'');
+ });
+ otherBridge?.addEventListener('click',()=>{
+  if(busy||saving||!comp||!folderData)return;
+  const selected=[],seen=new Set();
+  for(const entry of comp.results){
+   if(!entry.calibre||!['calibre_only','metadata_gaps','matched'].includes(entry.status))
+    continue;
+   const files=folderData.otherFiles?.get(String(entry.calibre.calibre_id))||[];
+   for(const f of files){
+    const key=f.webkitRelativePath||f.name;
+    if(seen.has(key))continue;
+    seen.add(key);
+    selected.push({file:f,title:entry.calibre.title,author:entry.calibre.authors,
+     identifier:entry.calibre.isbn,book_id:entry.book?.id||''});
+   }
+  }
+  if(!selected.length){
+   repairStatus.textContent='No unambiguous PDF, AZW3 or MOBI files were found. '+
+    'Conflicting Calibre matches remain in review.';
+   return;
+  }
+  onImportDigitalFiles(selected.slice(0,10000));
+  repairStatus.textContent='Sent '+Math.min(selected.length,10000)+
+   ' Calibre PDF/AZW3/MOBI files to the private importer. '+
+   'Preview hashes and matches before selecting Save all eligible. '+
+   (selected.length>10000?'More files remain; use another selection for the remainder.':'');
  });
  const drawHistory=async()=>{
   if(!historyList)return;

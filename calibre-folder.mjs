@@ -35,7 +35,7 @@ function metadata(xml,id,available,folder){
   formats:available.formats,cover:!!available.cover,series,series_index};
 }
 export function indexCalibreFolder(files){
- const covers=new Map(),epubs=new Map(),ops=[],groups=new Map();
+ const covers=new Map(),epubs=new Map(),otherFiles=new Map(),ops=[],groups=new Map();
  for(const file of filesOf(files)){
   const path=rel(file),meta=calibreFolderId(path);
   if(!meta)continue;
@@ -52,10 +52,13 @@ export function indexCalibreFolder(files){
    if(ext==='EPUB'){
     if(!epubs.has(meta.id))epubs.set(meta.id,[]);
     epubs.get(meta.id).push(file);
+   }else if(['PDF','AZW3','MOBI'].includes(ext)){
+    if(!otherFiles.has(meta.id))otherFiles.set(meta.id,[]);
+    otherFiles.get(meta.id).push(file);
    }
   }
  }
- return {covers,epubs,ops,groups};
+ return {covers,epubs,otherFiles,ops,groups};
 }
 export async function readCalibreFolder(files,{onProgress=()=>{},cancelled=()=>false}={}){
  const index=indexCalibreFolder(files);
@@ -81,5 +84,5 @@ export async function readCalibreFolder(files,{onProgress=()=>{},cancelled=()=>f
   if(start%200===0)await new Promise(resolve=>setTimeout(resolve,0));
  }
  if(!records.length)throw Error('No readable Calibre metadata.opf files found');
- return {books:records,covers:index.covers,epubs:index.epubs};
+ return {books:records,covers:index.covers,epubs:index.epubs,otherFiles:index.otherFiles};
 }
