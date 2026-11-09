@@ -178,7 +178,7 @@ test('UI and authenticated worker include online owner repair without Goodreads 
  assert.match(lib,/initOnlineEnrich\(api/);
  assert.match(html,/id="online-apply"/);
  assert.match(ui,/MAX_LOOKUPS_PER_DAY=40/);
- assert.match(ui,/repair-auto/);
+ assert.match(ui,/repair-batch/);
  assert.match(html,/id="online-reset"/);
  assert.doesNotMatch(ui,/goodreads\.com\/api/);
 });
