@@ -12,6 +12,9 @@ const clean=(x,max)=>typeof x==='string'?x.trim().slice(0,max):'';
 const validId=x=>typeof x==='string'&&/^[0-9a-f-]{36}$/i.test(x);
 // EPUB2 XHTML covers are newly recognized; retry older negative checks once.
 const COVER_CHECK_VERSION=2;
+const DESCRIPTION_CHECK_VERSION=1;
+const descriptionAlreadyChecked=(version,hash,sha)=>
+ version===DESCRIPTION_CHECK_VERSION&&hash===sha;
 const coverAlreadyChecked=(version,hash,sha)=>version===COVER_CHECK_VERSION&&hash===sha;
 function unpack(value){
  let metadata={};
@@ -22,7 +25,9 @@ function unpack(value){
  const tags=[...new Map(raw.filter(x=>typeof x==='string').map(x=>clean(x,90))
   .filter(Boolean).map(x=>[x.toLocaleLowerCase(),x])).values()];
  return {synopsis,tags,coverCheckedVersion:metadata.cover_repair_checked_version,
-  coverCheckedHash:metadata.cover_repair_checked_sha256};
+  coverCheckedHash:metadata.cover_repair_checked_sha256,
+  descriptionCheckedVersion:metadata.description_repair_checked_version,
+  descriptionCheckedHash:metadata.description_repair_checked_sha256};
 }
 async function linkedFile(db,fileId){
  return one(db,'SELECT f.id,f.book_id,f.edition_id,f.sha256,f.original_filename,'+
@@ -75,6 +80,11 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   return json({file_id:row.id,book_id:row.book_id,title:row.title,
    expected_updated_at:row.updated_at,
    synopsis:row.synopsis?.trim()?'':meta.synopsis,
+   synopsis_missing:!row.synopsis?.trim(),
+   synopsis_recheck:!row.synopsis?.trim()&&!meta.synopsis&&
+    !descriptionAlreadyChecked(meta.descriptionCheckedVersion,meta.descriptionCheckedHash,row.sha256),
+   synopsis_source_unavailable:!row.synopsis?.trim()&&!meta.synopsis&&
+    descriptionAlreadyChecked(meta.descriptionCheckedVersion,meta.descriptionCheckedHash,row.sha256),
    subjects:meta.tags.filter(label=>!present.has(label.toLocaleLowerCase())),
    cover_missing:!cover?.n&&standard&&!checked,
    cover_unselected:!!displayCandidate&&standard,
@@ -115,6 +125,13 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    return {file_id:row.id,book_id:row.book_id,title:row.title,
     expected_updated_at:row.updated_at,
     synopsis:row.synopsis?.trim()?'':extracted.synopsis,
+    synopsis_missing:!row.synopsis?.trim(),
+    synopsis_recheck:!row.synopsis?.trim()&&!extracted.synopsis&&
+     !descriptionAlreadyChecked(extracted.descriptionCheckedVersion,
+      extracted.descriptionCheckedHash,row.sha256),
+    synopsis_source_unavailable:!row.synopsis?.trim()&&!extracted.synopsis&&
+     descriptionAlreadyChecked(extracted.descriptionCheckedVersion,
+      extracted.descriptionCheckedHash,row.sha256),
     subjects:extracted.tags.filter(tag=>!current.has(tag.toLocaleLowerCase())),
     cover_missing:!row.cover_count&&
      row.edition_format==='ebook'&&row.edition_special===0&&
@@ -142,8 +159,12 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    if(previous)return json({status:'already_processed',file_id:row.id});
    return fail('Book changed since preview. Refresh the repair preview.',409);
   }
-  const {synopsis,tags,coverCheckedVersion,coverCheckedHash}=unpack(row.metadata_json);
-  const description=!row.synopsis?.trim()?synopsis:'';
+  const cached=unpack(row.metadata_json);
+  const {tags,coverCheckedVersion,coverCheckedHash}=cached;
+  const needsSourceDescription=!row.synopsis?.trim()&&!cached.synopsis&&
+   !descriptionAlreadyChecked(cached.descriptionCheckedVersion,
+    cached.descriptionCheckedHash,row.sha256);
+  let description=!row.synopsis?.trim()?cached.synopsis:'';
   const existing=await many(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',[row.book_id]);
   const present=new Set(existing.map(tag=>tag.label.toLocaleLowerCase()));
   const additions=tags.filter(label=>!present.has(label.toLocaleLowerCase()));
@@ -158,15 +179,14 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const selectedCover=coverCount?.n&&!coverCount?.selected&&
     row.edition_format==='ebook'&&row.edition_special===0
     ?await singleUnselectedEpubCover(db,row.book_id,row.edition_id):null;
-  let checkedNoCover=false;
+  let checkedNoCover=false,descriptionRechecked=false,sourceMissing=false;
   let coverInfo=null,coverKey=null;
-  if(needsCover&&env.BOOK_FILES){
-   // Download only one bounded owner-private EPUB when a cover is missing.
+  if((needsCover||needsSourceDescription)&&env.BOOK_FILES){
+   // Reopen only source EPUBs that are missing descriptions/embedded covers.
+   // The original importer did not always extract EPUB2/EPUB3 descriptions,
+   // so a blank cached field is NOT proof the EPUB lacks a synopsis.
    const object=await env.BOOK_FILES.get(row.private_object_key);
    if(object){
-    // Real R2 objects expose arrayBuffer(), but test doubles and some
-    // storage adapters expose a ReadableStream body. Never turn the stream
-    // object itself into file bytes.
     const bytes=object.arrayBuffer?await object.arrayBuffer():
       object.body instanceof ReadableStream?
         await new Response(object.body).arrayBuffer():
@@ -175,37 +195,57 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
     if(bytes?.byteLength<=MAX_EPUB_BYTES&&bytes?.byteLength>0){
      const file=new File([bytes],/\\.epub$/i.test(row.original_filename||'')
       ?row.original_filename:'stored.epub',{type:'application/epub+zip'});
-     const inspected=await inspectEpub(file);
+     const inspected=await inspectEpub(file,{includeCover:needsCover});
      if(inspected.sha256!==row.sha256)return fail('Saved EPUB integrity check failed',409);
-     checkedNoCover=true;
-     if(inspected.cover){
-      const imageBytes=new Uint8Array(await inspected.cover.arrayBuffer());
-      const mime=inspected.coverType;
-      if(imageBytes.length>0&&imageBytes.length<=5*1024*1024&&
-       ['image/png','image/jpeg','image/webp'].includes(mime)){
-       coverInfo={bytes:imageBytes,mime};
-       checkedNoCover=false;
+     if(needsSourceDescription){
+      descriptionRechecked=true;
+      description=clean(inspected.description,3000);
+     }
+     if(needsCover){
+      checkedNoCover=true;
+      if(inspected.cover){
+       const imageBytes=new Uint8Array(await inspected.cover.arrayBuffer());
+       const mime=inspected.coverType;
+       if(imageBytes.length>0&&imageBytes.length<=5*1024*1024&&
+        ['image/png','image/jpeg','image/webp'].includes(mime)){
+        coverInfo={bytes:imageBytes,mime};
+        checkedNoCover=false;
+       }
       }
      }
     }
-   }
+   }else sourceMissing=true;
   }
-  // Cache only a verified negative cover inspection. Versioned metadata
-  // permits a future improved extractor to retry without replacing books.
-  const checkedCoverStmt=()=>db.prepare(
-   "UPDATE epub_files SET metadata_json=json_set("+
-   " CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,"+
-   " '$.cover_repair_checked_version',?,"+
-   " '$.cover_repair_checked_sha256',?) WHERE id=? AND sha256=?")
-   .bind(COVER_CHECK_VERSION,row.sha256,row.id,row.sha256);
+  // Record a verified negative EPUB source result once per source hash and
+  // extractor version; future health scans can then use online matching.
+  const markSourceChecked=()=>{
+   if(!checkedNoCover&&!descriptionRechecked)return null;
+   const updates=[];
+   if(checkedNoCover)updates.push(
+    "'$.cover_repair_checked_version',"+COVER_CHECK_VERSION,
+    "'$.cover_repair_checked_sha256',?");
+   if(descriptionRechecked)updates.push(
+    "'$.description_repair_checked_version',"+DESCRIPTION_CHECK_VERSION,
+    "'$.description_repair_checked_sha256',?");
+   return db.prepare(
+    "UPDATE epub_files SET metadata_json=json_set("+
+    " CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,"+
+    updates.join(',')+") WHERE id=? AND sha256=?"
+   ).bind(...Array(checkedNoCover?1:0).fill(row.sha256),
+    ...Array(descriptionRechecked?1:0).fill(row.sha256),row.id,row.sha256);
+  };
   if(!description&&!additions.length&&!coverInfo&&!selectedCover){
-   if(checkedNoCover)await checkedCoverStmt().run();
+   const mark=markSourceChecked();
+   if(mark)await mark.run();
    return json({status:previous?'already_processed':'no_changes',
-    file_id:row.id,cover_checked:checkedNoCover});
+    file_id:row.id,cover_checked:checkedNoCover,description_rechecked:descriptionRechecked,
+    source_synopsis_unavailable:!!row.synopsis?.trim()?false:!description,
+    source_cover_unavailable:checkedNoCover,source_epub_missing:sourceMissing});
   }
   const now=new Date().toISOString(),batchId=crypto.randomUUID(),changeId=crypto.randomUUID();
   const stmts=[];
-  if(checkedNoCover)stmts.push(checkedCoverStmt());
+  const mark=markSourceChecked();
+  if(mark)stmts.push(mark);
   if(selectedCover){
    // Guard against concurrent owner edits. Never replace a manually selected
    // cover or move any artwork to a different edition.
@@ -266,7 +306,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   }
   return json({status:'applied',change_id:changeId,file_id:row.id,
    synopsis_filled:!!description,tags_added:additions.length,
-   cover_added:!!coverId,cover_selected:!!selectedCover});
+   cover_added:!!coverId,cover_selected:!!selectedCover,
+   description_rechecked:descriptionRechecked});
  }
  if(path==='/api/epubs/backfill/undo'&&method==='POST'){
   let data;
