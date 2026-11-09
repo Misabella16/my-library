@@ -242,9 +242,10 @@
     <section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
       <p class="section-kicker">✧ CATALOGUE HEALTH</p>
       <h2>Find books that need attention</h2>
-      <p class="muted">Review missing covers, summaries, tags, editions, and possible same-title duplicates before your next large EPUB import. This checks at most 40 books per click and never changes book records automatically.</p>
+      <p class="muted">Scan your entire catalogue in one click to find missing covers, summaries, tags, editions, and possible duplicates. The scan uses small, low-cost requests automatically and never edits book records. For existing EPUB files, use the separate safe repair button below.</p>
       <div class="collection-health-actions">
-        <button type="button" class="btn" id="collection-health-scan">Scan first 40 books</button>
+        <button type="button" class="btn" id="collection-health-scan">Scan entire library</button>
+        <button type="button" class="btn subtle" id="collection-health-pause" disabled>Pause scan</button>
         <label>Show
           <select id="collection-health-filter">
             <option value="issues">Books needing attention</option>
@@ -257,10 +258,14 @@
           </select>
         </label>
         <button type="button" class="btn subtle" id="collection-health-export" disabled>Export scanned report (CSV)</button>
+        <button type="button" class="btn subtle" id="collection-health-repair">Repair saved EPUB metadata &amp; covers</button>
       </div>
       <p id="collection-health-status" class="small-status" role="status" aria-live="polite">Start the read-only catalogue scan when you're ready.</p>
       <div id="collection-health-metrics" class="collection-health-metrics" aria-live="polite"></div>
       <div id="collection-health-results" class="collection-health-results"></div>
+      <p id="collection-health-shown" class="small-status" aria-live="polite"></p>
+      <button type="button" class="btn subtle" id="collection-health-more" hidden>Show next 100 matching books</button>
+      <p class="muted">Missing information isn't always in the source file. EPUB repair only fills safe gaps from saved EPUB metadata. Goodreads-only and other entries without usable metadata can still need separate matching. Possible duplicates are never automatically merged.</p>
     </section>
     <div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
     <section class="goodreads-tool" aria-labelledby="goodreads-heading">

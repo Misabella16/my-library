@@ -1,5 +1,5 @@
-// Private, read-only catalogue scan UI. Each click checks at most 40 active
-// books; raw private details stay on the device. Nothing edits the catalogue.
+// Owner-only catalogue health scan. One click walks bounded, indexed D1
+// pages without holding a huge server response or modifying book records.
 const byId=id=>document.getElementById(id);
 const el=(tag,text,cls)=>{const x=document.createElement(tag);
  if(text!==undefined)x.textContent=String(text);if(cls)x.className=cls;return x;};
@@ -22,18 +22,30 @@ export function healthCsv(rows){
   ...HEALTH_FLAGS.map(([key])=>row[key]===1?'Review':'')]);
  return '\ufeff'+[headings,...data].map(line=>line.map(csvCell).join(',')).join('\r\n')+'\r\n';
 }
+export const HEALTH_RESULT_PAGE=100;
 export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
  const section=byId('collection-health'),status=byId('collection-health-status'),
-  start=byId('collection-health-scan'),filter=byId('collection-health-filter'),
+  start=byId('collection-health-scan'),pause=byId('collection-health-pause'),
+  repair=byId('collection-health-repair'),filter=byId('collection-health-filter'),
   exportBtn=byId('collection-health-export'),results=byId('collection-health-results'),
-  metrics=byId('collection-health-metrics');
- if(!section||!status||!start||!filter||!exportBtn||!results||!metrics)return null;
- let cursor='',done=false,busy=false,rows=[],seen=new Set();
+  metrics=byId('collection-health-metrics'),more=byId('collection-health-more'),
+  shown=byId('collection-health-shown');
+ if(!section||!status||!start||!pause||!filter||!exportBtn||!results||!metrics||!more||!shown)
+  return null;
+ let cursor='',done=false,busy=false,pauseRequested=false,rows=[],seen=new Set();
+ let visibleLimit=HEALTH_RESULT_PAGE;
  const say=msg=>{status.textContent=msg;};
  const syncControls=()=>{
-  start.disabled=busy||done;
-  start.textContent=done?'Scan complete':rows.length?'Scan next 40 books':'Scan first 40 books';
+  start.disabled=busy;
+  start.textContent=busy?'Scanning entire library…':
+   done?'Scan entire library again':rows.length?'Resume full library scan':'Scan entire library';
+  pause.disabled=!busy||pauseRequested;
   exportBtn.disabled=!rows.length;
+  more.disabled=busy;
+  if(repair){
+   const existing=byId('epub-backfill-all');
+   repair.disabled=!existing||existing.disabled;
+  }
  };
  const filtered=()=>{
   const value=filter.value;
@@ -43,13 +55,15 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
  const render=()=>{
   const counts=healthCounts(rows);
   metrics.replaceChildren();
-  const total=el('strong',rows.length+' books checked');metrics.append(total);
-  for(const [key,label] of HEALTH_FLAGS)metrics.append(el('span',label+': '+counts[key],'health-metric'));
+  metrics.append(el('strong',rows.length+' books checked'));
+  for(const [key,label] of HEALTH_FLAGS)
+   metrics.append(el('span',label+': '+counts[key],'health-metric'));
   results.replaceChildren();
   const visible=filtered();
   if(!visible.length)results.append(el('p',
-   rows.length?'No books match this filter in the scanned pages.':'Run a scan to inspect your catalogue.','muted'));
-  for(const row of visible){
+   rows.length?'No books match this filter in the scanned catalogue.':
+    'Scan your library once to see all missing-data issues.','muted'));
+  for(const row of visible.slice(0,visibleLimit)){
    const card=el('article',undefined,'health-result');
    const details=el('div',undefined,'health-result-details');
    details.append(el('strong',row.title||'Untitled'),el('p',row.author||'Unknown author','muted'));
@@ -64,35 +78,91 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
    });
    card.append(details,open);results.append(card);
   }
+  more.hidden=visible.length<=visibleLimit;
+  shown.textContent=visible.length>visibleLimit?
+   'Showing '+visibleLimit.toLocaleString()+' of '+visible.length.toLocaleString()+
+   ' matching books. CSV export includes all scanned matching books.':
+   'Showing all '+visible.length.toLocaleString()+' matching books.';
   syncControls();
  };
- filter.addEventListener('change',render);
+ const reset=()=>{
+  cursor='';done=false;rows=[];seen.clear();visibleLimit=HEALTH_RESULT_PAGE;render();
+ };
+ filter.addEventListener('change',()=>{visibleLimit=HEALTH_RESULT_PAGE;render();});
+ more.addEventListener('click',()=>{visibleLimit+=HEALTH_RESULT_PAGE;render();});
+ pause.addEventListener('click',()=>{
+  if(!busy)return;
+  pauseRequested=true;pause.disabled=true;
+  say('Pause requested. The current small scan page will finish first.');
+ });
  start.addEventListener('click',async()=>{
-  if(busy||done)return;busy=true;syncControls();
+  if(busy)return;
+  if(done)reset();
+  busy=true;pauseRequested=false;syncControls();
+  let pages=0;
   try{
-   const params=new URLSearchParams();
-   if(cursor)params.set('cursor',cursor);
-   const page=await api('/api/catalogue/health'+(params.size?'?'+params:''));
-   if(!Array.isArray(page.books))throw Error('Incomplete health scan response');
-   for(const row of page.books){
-    if(seen.has(row.book_id))continue;
-    seen.add(row.book_id);rows.push(row);
+   while(!done&&!pauseRequested){
+    const params=new URLSearchParams();
+    if(cursor)params.set('cursor',cursor);
+    const page=await api('/api/catalogue/health'+(params.size?'?'+params:''));
+    if(!Array.isArray(page.books))throw Error('Incomplete health scan response');
+    // Advance only after the indexed page has arrived; recoverable failures
+    // therefore never skip a book or discard previously completed pages.
+    for(const row of page.books){
+     if(seen.has(row.book_id))continue;
+     seen.add(row.book_id);rows.push(row);
+    }
+    pages++;
+    done=!page.has_more;
+    if(!done){
+     if(!page.books.length||!page.next_cursor||page.next_cursor===cursor)
+      throw Error('Scan pagination could not advance safely');
+     cursor=page.next_cursor;
+    }else cursor='';
+    if(pages%5===0||done){
+     say('Checked '+rows.length.toLocaleString()+' books'+
+      (done?' · Entire active catalogue scanned.':' · Scanning automatically…')+
+      ' This report is read-only. Possible duplicates require review.');
+     render();
+     // Keep the browser usable during long scans and let Pause respond.
+     await new Promise(resolve=>setTimeout(resolve,0));
+    }
    }
-   done=!page.has_more;cursor=page.next_cursor||'';
-   say('Checked '+rows.length+' books'+(done?' · Entire active catalogue scanned.':
-    ' · Continue scanning the next 40 books.')+
-    ' This report is read-only. Possible duplicates require human review.');
-  }catch(error){say('Health scan stopped safely: '+(error.message||'Request failed'));}
-  finally{busy=false;render();}
+   if(pauseRequested&&!done){
+    say('Paused after '+rows.length.toLocaleString()+
+     ' books. Select Resume full library scan to continue without starting over.');
+   }
+  }catch(error){
+   const code=error?.payload?.code||'';
+   const quota=['database_read_quota','database_write_quota',
+    'database_limit_reached','database_storage_limit'].includes(code);
+   say('Scan stopped after '+rows.length.toLocaleString()+' books: '+
+    (quota?'Cloudflare database allowance reached. Resume when it resets.':
+     error.message||'Request failed')+
+    ' Already scanned results are preserved in this open tab. Click Resume to continue.');
+  }finally{busy=false;pauseRequested=false;render();}
+ });
+ repair?.addEventListener('click',()=>{
+  const button=byId('epub-backfill-all');
+  if(!button||button.disabled){
+   say('The stored-EPUB repair is unavailable or already in progress. Review its status below.');
+   return;
+  }
+  button.click();
+  byId('epub-backfill')?.scrollIntoView?.({behavior:'smooth',block:'start'});
+  say('Started the existing stored-EPUB repair. Follow its progress below. '+
+   'Books with no stored EPUB need separate source matching.');
  });
  exportBtn.addEventListener('click',()=>{
-  const url=URL.createObjectURL(new Blob([healthCsv(filtered())],
+  const displayed=filtered();
+  const url=URL.createObjectURL(new Blob([healthCsv(displayed)],
    {type:'text/csv;charset=utf-8'}));
   const link=el('a');link.href=url;link.download='my-library-catalogue-health.csv';
   document.body.append(link);link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  say('Exported '+filtered().length+' visible scanned books. Continue scanning to include the rest.');
+  say('Exported '+displayed.length.toLocaleString()+' matching scanned books.'+
+   (done?' Entire catalogue was checked.':' Finish the scan to include the remaining books.'));
  });
  render();
- return {refresh:()=>{cursor='';done=false;rows=[];seen.clear();render();}};
+ return {refresh:reset};
 }
