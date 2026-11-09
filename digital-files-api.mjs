@@ -86,8 +86,9 @@ async function identify(db,item){
  }
  if(item.book_id && (matched.status!=='match'||matched.book_id!==item.book_id))
   return {status:'needs_review',reason:'Requested book does not match the verified catalogue identity'};
- if(matched.status==='new'&&(!item.title||!item.author))
-  return {status:'needs_review',reason:'A title and author are required for a new book'};
+ if(matched.status==='new'&&(!item.title||!item.author||
+    ['unknown','unknown author','n a','not set'].includes(normalizeEpubText(item.author))))
+  return {status:'needs_review',reason:'A reliable title and author are required for a new book'};
  return matched;
 }
 function guardKey(key,sha,format){
