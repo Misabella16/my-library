@@ -70,6 +70,21 @@ It streams the compressed Works and Authors data directly, finds a verified matc
 
 Books with multiple verified works, uncertain authors, missing source metadata or unrecognized titles are held back. A work-level match cannot safely manufacture publisher, ISBN, exact edition or a special-edition cover.
 
+## Optional: reuse the small local SQLite cache
+
+The first full scan also stores verified work metadata in *my-library-matches.sqlite* next to the JSON report (or at the path supplied by *--cache-db*). This cache contains **only your verified book matches**, not the complete Open Library dataset.
+
+After exporting a refreshed website catalogue, you can reuse those previously verified matches without re-reading the multi-gigabyte dumps:
+
+~~~sh
+python3 local-mac/openlibrary_works_only.py \
+  --catalogue ~/Downloads/my-library-catalogue.json \
+  --from-cache \
+  --output ~/Downloads/my-library-matches.json
+~~~
+
+This only reuses works with the **same verified title and author**. New books, renamed records or books that could not be matched the first time remain unmatched until a fresh Works + Authors scan. The local cache does not silently guess those entries.
+
 ## 4. Import verified matches to the website
 
 Return to **Imports & Undo -> Advanced tools -> Offline matching** on the live site, choose the generated *my-library-matches.json* file, and click **Apply ALL verified matches**. It proceeds automatically in guarded batches with Pause and Undo.
