@@ -267,6 +267,19 @@
       <button type="button" class="btn subtle" id="collection-health-more" hidden>Show next 100 matching books</button>
       <p class="muted">Missing information isn't always in the source file. EPUB repair only fills safe gaps from saved EPUB metadata. Goodreads-only and other entries without usable metadata can still need separate matching. Possible duplicates are never automatically merged.</p>
     </section>
+    <section class="surface collection-health" id="existing-cover-relink" aria-labelledby="relink-existing-heading">
+      <p class="section-kicker">✧ AUTOMATIC COVER RECOVERY</p>
+      <h3 id="relink-existing-heading">Recover covers you already have</h3>
+      <p>Some private cover images were saved correctly but never selected for display. Recover all uniquely identified, non-special artwork in one scan, without reuploading a single image. Books with multiple candidate images, missing R2 files, or special editions are skipped for review.</p>
+      <div class="collection-health-actions">
+        <button class="btn" type="button" id="relink-existing-start">Recover ALL existing covers</button>
+        <button class="btn subtle" type="button" id="relink-existing-stop" disabled>Pause</button>
+        <button class="btn subtle" type="button" id="relink-existing-history">Cover repair history &amp; Undo</button>
+      </div>
+      <p class="small-status" id="relink-existing-status" role="status" aria-live="polite">Ready. This scans eligible cover records automatically in low-cost batches. No file is uploaded or deleted.</p>
+      <div id="relink-existing-history-list" class="epub-preview-list" aria-live="polite"></div>
+      <p class="muted">This repairs missing display selections only. Use saved EPUB repair, Calibre repair, or verified online matching for books with no usable cover image.</p>
+    </section>
     <section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
       <p class="section-kicker">✧ VERIFIED ONLINE METADATA REPAIR</p>
       <h3 id="online-enrich-heading">Find missing book summaries, tags and covers online</h3>
