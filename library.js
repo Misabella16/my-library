@@ -213,9 +213,38 @@ function renderDetail(){
        safe(file.original_filename||'Book EPUB')+'</span> '+
        '<button class="btn mini subtle" type="button" data-repair-private-epub="'+
        safe(file.id)+'">Recover missing cover & metadata</button>'+
+       (machineTitleReason(b.title)?
+        '<button class="btn mini" type="button" data-repair-private-title="'+
+        safe(file.id)+'">Recover book title from saved EPUB</button>':'')+
        '<span data-repair-result="'+safe(file.id)+'" aria-live="polite"></span></p>').join(''):
        '<p class="muted">No EPUB uploaded for this book yet.</p>';
       if(response.truncated)dest.insertAdjacentText('beforeend',' Showing the first 100 files.');
+      dest.addEventListener('click',async event=>{
+        const button=event.target.closest('[data-repair-private-title]');
+        if(!button||button.disabled)return;
+        const fileId=safeId(button.dataset.repairPrivateTitle);
+        if(!fileId)return;
+        const feedback=dest.querySelector('[data-repair-result="'+fileId+'"]');
+        button.disabled=true;
+        if(feedback)feedback.textContent=' Checking the original EPUB filename…';
+        try{
+          const response=await api('/api/books/auto-title-repair/batch',{
+           method:'POST',data:{items:[{
+            id:b.id,expected_updated_at:b.updated_at,source_file_ids:[fileId]
+           }]}
+          });
+          const result=response.results?.[0];
+          if(result?.status==='applied'){
+           if(feedback)feedback.textContent=' Title repaired: '+result.title+'. Undo is available in Imports & Undo.';
+           await listBooks();
+           if(state.selectedId===b.id)await selectBook(b.id);
+          }else if(feedback){
+           feedback.textContent=' Title needs review: '+(result?.reason||result?.status||'No reliable match');
+          }
+        }catch(error){
+         if(feedback)feedback.textContent=' Title repair stopped: '+(error.message||'Request failed');
+        }finally{button.disabled=false;}
+      });
       dest.addEventListener('click',async event=>{
         const button=event.target.closest('[data-repair-private-epub]');
         if(!button||button.disabled)return;
