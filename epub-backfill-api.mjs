@@ -31,6 +31,22 @@ async function linkedFile(db,fileId){
   'LEFT JOIN editions e ON e.id=f.edition_id '+
   'WHERE f.id=? AND b.archived_at IS NULL',[fileId]);
 }
+
+/* No external lookup or display change unless there is exactly one existing
+ * image on the whole book, and it is an EPUB cover on the standard ebook.
+ * This prevents auto-selecting special editions or overriding manual art.
+ */
+async function singleUnselectedEpubCover(db,bookId,editionId){
+ const results=await many(db,
+  "SELECT im.id,im.edition_id,im.origin,im.role,im.display_cover,im.copy_id,"+
+  "im.private_object_key FROM edition_images im JOIN editions e ON e.id=im.edition_id "+
+  "WHERE e.book_id=? LIMIT 2",[bookId]);
+ if(results.length!==1)return null;
+ const row=results[0];
+ return row.edition_id===editionId&&row.origin==='epub'&&row.role==='cover'&&
+  row.display_cover===0&&row.copy_id===null&&!!row.private_object_key?row:null;
+}
+
 export async function handleEpubBackfillApi(request,db,path,env={}){
  const method=request.method;
  if(path==='/api/epubs/backfill/history'&&method==='GET'){
@@ -52,6 +68,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const saved=await many(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',[row.book_id]);
   const present=new Set(saved.map(tag=>tag.label.toLocaleLowerCase()));
   const cover=await one(db,"SELECT COUNT(*) AS n FROM edition_images WHERE edition_id=? AND role='cover'",[row.edition_id]);
+  const displayCandidate=cover?.n?await singleUnselectedEpubCover(db,row.book_id,row.edition_id):null;
   const standard=row.edition_format==='ebook'&&row.edition_special===0;
   const checked=coverAlreadyChecked(meta.coverCheckedVersion,meta.coverCheckedHash,row.sha256);
   return json({file_id:row.id,book_id:row.book_id,title:row.title,
@@ -59,6 +76,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    synopsis:row.synopsis?.trim()?'':meta.synopsis,
    subjects:meta.tags.filter(label=>!present.has(label.toLocaleLowerCase())),
    cover_missing:!cover?.n&&standard&&!checked,
+   cover_unselected:!!displayCandidate&&standard,
    cover_unavailable:!cover?.n&&standard&&checked});
  }
  if(path==='/api/epubs/backfill/preview'&&method==='GET'){
@@ -69,6 +87,10 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const limit=Number.isInteger(requested)?Math.max(1,Math.min(10,requested)):10;
   const rows=await many(db,'SELECT f.id,f.book_id,f.sha256,f.metadata_json,b.title,b.synopsis,b.updated_at, '+
    "(SELECT COUNT(*) FROM edition_images im WHERE im.edition_id=f.edition_id AND im.role='cover') AS cover_count, "+
+   "(SELECT COUNT(*) FROM edition_images im JOIN editions ee ON ee.id=im.edition_id WHERE ee.book_id=f.book_id) AS book_image_count, "+
+   "(SELECT COUNT(*) FROM edition_images im WHERE im.edition_id=f.edition_id "+
+   "AND im.origin='epub' AND im.role='cover' AND im.display_cover=0 "+
+   "AND im.copy_id IS NULL AND im.private_object_key IS NOT NULL) AS eligible_unselected_count, "+
    "e.format AS edition_format,e.is_special AS edition_special "+
    'FROM epub_files f JOIN books b ON b.id=f.book_id '+
    'LEFT JOIN editions e ON e.id=f.edition_id '+
@@ -98,7 +120,9 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
      !coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256),
     cover_unavailable:!row.cover_count&&
      row.edition_format==='ebook'&&row.edition_special===0&&
-     coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256)};
+     coverAlreadyChecked(extracted.coverCheckedVersion,extracted.coverCheckedHash,row.sha256),
+    cover_unselected:row.book_image_count===1&&row.eligible_unselected_count===1&&
+     row.edition_format==='ebook'&&row.edition_special===0};
   }),next_cursor:rows.length>limit?page[page.length-1].id:null});
  }
  if(path==='/api/epubs/backfill/apply'&&method==='POST'){
@@ -128,6 +152,11 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    "FROM edition_images WHERE edition_id=?",[row.edition_id]);
   const needsCover=coverCount?.n===0&&row.edition_format==='ebook'&&row.edition_special===0&&
     !coverAlreadyChecked(coverCheckedVersion,coverCheckedHash,row.sha256);
+  // An uploaded EPUB cover may exist in R2 but not be selected for display.
+  // Only one unselected EPUB cover on the whole book is safe to promote.
+  const selectedCover=coverCount?.n&&!coverCount?.selected&&
+    row.edition_format==='ebook'&&row.edition_special===0
+    ?await singleUnselectedEpubCover(db,row.book_id,row.edition_id):null;
   let checkedNoCover=false;
   let coverInfo=null,coverKey=null;
   if(needsCover&&env.BOOK_FILES){
@@ -168,7 +197,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    " '$.cover_repair_checked_version',?,"+
    " '$.cover_repair_checked_sha256',?) WHERE id=? AND sha256=?")
    .bind(COVER_CHECK_VERSION,row.sha256,row.id,row.sha256);
-  if(!description&&!additions.length&&!coverInfo){
+  if(!description&&!additions.length&&!coverInfo&&!selectedCover){
    if(checkedNoCover)await checkedCoverStmt().run();
    return json({status:previous?'already_processed':'no_changes',
     file_id:row.id,cover_checked:checkedNoCover});
@@ -176,6 +205,17 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const now=new Date().toISOString(),batchId=crypto.randomUUID(),changeId=crypto.randomUUID();
   const stmts=[];
   if(checkedNoCover)stmts.push(checkedCoverStmt());
+  if(selectedCover){
+   // Guard against concurrent owner edits. Never replace a manually selected
+   // cover or move any artwork to a different edition.
+   stmts.push(db.prepare(
+    "UPDATE edition_images SET display_cover=1 WHERE id=? "+
+    "AND edition_id=? AND origin='epub' AND role='cover' "+
+    "AND private_object_key IS NOT NULL AND copy_id IS NULL AND display_cover=0 "+
+    "AND NOT EXISTS (SELECT 1 FROM edition_images im JOIN editions ee ON ee.id=im.edition_id "+
+    "WHERE ee.book_id=? AND im.display_cover=1)")
+    .bind(selectedCover.id,row.edition_id,row.book_id));
+  }
   let coverId=null;
   const coverDisplay=coverCount?.selected?0:1;
   if(coverInfo){
@@ -203,6 +243,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   }
   const after={file_id:row.id,book_id:row.book_id,description,
    tags:additions,cover_id:coverId,cover_key:coverKey,cover_display:coverDisplay,
+   selected_existing_cover_id:selectedCover?.id||null,
    prior_updated_at:row.updated_at,
    applied_updated_at:description?now:row.updated_at};
   stmts.push(db.prepare("INSERT INTO import_batches(id,source,status,report,created_at) "+
@@ -221,7 +262,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    throw error;
   }
   return json({status:'applied',change_id:changeId,file_id:row.id,
-   synopsis_filled:!!description,tags_added:additions.length,cover_added:!!coverId});
+   synopsis_filled:!!description,tags_added:additions.length,
+   cover_added:!!coverId,cover_selected:!!selectedCover});
  }
  if(path==='/api/epubs/backfill/undo'&&method==='POST'){
   let data;
@@ -253,7 +295,27 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
      cover.copy_id!==null)
     return fail('The repaired EPUB cover was changed or verified. Nothing was undone.',409);
   }
+  if(after.selected_existing_cover_id){
+   const selected=await one(db,
+    "SELECT id,edition_id,origin,role,display_cover,copy_id,private_object_key "+
+    "FROM edition_images WHERE id=?",[after.selected_existing_cover_id]);
+   const file=await linkedFile(db,after.file_id);
+   const displayed=await one(db,
+    "SELECT COUNT(*) AS n FROM edition_images im JOIN editions ee ON ee.id=im.edition_id "+
+    "WHERE ee.book_id=? AND im.display_cover=1",[after.book_id]);
+   if(!file||!selected||selected.edition_id!==file.edition_id||
+      selected.origin!=='epub'||selected.role!=='cover'||
+      !selected.private_object_key||selected.copy_id!==null||
+      selected.display_cover!==1||displayed?.n!==1)
+    return fail('The selected EPUB cover was changed. Nothing was undone.',409);
+  }
   const now=new Date().toISOString(),stmts=[];
+  if(after.selected_existing_cover_id){
+   stmts.push(db.prepare(
+    "UPDATE edition_images SET display_cover=0 "+
+    "WHERE id=? AND origin='epub' AND role='cover' AND display_cover=1")
+    .bind(after.selected_existing_cover_id));
+  }
   if(after.cover_id){
    stmts.push(db.prepare(
     "DELETE FROM edition_images WHERE id=? AND origin='epub' AND private_object_key=? "+
