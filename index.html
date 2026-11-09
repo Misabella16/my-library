@@ -382,16 +382,21 @@
       </section>
       <section id="epub-title-cleanup" class="epub-tool" aria-label="Clean saved book titles">
         <h4>Clean messy titles already saved in My Library</h4>
-        <p class="muted">Scan your whole catalogue for download-site labels, ISBNs used as titles, and hexadecimal file IDs. The scanner also checks previously uploaded EPUB metadata. For ISBN-only titles, choose <strong>Find titles from ISBNs</strong> to get Open Library suggestions in low-volume batches. Review and approve changes before saving; unresolved or conflicting titles stay unchanged. Original EPUB files, notes, covers and editions stay intact.</p>
+        <p class="muted">Scan your whole catalogue for download-site labels, ISBNs used as titles, and hexadecimal file IDs. The scanner also checks previously uploaded EPUB metadata. For ISBN-only titles, choose <strong>Find titles from ISBNs</strong> to get Open Library suggestions in low-volume batches. Use Auto-repair to save verified title fixes in bulk with a permanent Undo history; uncertain results remain for review. Covers alone are never used as proof of a book's identity. Original EPUB files, notes, covers, special editions and reading progress remain intact.</p>
         <div class="goodreads-actions">
           <button class="btn subtle" id="epub-title-scan" type="button">Scan next 50 books</button>
           <button class="btn subtle" id="epub-title-scan-all" type="button">Find all messy titles (entire library)</button>
           <button class="btn subtle" id="epub-title-isbn-lookup" type="button" disabled>Find titles from ISBNs (Open Library)</button>
+          <button class="btn" id="epub-title-auto-repair" type="button">Auto-repair verified titles (all books)</button>
+          <button class="btn subtle" id="epub-title-auto-pause" type="button" disabled>Pause auto-repair</button>
+          <button class="btn subtle" id="epub-title-auto-history" type="button">Automatic repair history &amp; Undo</button>
           <button class="btn" id="epub-title-apply" type="button" disabled>Fix selected titles</button>
           <button class="btn subtle" id="epub-title-undo" type="button" disabled>Undo titles fixed this session</button>
         </div>
         <p class="small-status" id="epub-title-status" role="status" aria-live="polite">Scan your whole collection once. Author-matched EPUB proposals are preselected; uncertain titles remain unchecked.</p>
         <p class="small-status" id="epub-title-isbn-status" role="status" aria-live="polite">ISBN lookup is optional and checks up to ten ISBNs per request. Only ISBNs are sent to Open Library. Uncertain matches are left unchecked.</p>
+        <p class="small-status" id="epub-title-auto-status" role="status" aria-live="polite">The automatic repair checks verified ISBN and saved EPUB matches, preserves edits, and leaves uncertain books for review. Undo is saved permanently.</p>
+        <div id="epub-title-auto-history-list" class="epub-preview-list" aria-live="polite"></div>
         <div class="epub-preview-list" id="epub-title-results" aria-live="polite"></div>
       </section>
       <p class="goodreads-private-note"><strong>Private storage.</strong> EPUB files, embedded covers, and explicit OPF subject tags are saved only to your owner-protected library after you select Save. Uncertain or missing metadata is held for review; you can correct titles/authors without changing the original file. Upload failures can be retried without restarting the entire folder. Imported EPUBs never create physical owned copies or overwrite special-edition artwork.</p>
