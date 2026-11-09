@@ -180,7 +180,7 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
  });
 
  const repairCandidates=()=>comp?.results.filter(x=>
-  x.book&&x.calibre&&(x.status==='metadata_gaps'||x.status==='matched'))||[];
+  x.book&&x.calibre&&x.status==='metadata_gaps')||[];
  const payloadFor=entry=>({
   book_id:entry.book.id,
   expected_updated_at:entry.book.updated_at,
@@ -219,7 +219,10 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
      const ext=localCover.name.split('.').at(-1).toLowerCase();
      const mime=ext==='png'?'image/png':ext==='webp'?'image/webp':'image/jpeg';
      try{
-      const query=new URLSearchParams({match:JSON.stringify(payloadFor(entry))});
+      const proposal=payloadFor(entry);
+      proposal.calibre={title:entry.calibre.title,authors:entry.calibre.authors,
+       isbn:entry.calibre.isbn};
+      const query=new URLSearchParams({match:JSON.stringify(proposal)});
       const result=await api('/api/calibre/cover?'+query,{
        method:'POST',raw:localCover,contentType:mime
       });
