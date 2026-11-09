@@ -565,9 +565,20 @@ document.addEventListener('DOMContentLoaded',async()=>{
         document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
       }
     });
-    initOnlineEnrich(api,{onUpdated:()=>refreshCurrent()});
-    initOfflineBulk(api,{onUpdated:()=>refreshCurrent()});
     const savedCoverRepair=initExistingCoverRelink(api,{onUpdated:()=>refreshCurrent()});
+    initOnlineEnrich(api,{
+      onUpdated:()=>refreshCurrent(),
+      prepareSaved:async()=>{
+        if(!storedEpubRepair?.repairAll||!savedCoverRepair?.runAll)
+          throw Error('Saved EPUB and cover recovery is unavailable');
+        const epub=await storedEpubRepair.repairAll();
+        if(!epub?.complete)return {complete:false};
+        const cover=await savedCoverRepair.runAll();
+        if(cover?.complete)await refreshCurrent();
+        return {complete:!!cover?.complete};
+      }
+    });
+    initOfflineBulk(api,{onUpdated:()=>refreshCurrent()});
     const combined=document.getElementById('collection-health-smart-repair');
     const combinedStatus=document.getElementById('collection-health-smart-status');
     combined?.addEventListener('click',async()=>{
