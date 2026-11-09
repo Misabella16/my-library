@@ -1,4 +1,5 @@
 import {inspectEpub,MAX_EPUB_BYTES} from './epub-reader.mjs';
+import {uploadLargeEpub,MULTIPART_THRESHOLD} from './large-epub-upload.mjs';
 import {suggestEpubMetadata,cleanEpubTitle} from './epub-metadata.mjs';
 import {bulkEpubReport,flagPossibleEpubDuplicates} from './epub-bulk.mjs';
 
@@ -13,7 +14,7 @@ const labels={
  already_uploaded:'Already uploaded',needs_review:'Needs review',
  same_file:'Duplicate in this selection',uploaded:'Saved',
  upload_failed:'Upload failed',possible_duplicate:'Possible duplicate EPUB',
- oversized:'Too large (over 24 MB)',unreadable:'Could not inspect EPUB'
+ oversized:'Too large (over 96 MiB)',unreadable:'Could not inspect EPUB'
 };
 const canImport=x=>!x?.excluded&&['new','match','upload_failed'].includes(x?.match?.status);
 const create=(tag,className,text)=>{
@@ -341,7 +342,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       if(file.size>MAX_EPUB_BYTES){
        entry.match={status:'oversized'};
        throw Error('This EPUB is '+(file.size/1048576).toFixed(1)+
-        ' MB. Current upload limit: 24 MB. Name cleanup is preview-only.');
+        ' MiB. Current upload limit: 96 MiB. Name cleanup is preview-only.');
       }
       // Inspect sequentially: no persistent file bytes or cover blobs
       // held in memory during thousand-book previews.
@@ -436,19 +437,31 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     const fresh=await inspectEpub(entry.file);
     if(fresh.sha256!==entry.metadata.sha256)
      throw Error('This EPUB changed since preview. Re-preview it.');
-    const form=new FormData();
-    form.set('epub',entry.file,entry.file.name);
-    if(fresh.cover)form.set('cover',fresh.cover,'embedded-cover'+
-     (fresh.coverType==='image/png'?'.png':
-      fresh.coverType==='image/webp'?'.webp':'.jpg'));
-    form.set('metadata',JSON.stringify({
+    const metadata={
      title:entry.metadata.title,author:entry.metadata.author,
      description:fresh.description,identifier:fresh.identifier,
-     subjects:fresh.subjects||[],
-     sha256:fresh.sha256,
+     subjects:fresh.subjects||[],sha256:fresh.sha256,
      ...(entry.match.book_id?{book_id:entry.match.book_id}:{})
-    }));
-    const result=await api('/api/epubs/upload',{method:'POST',formData:form});
+    };
+    let result;
+    if(entry.file.size>MULTIPART_THRESHOLD){
+     result=await uploadLargeEpub(api,{file:entry.file,metadata,cover:fresh.cover,
+      resume:entry.largeSession||null,
+      onSession:session=>{entry.largeSession=session;},
+      onProgress:fraction=>{
+       inform('Uploading '+entry.file.name+' in verified 8 MiB parts: '+
+        Math.round(fraction*100)+'%. Keep this tab open.');
+      }});
+     entry.largeSession=null;
+    }else{
+     const form=new FormData();
+     form.set('epub',entry.file,entry.file.name);
+     if(fresh.cover)form.set('cover',fresh.cover,'embedded-cover'+
+      (fresh.coverType==='image/png'?'.png':
+       fresh.coverType==='image/webp'?'.webp':'.jpg'));
+     form.set('metadata',JSON.stringify(metadata));
+     result=await api('/api/epubs/upload',{method:'POST',formData:form});
+    }
     // Retain canonical book and EPUB identifiers for the review CSV.
     if(result.uploaded){
       entry.uploadResult=result;
