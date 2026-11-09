@@ -1,4 +1,5 @@
 import {parseCalibreExport,compareCalibre,exportComparisonCsv} from './calibre-compare.mjs';
+import {readCalibreFolder} from './calibre-folder.mjs';
 // Calibre export is read locally in the browser, never uploaded to My Library.
 // Catalogue pagination uses indexed D1 GET routes and no mutations.
 const node=(tag,value,cls)=>{
@@ -7,10 +8,17 @@ const node=(tag,value,cls)=>{
  if(cls)el.className=cls;
  return el;
 };
-export function initCalibreCompare(api){
+export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>{}}={}){
  const root=document.getElementById('calibre-compare');
  if(!root)return null;
  const file=root.querySelector('#calibre-file'),
+  folder=root.querySelector('#calibre-folder'),
+  apply=root.querySelector('#calibre-apply'),
+  applyPause=root.querySelector('#calibre-apply-pause'),
+  bridge=root.querySelector('#calibre-import-epubs'),
+  undoHistory=root.querySelector('#calibre-undo-history'),
+  historyList=root.querySelector('#calibre-undo-list'),
+  repairStatus=root.querySelector('#calibre-repair-status'),
   run=root.querySelector('#calibre-compare-run'),
   pause=root.querySelector('#calibre-compare-pause'),
   filter=root.querySelector('#calibre-compare-filter'),
@@ -21,10 +29,15 @@ export function initCalibreCompare(api){
   more=root.querySelector('#calibre-compare-more');
  if([file,run,pause,filter,exportBtn,status,metrics,results,more].some(x=>!x))
   return null;
- let busy=false,stop=false,comp=null,visible=80,catalogue=[];
+ let busy=false,stop=false,comp=null,visible=80,catalogue=[],folderData=null,siteEpubs=[];
+ let saving=false,saveStop=false,saveOffset=0,saveOrder=null,saveFailures=0;
  const say=s=>{status.textContent=s;};
  const update=()=>{
-  run.disabled=busy||!file.files?.length;
+  run.disabled=busy||saving||(!file.files?.length&&!folder?.files?.length);
+  if(apply)apply.disabled=busy||saving||!comp;
+  if(applyPause)applyPause.disabled=!saving||saveStop;
+  if(bridge)bridge.disabled=busy||saving||!comp||!folderData;
+  if(undoHistory)undoHistory.disabled=busy||saving;
   pause.disabled=!busy||stop;
   filter.disabled=!comp;
   exportBtn.disabled=!comp;
@@ -82,6 +95,11 @@ export function initCalibreCompare(api){
    card.append(details);results.append(card);
   }
   more.hidden=rows.length<=visible;
+  if(folderData&&repairStatus&&!saving)
+   repairStatus.textContent='Local Calibre folder indexed: '+
+    folderData.covers.size+' cover candidates and '+
+    [...folderData.epubs.values()].reduce((n,fs)=>n+fs.length,0)+
+    ' EPUB files. Select Repair matched books to fill missing data and covers.';
   say(comp.counts.calibre.toLocaleString()+' Calibre books compared against '+
    comp.counts.site.toLocaleString()+
    ' My Library books. This report is read-only; no data was changed. '+
@@ -114,18 +132,33 @@ export function initCalibreCompare(api){
   if(busy||!file.files?.length)return;
   busy=true;stop=false;comp=null;visible=80;filter.value='all';update();
   try{
-   const selected=file.files[0];
-   if(selected.size>65_000_000)throw Error('Choose a Calibre CSV or JSON under 65 MB');
-   say('Reading the Calibre export locally…');
-   const text=await selected.text();
-   const books=parseCalibreExport(text,selected.name);
+   let books;
+   folderData=null;
+   if(folder?.files?.length){
+    say('Reading locally selected Calibre metadata.opf files…');
+    folderData=await readCalibreFolder(folder.files,{
+     cancelled:()=>stop,
+     onProgress:(n,total)=>say('Reading Calibre folder metadata: '+n+' / '+total)
+    });
+    if(!folderData||stop)return;
+    books=parseCalibreExport(JSON.stringify(folderData.books),'calibre.json');
+   }else{
+    const selected=file.files[0];
+    if(selected.size>65_000_000)throw Error('Choose a Calibre CSV or JSON under 65 MB');
+    say('Reading the Calibre export locally…');
+    const text=await selected.text();
+    books=parseCalibreExport(text,selected.name);
+   }
    if(stop)return;
    const site=await fetchCatalogue('books');
    if(stop)return;
    const editions=await fetchCatalogue('editions');
    if(stop)return;
+   siteEpubs=await fetchCatalogue('epubs');
+   if(stop)return;
    catalogue=site;
-   comp=compareCalibre(books,site,editions);
+   comp=compareCalibre(books,site,editions,siteEpubs);
+   saveOffset=0;saveOrder=null;saveFailures=0;
    render();
   }catch(error){
    say('Comparison stopped: '+(error.message||'Unexpected error')+
