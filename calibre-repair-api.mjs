@@ -269,14 +269,15 @@ async function undo(request,db,env){
    throw e;
   }
  }
- const image=await first(db,'SELECT id,edition_id,private_object_key,origin,display_cover '+
+ const image=await first(db,'SELECT id,edition_id,private_object_key,origin,display_cover,match_status '+
   'FROM edition_images WHERE id=?',log.entity_id);
  if(!image||image.private_object_key!==after.cover_key||image.display_cover!==1||
-  image.origin!=='manual'||image.edition_id!==after.edition_id)
-  return err('Cover was changed after Calibre upload. Undo would be unsafe',409);
+  image.origin!=='manual'||image.match_status!=='possible'||
+  image.edition_id!==after.edition_id)
+  return err('Cover was changed or verified after Calibre upload. Undo would be unsafe',409);
  const stmts=[
   db.prepare('DELETE FROM edition_images WHERE id=? AND edition_id=? '+
-   'AND private_object_key=? AND display_cover=1')
+   "AND private_object_key=? AND display_cover=1 AND match_status='possible'")
    .bind(log.entity_id,after.edition_id,after.cover_key)
  ];
  if(after.created_edition_id){

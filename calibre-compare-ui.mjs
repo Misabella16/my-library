@@ -102,10 +102,24 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
     ' EPUB files. Select Repair matched books to fill missing data and covers.';
   say(comp.counts.calibre.toLocaleString()+' Calibre books compared against '+
    comp.counts.site.toLocaleString()+
-   ' My Library books. This report is read-only; no data was changed. '+
-   'A book marked unmatched could still be an uncertain duplicate.');
+   ' My Library books. Comparing does not change either library. '+
+   'Changes are made only after you select Repair matched books, and Undo remains available. '+
+   'Unmatched books could still be uncertain duplicates.');
   update();
  };
+ // A selected file/folder must enable Compare. Existing comparison results
+ // become stale when the source changes, so never offer repair until rescanned.
+ const changed=()=>{
+  if(busy||saving)return;
+  comp=null;folderData=null;saveOrder=null;saveOffset=0;visible=80;
+  filter.value='all';metrics.replaceChildren();results.replaceChildren();
+  if(repairStatus)repairStatus.textContent='New Calibre source selected. Compare again before repairing.';
+  say('Calibre source selected. Choose Compare entire libraries.');
+  update();
+ };
+ file.addEventListener('change',changed);
+ folder?.addEventListener('change',changed);
+
  const fetchCatalogue=async type=>{
   let cursor='',seen=new Set(),out=[],pages=0;
   while(!stop){

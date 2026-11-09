@@ -311,3 +311,29 @@ test('Calibre folder repair and EPUB handoff are wired in the live UI',()=>{
  assert.match(ui,/\/api\/calibre\/enrich/);
  assert.match(ui,/\/api\/calibre\/undo/);
 });
+
+
+test('Owner verification of a Calibre cover blocks Undo from deleting that image',async()=>{
+ const f=fixture();try{
+  const b=f.book(1,'Revolutionary Princess Eve','Author A');
+  const selected=f.enrichment(b,f.form());
+  const query=new URLSearchParams({match:JSON.stringify(selected)});
+  const r=await f.request('cover?'+query,new Uint8Array([255,216,255,224,2]),'image/jpeg');
+  assert.equal(r.status,201);
+  const result=await r.json();
+  f.sql.prepare("UPDATE edition_images SET match_status='user_verified' WHERE id=?")
+   .run(result.cover_id);
+  const undo=await f.request('undo',{change_id:result.change_id});
+  assert.equal(undo.status,409);
+  assert.equal(f.sql.prepare('SELECT match_status FROM edition_images WHERE id=?')
+   .get(result.cover_id).match_status,'user_verified');
+  assert.equal(f.store.size,1);
+ }finally{f.close();}
+});
+test('Folder-only Calibre comparison works without requiring a CSV/JSON export',()=>{
+ const ui=readFileSync(new URL('../calibre-compare-ui.mjs',import.meta.url),'utf8');
+ assert.match(ui,/if\(busy\|\|\(!file\.files\?\.length&&!folder\?\.files\?\.length\)\)return;/);
+ assert.match(ui,/folderData=await readCalibreFolder/);
+ assert.match(ui,/folder\?\.addEventListener\('change',changed\)/);
+ assert.match(ui,/file\.addEventListener\('change',changed\)/);
+});
