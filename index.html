@@ -339,6 +339,7 @@
         <button class="btn" id="calibre-apply" type="button" disabled>Repair matched books: titles, authors, tags, summaries &amp; covers</button>
         <button class="btn subtle" id="calibre-apply-pause" type="button" disabled>Pause repairs</button>
         <button class="btn subtle" id="calibre-import-epubs" type="button" disabled>Send missing Calibre EPUBs to private importer</button>
+        <button class="btn subtle" id="calibre-import-other" type="button" disabled>Send Calibre PDFs/AZW3/MOBI to private importer</button>
         <button class="btn subtle" id="calibre-undo-history" type="button">Calibre repair history &amp; Undo</button>
       </div>
       <p id="calibre-compare-status" class="small-status" role="status" aria-live="polite">Choose your Calibre export OR the Calibre library folder, which contains metadata.opf and cover.jpg files. Only matched repairs you initiate write to My Library.</p>
@@ -359,6 +360,27 @@
       <div id="calibre-compare-results" class="epub-preview-list"></div>
       <button class="btn subtle" id="calibre-compare-more" type="button" hidden>Show next 80 matches</button>
       <p class="goodreads-private-note">Selecting the actual Calibre folder enables real cover uploads and EPUB imports. CSV/JSON exports alone can fill descriptions, tags, and verified titles but do not contain image or ebook bytes. No special-edition covers or personal notes are overwritten, and ambiguous matches remain for review.</p>
+    </section>
+    <section class="epub-tool surface" id="digital-import" aria-labelledby="digital-heading">
+      <p class="section-kicker">✧ PRIVATE DIGITAL FORMATS</p>
+      <h3 id="digital-heading">Import PDF, AZW3 and MOBI files</h3>
+      <p>Choose files directly or select them from your Calibre library folder above. My Library checks SHA-256 hashes and reliable book identities before saving. Existing EPUBs use their original importer. PDF, AZW3 and MOBI stay private, attached to standard ebook editions, and never overwrite your covers, physical copies, reviews or reading notes.</p>
+      <div class="goodreads-actions">
+        <label class="goodreads-file-label" for="digital-files">Choose PDF/AZW3/MOBI files
+          <input id="digital-files" type="file" accept=".pdf,.azw3,.mobi,application/pdf" multiple>
+        </label>
+        <label class="goodreads-file-label" for="digital-folder">Choose a folder of digital books
+          <input id="digital-folder" type="file" accept=".pdf,.azw3,.mobi" webkitdirectory directory multiple>
+        </label>
+        <button class="btn subtle" id="digital-preview" type="button" disabled>Preview &amp; check duplicates</button>
+        <button class="btn" id="digital-save" type="button" disabled>Save all eligible files privately</button>
+        <button class="btn subtle" id="digital-pause" type="button" disabled>Pause after current file</button>
+      </div>
+      <p id="digital-status" class="small-status" role="status" aria-live="polite">Select files to begin. Maximum 96 MiB per file and 10,000 files per selection. Larger files use private 8 MiB transfer chunks. Uncertain book identities remain in review.</p>
+      <p id="digital-summary" class="small-status" aria-live="polite"></p>
+      <div id="digital-results" class="epub-preview-list" aria-live="polite"></div>
+      <button class="btn subtle" id="digital-show-more" type="button" hidden>Show more results</button>
+      <p class="goodreads-private-note">Removing a private file from its book page hides it without deleting its stored original. You can restore it from that book's file history. To upload a Calibre EPUB, continue using the EPUB import section below.</p>
     </section>
     <section class="epub-tool surface" aria-labelledby="epub-heading">
       <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
