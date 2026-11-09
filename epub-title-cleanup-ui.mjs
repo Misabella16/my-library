@@ -89,6 +89,8 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
    more.type='button';more.addEventListener('click',()=>{shown+=60;render();});
    results.append(more);
   }
+  if(reviewFilter)reviewFilter.textContent=reviewOnly?'Show all candidates':
+   'Show unresolved review queue';
   controls();
  }
 
