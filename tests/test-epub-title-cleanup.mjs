@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {handleEpubTitleCleanupApi} from '../epub-title-cleanup-api.mjs';
+import {machineTitleReason} from '../epub-metadata.mjs';
 const uuid=n=>{const h=n.toString(16).padStart(32,'0');
  return h.slice(0,8)+'-'+h.slice(8,12)+'-4'+h.slice(13,16)+'-8'+h.slice(17,20)+'-'+h.slice(20);};
 function fixture(){
@@ -22,7 +23,7 @@ function fixture(){
  const call=(cursor='')=>handleEpubTitleCleanupApi(
   new Request('https://books.example/api/epubs/title-cleanup/preview'+
    (cursor?'?after='+cursor:'')),db,'/api/epubs/title-cleanup/preview');
- return {sql,add,call,metrics:()=>({reads,writes}),close:()=>sql.close()};
+ return {sql,db,add,call,metrics:()=>({reads,writes}),close:()=>sql.close()};
 }
 test('Preview detects grouped download suffixes and keeps the original stored title untouched',async()=>{
  const f=fixture();
@@ -90,4 +91,86 @@ test('Saved cleanup UI is opt-in and uses optimistic book edits instead of file 
  assert.match(worker,/handleEpubTitleCleanupApi/);
  assert.match(lib,/initEpubTitleCleanup\(api/);
  assert.equal(ui.includes('/api/epubs/upload'),false);
+});
+
+test('Only validated ISBN-only and long hexadecimal IDs are classified as broken titles',()=>{
+ assert.equal(machineTitleReason('0316285064 (N)'),'isbn_used_as_title');
+ assert.equal(machineTitleReason('01c29e7e457f1a029897e593102291ce'),'hex_file_identifier');
+ assert.equal(machineTitleReason('0e56a7ce58116d64d7385b1533ecf03'),'hex_file_identifier');
+ assert.equal(machineTitleReason('01 Adventures Of Conrad Stargard - The Cross Time Engineer'),'');
+ assert.equal(machineTitleReason('The Seventh Sense'),'');
+ assert.equal(machineTitleReason('9780306406157'),'isbn_used_as_title');
+ assert.equal(machineTitleReason('0316285065'),'');
+});
+test('Title cleanup identifies machine-generated titles across already imported catalogue',async()=>{
+ const f=fixture();
+ try{
+  const isbn=f.add(9,'0316285064 (N)',{author:'Joshua Cooper Ramo'});
+  const hash=f.add(10,'01c29e7e457f1a029897e593102291ce');
+  f.add(11,'01 Adventures Of Conrad Stargard - The Cross Time Engineer');
+  const response=await f.call();
+  assert.equal(response.status,200);
+  const rows=(await response.json()).candidates;
+  assert.equal(rows.length,2);
+  assert.deepEqual(rows.map(x=>x.id),[isbn,hash]);
+  assert.deepEqual(rows.map(x=>x.reason),['isbn_used_as_title','hex_file_identifier']);
+  assert.deepEqual(rows.map(x=>x.proposed_title),['','']);
+  assert.equal(f.metrics().writes,0);
+ }finally{f.close();}
+});
+test('EPUB source scan proposes a reliable existing OPF title with matching author only',async()=>{
+ const f=fixture();
+ try{
+  const bookId=f.add(9,'01c29e7e457f1a029897e593102291ce',
+    {author:'Joshua Cooper Ramo'});
+  const sourceId=uuid(500);
+  f.sql.prepare('INSERT INTO epub_files '+
+   '(id,sha256,original_filename,private_object_key,metadata_json,book_id) '+
+   'VALUES (?,?,?,?,?,?)').run(sourceId,'a'.repeat(64),
+    'hash.epub','epubs/test-1.epub',JSON.stringify({
+     title:'The Seventh Sense',author:'Joshua Cooper Ramo'
+    }),bookId);
+  const path='/api/epubs/title-cleanup/sources';
+  const response=await handleEpubTitleCleanupApi(new Request('https://books.example'+path),
+   f.db,path);
+  assert.equal(response.status,200,await response.clone().text());
+  const data=await response.json();
+  assert.equal(data.scanned,1);
+  assert.equal(data.candidates.length,1);
+  assert.equal(data.candidates[0].proposed_title,'The Seventh Sense');
+  assert.equal(data.candidates[0].safe_match,true);
+  assert.equal(data.candidates[0].id,bookId);
+  assert.ok(!JSON.stringify(data).includes('private_object_key'));
+  assert.equal(f.metrics().writes,0);
+ }finally{f.close();}
+});
+test('EPUB title proposals with an author mismatch require review and never auto-save',async()=>{
+ const f=fixture();
+ try{
+  const bookId=f.add(20,'0316285064 (N)',{author:'Joshua Cooper Ramo'});
+  f.sql.prepare('INSERT INTO epub_files '+
+   '(id,sha256,original_filename,private_object_key,metadata_json,book_id) '+
+   'VALUES (?,?,?,?,?,?)').run(uuid(600),'b'.repeat(64),
+    'other.epub','epubs/test-2.epub',JSON.stringify({
+     title:'Different Book',author:'Another Author'
+    }),bookId);
+  const path='/api/epubs/title-cleanup/sources';
+  const data=await (await handleEpubTitleCleanupApi(
+   new Request('https://books.example'+path),f.db,path)).json();
+  assert.equal(data.candidates.length,1);
+  assert.equal(data.candidates[0].safe_match,false);
+  assert.equal(data.candidates[0].reason,'author_needs_review');
+  assert.equal(f.sql.prepare('SELECT title FROM books WHERE id=?').get(bookId).title,
+   '0316285064 (N)');
+  assert.equal(f.metrics().writes,0);
+ }finally{f.close();}
+});
+test('Existing cleanup scans entire library and includes cautious second EPUB source pass',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../epub-title-cleanup-ui.mjs',import.meta.url),'utf8');
+ assert.match(html,/Find all messy titles \(entire library\)/);
+ assert.match(ui,/\/api\/epubs\/title-cleanup\/sources/);
+ assert.match(ui,/sourceFinished/);
+ assert.match(ui,/if\(!row\.proposed_title\)throw Error/);
+ assert.equal(ui.includes('pages<200'),false);
 });

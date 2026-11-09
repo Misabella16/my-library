@@ -78,3 +78,27 @@ export function suggestEpubMetadata(metadata,fileName=''){
   guessedTitle?'Filename used as title. Check the suggestion before importing.':null;
  return {title,author,guessedTitle,cleanedSourceStamp,reviewReason};
 }
+
+/* A title comprised solely of a download ID or a validated ISBN is not a
+ * readable book title. Never rewrite it without independently sourced metadata.
+ */
+export function machineTitleReason(value){
+ const title=compact(value).replace(/\.epub$/i,'').trim();
+ const plain=title.replace(/\s*\([A-Z]\)$/i,'').trim();
+ if(/^[0-9a-f]{16,64}$/i.test(plain)||
+  /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(plain))
+  return 'hex_file_identifier';
+ const stripped=plain.replace(/^isbn(?:-10|-13)?\s*[:#-]?\s*/i,'')
+  .replace(/[\s-]/g,'');
+ if(/^\d{9}[\dX]$/i.test(stripped)){
+  const sum=[...stripped.toUpperCase()].reduce((n,ch,i)=>
+   n+(ch==='X'?10:Number(ch))*(10-i),0);
+  if(sum%11===0)return 'isbn_used_as_title';
+ }
+ if(/^(?:978|979)\d{10}$/.test(stripped)){
+  const sum=[...stripped.slice(0,12)].reduce((n,ch,i)=>
+   n+Number(ch)*(i%2?3:1),0);
+  if((10-sum%10)%10===Number(stripped[12]))return 'isbn_used_as_title';
+ }
+ return '';
+}
