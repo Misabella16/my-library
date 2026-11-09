@@ -1,5 +1,5 @@
 // Targeted, owner-only recovery. One click: saved-file recovery, keyset scan,
-// then a bounded and paced daily batch of verified Open Library lookups.
+// then paced, resumable batches of verified Open Library lookups.
 // No catalogue dumps and no mass external API harvesting.
 const el=(tag,label,cls)=>{
  const n=document.createElement(tag);
@@ -7,7 +7,6 @@ const el=(tag,label,cls)=>{
  if(cls)n.className=cls;
  return n;
 };
-const MAX_LOOKUPS_PER_DAY=40;
 const CHECKPOINT_KEY='my-library-cover-synopsis-repair-v2';
 const today=()=>new Date().toISOString().slice(0,10);
 const emptyProgress=()=>({lastCompletedId:'',day:today(),todayUsed:0,
@@ -26,7 +25,7 @@ function readProgress(){
   }
   result.savedFirstDone=raw.savedFirstDone===true;
   if(raw.day===today()&&Number.isSafeInteger(raw.todayUsed))
-   result.todayUsed=Math.max(0,Math.min(MAX_LOOKUPS_PER_DAY,raw.todayUsed));
+   result.todayUsed=Math.max(0,raw.todayUsed);
   return result;
  }catch{return emptyProgress();}
 }
@@ -58,13 +57,11 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
  const controls=()=>{
   rollover();
   scan.disabled=busy;
-  apply.disabled=busy||(scanned&&done&&!remaining().length)||
-   progress.todayUsed>=MAX_LOOKUPS_PER_DAY;
+  apply.disabled=busy||(scanned&&done&&!remaining().length);
   pause.disabled=!busy||stop;
   reset.disabled=busy;
   apply.textContent=busy?'Repairing missing metadata…':
-   progress.todayUsed>=MAX_LOOKUPS_PER_DAY?
-   'Daily online limit reached':progress.lastCompletedId?
+   progress.lastCompletedId?
    'Resume targeted repair':'Repair missing data (no downloads)';
  };
  const refresh=()=>{
@@ -72,7 +69,7 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
    candidates.length.toLocaleString()+' with missing fields · '+
    progress.saved+' repaired · '+progress.synopses+' synopses · '+
    progress.covers+' covers · '+progress.tags+' tags · '+progress.review+
-   ' review · '+progress.todayUsed+'/'+MAX_LOOKUPS_PER_DAY+
+   ' review · '+progress.todayUsed+
    ' online checks today';
   results.replaceChildren();
   for(const x of outcomes.slice(-40).reverse()){
@@ -126,7 +123,7 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
   try{
    const complete=await scanLibrary();
    say(complete?'Found '+candidates.length.toLocaleString()+
-    ' books with gaps. The repair button will use saved EPUBs first, then a small online batch.':
+    ' books with gaps. The repair button will use saved EPUBs first, then continue through the remaining gaps in paced batches.':
     'Scan paused; no changes made. Scan again to restart.');
   }catch(error){say('Scan stopped safely: '+(error.message||'Request failed'));}
   finally{busy=false;stop=false;refresh();}
@@ -135,7 +132,7 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
   say('Pause requested. The current safe repair or page will finish first.');});
  reset.addEventListener('click',()=>{
   if(busy)return;
-  // Restart the book cursor, not the daily external-source request budget.
+  // Restart the book cursor while preserving today’s informational counter.
   const priorDay=progress.day,priorUsed=progress.todayUsed;
   progress=emptyProgress();
   if(priorDay===today())progress.todayUsed=priorUsed;
@@ -145,7 +142,7 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
   refresh();
  });
  apply.addEventListener('click',async()=>{
-  if(busy||progress.todayUsed>=MAX_LOOKUPS_PER_DAY)return;
+  if(busy)return;
   busy=true;stop=false;controls();
   let repairedThisRun=0,checked=0;
   try{
@@ -174,12 +171,11 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
     return;
    }
    for(let offset=0;offset<pending.length;){
-    if(stop||progress.todayUsed>=MAX_LOOKUPS_PER_DAY)break;
-    const count=Math.min(4,pending.length-offset,
-     MAX_LOOKUPS_PER_DAY-progress.todayUsed);
+    if(stop)break;
+    const count=Math.min(4,pending.length-offset);
     const group=pending.slice(offset,offset+count);
     say('Checking '+(checked+1)+'–'+(checked+group.length)+
-     ' of '+Math.min(pending.length,MAX_LOOKUPS_PER_DAY-progress.todayUsed)+
+     ' of '+pending.length+
      ' missing entries. Reusing one search for compatible ISBNs…');
     let response;
     try{
@@ -232,13 +228,10 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
     await new Promise(resolve=>setTimeout(resolve,2300));
    }
    if(repairedThisRun)await onUpdated();
-   if(progress.todayUsed>=MAX_LOOKUPS_PER_DAY)
-    say('Checked '+checked+' books in this run; '+repairedThisRun+
-     ' repaired. Reached the daily source-friendly limit ('+
-     MAX_LOOKUPS_PER_DAY+'). Resume tomorrow; progress is saved on this browser.');
-   else if(stop){
-    if(!status.textContent.includes('limit reached')&&
-      !status.textContent.includes('request failed'))
+   if(stop){
+    if(!status.textContent.startsWith('Source limit')&&
+      !status.textContent.startsWith('Online lookup')&&
+      !status.textContent.startsWith('Unexpected match'))
      say('Paused after '+checked+' books; progress is saved. Click Resume to continue.');
    }else say('Checked '+checked+' remaining candidates; '+repairedThisRun+
     ' repaired. Any unresolved matches remain in the review list.');
@@ -282,3 +275,4 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
  return {getState:()=>({scanned,done,candidates:candidates.length,
   checked:progress.todayUsed,counts:{...progress}})};
 }
+

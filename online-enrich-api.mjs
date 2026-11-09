@@ -3,6 +3,8 @@
 // storage, or alter any existing note, review, cover, or special edition.
 import {extractIsbn13} from './epub-isbn.mjs';
 import {machineTitleReason} from './epub-metadata.mjs';
+import {createPacedFetch} from './source-pacing.mjs';
+const pacedSourceFetch=createPacedFetch((...args)=>fetch(...args));
 const HEAD={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store'};
 const json=(o,status=200)=>new Response(JSON.stringify(o),{status,headers:HEAD});
 const fail=(error,status=400)=>json({error},status);
@@ -250,7 +252,7 @@ async function undo(db,env,id){
  if(after.cover_key&&env.BOOK_FILES)try{await env.BOOK_FILES.delete(after.cover_key);}catch{}
  return json({status:'undone',book_id:log.entity_id});
 }
-export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=fetch}={}){
+export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=pacedSourceFetch}={}){
  if(!path.startsWith('/api/online-enrich/'))return null;
  const end=path.slice('/api/online-enrich/'.length);
  if(end==='history'&&request.method==='GET'){
@@ -346,3 +348,4 @@ export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=fet
  }
  return fail('Method not allowed',405);
 }
+
