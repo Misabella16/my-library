@@ -322,6 +322,35 @@
       <section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
       <p class="goodreads-private-note" id="goodreads-privacy"><strong>Private by design.</strong> Preview stays on your device. Only after you confirm an import are the newly selected book details sent to your protected My Library database. Undo archives unchanged books created by that batch. It never deletes EPUBs, owned copies, or special editions.</p>
     </section>
+    <section class="epub-tool surface" id="calibre-compare" aria-labelledby="calibre-compare-heading">
+      <p class="section-kicker">✧ MY LIBRARIES · CROSS-CHECK</p>
+      <h3 id="calibre-compare-heading">Compare your Calibre library</h3>
+      <p>Use a Calibre catalogue CSV, or the richer JSON made with <code>calibredb list --for-machine</code>. The file stays in your browser. Compare all books, ISBNs and editions against My Library to find missing entries, suspicious matches, summary and tag gaps, and Calibre cover opportunities. This preview never edits either catalogue or uploads your ebooks.</p>
+      <div class="goodreads-actions">
+        <label class="goodreads-file-label" for="calibre-file">Choose Calibre CSV or JSON
+          <input id="calibre-file" type="file" accept=".csv,.json,text/csv,application/json">
+        </label>
+        <button class="btn" id="calibre-compare-run" type="button" disabled>Compare entire libraries</button>
+        <button class="btn subtle" id="calibre-compare-pause" type="button" disabled>Stop comparison</button>
+        <button class="btn subtle" id="calibre-compare-export" type="button" disabled>Download comparison report</button>
+      </div>
+      <p id="calibre-compare-status" class="small-status" role="status" aria-live="polite">Choose your Calibre export. The website will read your catalogue in small, low-D1-cost pages.</p>
+      <div id="calibre-compare-metrics" class="goodreads-stats" aria-live="polite"></div>
+      <label class="epub-filter-label" for="calibre-compare-filter">Show comparison
+        <select id="calibre-compare-filter" disabled>
+          <option value="all">All books</option>
+          <option value="calibre_only">In Calibre, not confidently matched in My Library</option>
+          <option value="site_only">In My Library, not confidently matched in Calibre</option>
+          <option value="metadata_gaps">Metadata, formats or cover opportunities</option>
+          <option value="needs_review">Ambiguous matches</option>
+          <option value="calibre_duplicate">Repeated Calibre entries</option>
+          <option value="matched">Exact matches</option>
+        </select>
+      </label>
+      <div id="calibre-compare-results" class="epub-preview-list"></div>
+      <button class="btn subtle" id="calibre-compare-more" type="button" hidden>Show next 80 matches</button>
+      <p class="goodreads-private-note">Calibre cover availability is a hint, not an uploaded image. A metadata export cannot transfer the original covers or ebook files. Unmatched records may require review, and no books are automatically merged.</p>
+    </section>
     <section class="epub-tool surface" aria-labelledby="epub-heading">
       <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
       <h3 id="epub-heading">Import EPUB files or an entire folder</h3>
