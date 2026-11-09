@@ -133,7 +133,7 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   // attribute rather than dc:description. Only accept explicit OPF fields:
   // never infer a synopsis from prose chapters or a cover.
   if(!description){
-    for(const match of packageXml.matchAll(/<(?:[\\w.-]+:)?meta\\b[^>]*>/gi)){
+    for(const match of packageXml.matchAll(/<(?:[\w.-]+:)?meta\b[^>]*>/gi)){
       const attributes=attrs(match[0]);
       if(['description','dcterms:description','dc:description'].includes(
         String(attributes.name||attributes.property||'').toLowerCase())){
@@ -143,7 +143,7 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
     }
   }
   if(!description){
-    for(const match of packageXml.matchAll(/<(?:[\\w.-]+:)?meta\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w.-]+:)?meta\\s*>/gi)){
+    for(const match of packageXml.matchAll(/<(?:[\w.-]+:)?meta\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?meta\s*>/gi)){
       const attributes=attrs(match[0].slice(0,match[0].indexOf('>')+1));
       if(['description','dcterms:description','dc:description'].includes(
         String(attributes.name||attributes.property||'').toLowerCase())){
