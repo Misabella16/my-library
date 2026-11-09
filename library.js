@@ -8,6 +8,7 @@ import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
 import {initVisualShelves} from './visual-shelves-ui.mjs';
 import {initCollectionHealth} from './collection-health-ui.mjs';
+import {initOnlineEnrich} from './online-enrich-ui.mjs';
 import {initCalibreCompare} from './calibre-compare-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
@@ -562,6 +563,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
         document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
       }
     });
+    initOnlineEnrich(api,{onUpdated:()=>refreshCurrent()});
     initCollectionHealth(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);
