@@ -58,8 +58,8 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
   metrics.append(el('strong',rows.length+' books checked'));
   for(const [key,label] of HEALTH_FLAGS)
    metrics.append(el('span',label+': '+counts[key],'health-metric'));
-  // Every stored EPUB references an edition. If there is no edition, the
-  // saved-EPUB repair cannot possibly supply a cover for that book.
+  // A display cover must be attached to an edition. No edition means that
+  // the standard EPUB repair cannot make a display cover visible.
   const noSource=rows.filter(row=>row.missing_cover===1&&row.missing_editions===1).length;
   metrics.append(el('span','Covers with no edition to repair: '+noSource,'health-metric'));
   results.replaceChildren();
@@ -74,7 +74,7 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
    const issues=healthProblems(row);
    details.append(el('p',issues.length?issues.join(' · '):'No issues found','muted'));
    if(row.missing_cover===1&&row.missing_editions===1)
-    details.append(el('p','No linked edition or EPUB. Stored-EPUB repair cannot fix this cover.','muted'));
+    details.append(el('p','No edition is recorded. The EPUB repair cannot display a cover here.','muted'));
    const open=el('button','Open book','btn subtle mini');open.type='button';
    open.addEventListener('click',async()=>{
     open.disabled=true;
