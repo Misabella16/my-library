@@ -10,7 +10,7 @@ export async function handleCalibreCompareApi(request,db,path){
  if(request.method!=='GET')return fail('Use GET',405);
  const query=new URL(request.url).searchParams;
  const type=query.get('type')||'books',cursor=query.get('cursor')||'';
- if(!['books','editions'].includes(type))return fail('Invalid catalogue type');
+ if(!['books','editions','epubs'].includes(type))return fail('Invalid catalogue type');
  if(cursor&&!uuid(cursor))return fail('Invalid scan cursor');
  let records;
  if(type==='books'){
@@ -22,10 +22,15 @@ export async function handleCalibreCompareApi(request,db,path){
    "WHERE e.book_id=b.id AND im.display_cover=1) AS has_cover "+
    "FROM books b WHERE b.archived_at IS NULL AND b.id>? ORDER BY b.id LIMIT ?")
    .bind(cursor,PAGE+1).all()).results||[];
- }else{
+ }else if(type==='editions'){
   records=(await db.prepare(
    "SELECT id,book_id,isbn,format,is_special FROM editions "+
    "WHERE id>? ORDER BY id LIMIT ?")
+   .bind(cursor,PAGE+1).all()).results||[];
+ }else{
+  records=(await db.prepare(
+   "SELECT id,book_id,original_filename FROM epub_files "+
+   "WHERE id>? AND book_id IS NOT NULL ORDER BY id LIMIT ?")
    .bind(cursor,PAGE+1).all()).results||[];
  }
  const has_more=records.length>PAGE,items=records.slice(0,PAGE);
