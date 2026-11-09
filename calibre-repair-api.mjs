@@ -122,8 +122,10 @@ async function enrich(request,db){
      book.id,book.updated_at,book.title,book.author,book.synopsis)
   ];
   for(const tag of additions){
-   sql.push(db.prepare("INSERT OR IGNORE INTO tags(id,label,kind) VALUES (?,?,'imported')")
-    .bind(crypto.randomUUID(),tag));
+   sql.push(db.prepare("INSERT OR IGNORE INTO tags(id,label,kind) "+
+    "SELECT ?,?,'imported' WHERE EXISTS(SELECT 1 FROM books "+
+    "WHERE id=? AND updated_at=?)")
+    .bind(crypto.randomUUID(),tag,book.id,now));
    sql.push(db.prepare("INSERT OR IGNORE INTO book_tags(book_id,tag_id,source) "+
     "SELECT ?,t.id,'calibre' FROM tags t WHERE t.label=? COLLATE NOCASE "+
     "AND EXISTS(SELECT 1 FROM books b WHERE b.id=? AND b.updated_at=?)")
