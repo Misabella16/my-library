@@ -102,8 +102,9 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
     ' EPUB files. Select Repair matched books to fill missing data and covers.';
   say(comp.counts.calibre.toLocaleString()+' Calibre books compared against '+
    comp.counts.site.toLocaleString()+
-   ' My Library books. This report is read-only; no data was changed. '+
-   'A book marked unmatched could still be an uncertain duplicate.');
+   ' My Library books. Comparing does not change either library. '+
+   'Changes are made only after you select Repair matched books, and Undo remains available. '+
+   'Unmatched books could still be uncertain duplicates.');
   update();
  };
  // A selected file/folder must enable Compare. Existing comparison results
