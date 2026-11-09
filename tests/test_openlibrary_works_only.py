@@ -7,6 +7,7 @@ python3 -m unittest discover -s tests -p 'test_openlibrary_works_only.py' -v
 import gzip
 import importlib.util
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -14,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "local-mac"))
-from openlibrary_works_only import match_works_only  # noqa: E402
+from openlibrary_works_only import match_works_only, save_matched_cache  # noqa: E402
 
 
 def dump(path, entries):
@@ -117,6 +118,18 @@ class WorksOnlyTests(unittest.TestCase):
         report = self.run_match()
         self.assertEqual(report["counts"]["books_needing_data"], 0)
         self.assertEqual(report["counts"]["verified_matches"], 0)
+
+    def test_sqlite_cache_contains_only_verified_matching_metadata(self):
+        report = self.run_match()
+        filename = Path(self.temp.name) / "verified.sqlite"
+        save_matched_cache(filename, report)
+        with sqlite3.connect(filename) as db:
+            rows = db.execute("SELECT book_id,source_work,cover_id FROM openlibrary_work_matches").fetchall()
+        self.assertEqual(rows, [(self.book_id, "/works/OL123W", 345)])
+        self.books[0]["author"] = "Wrong Author"
+        save_matched_cache(filename, self.run_match())
+        with sqlite3.connect(filename) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM openlibrary_work_matches").fetchone()[0], 0)
 
     def test_missing_cover_or_description_does_not_invent_them(self):
         self.work_records[0][2].pop("covers")
