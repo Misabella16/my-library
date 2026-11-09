@@ -350,15 +350,16 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
      ' matched books. Saved changes have Undo. No EPUBs were uploaded. '+
      (repaired?.error||'Use Repair matched books to resume.'));return;
    }
-   tell('Step 3/3: refreshing the catalogue and checking missing EPUBs…');
-   await compareSelected();
-   if(!comp){tell('Comparison refresh failed. Repairs remain saved; compare again before importing EPUBs.');return;}
+   // No second full D1 scan: metadata/cover repair does not add EPUB files.
+   // The private EPUB importer independently rechecks each SHA and identity
+   // against current D1 records before any user-approved upload.
+   tell('Step 3/3: preparing missing EPUBs for fresh duplicate checks…');
    const count=prepareEpubs()||0;
    tell('Calibre sync: '+repaired.fixed+' metadata repairs, '+
     repaired.covers+' covers saved, '+repaired.errors+' items held for review. '+
     (count?count+' candidate EPUBs sent for duplicate preview. Review the importer and choose Save all eligible EPUBs when ready.':
      'No eligible missing EPUBs were found. Review ambiguous matches separately.')+
-    ' No EPUBs were automatically uploaded.');
+    ' No EPUBs were automatically uploaded. Select Compare again later to refresh report totals.');
   }catch(error){
    tell('Sync stopped safely: '+(error.message||'Unexpected error')+
     '. Completed repairs retain Undo. No EPUBs were automatically uploaded.');
