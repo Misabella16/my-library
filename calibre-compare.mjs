@@ -174,13 +174,17 @@ export function compareCalibre(books,libraryBooks,editions){
 }
 export function exportComparisonCsv(comp,filter='all'){
  const headings=['Status','Calibre Title','Calibre Authors','Calibre ISBN','Calibre Formats',
+  'Calibre Tags','Calibre Description','Calibre Series','Calibre Cover Available',
   'My Library Title','My Library Author','My Library Book ID','Gaps / Review Notes'];
  const rows=comp.results.filter(x=>filter==='all'||x.status===filter).map(item=>[
   item.status,item.calibre.title,item.calibre.authors,item.calibre.isbn,
-  item.calibre.formats.join('; '),item.book?.title||'',item.book?.author||'',
+  item.calibre.formats.join('; '),item.calibre.tags.join('; '),
+  item.calibre.description.slice(0,12000),item.calibre.series,
+  item.calibre.cover?'Yes':'No',item.book?.title||'',item.book?.author||'',
   item.book?.id||'',item.issues.join('; ')||item.notes]);
  if(filter==='all'||filter==='site_only')for(const book of comp.siteOnly)
-  rows.push(['site_only','','','','',book.title,book.author,book.id,'Not found in Calibre export']);
+  rows.push(['site_only','','','','','','','','',book.title,book.author,book.id,
+   'Not confidently matched in Calibre export']);
  const csv=x=>{
   const val=String(x??'');
   const safe=/^\s*[=+@-]/.test(val)?"'"+val:val;
