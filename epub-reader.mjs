@@ -149,11 +149,17 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
       .map(match=>attrs(match[0])).find(a=>a.name?.toLowerCase()==='cover');
     if(coverMeta)coverItem=manifest.get(coverMeta.content);
   }
-  // EPUB2 occasionally places the cover reference in a <guide> section.
-  if(!coverItem){
-    const guide=[...packageXml.matchAll(/<(?:[\w.-]+:)?reference\b[^>]*>/gi)]
-      .map(match=>attrs(match[0])).find(a=>a.type==='cover' && /\.(png|jpe?g|webp)(?:$|[?#])/i.test(a.href||''));
-    if(guide)coverItem=guide;
+  // EPUB2 often stores the cover in an explicitly labeled XHTML guide page.
+  // Do not treat the first ordinary XHTML file as a cover.
+  let coverDocument='';
+  const coverGuide=[...packageXml.matchAll(/<(?:[\w.-]+:)?reference\b[^>]*>/gi)]
+    .map(match=>attrs(match[0])).find(a=>a.type?.toLowerCase()==='cover'&&
+      (/\.(?:xhtml|html|htm)(?:$|[?#])/i.test(a.href||'')||
+       /\.(?:png|jpe?g|webp)(?:$|[?#])/i.test(a.href||'')));
+  if(!coverItem&&coverGuide){
+   if(/\.(?:xhtml|html|htm)(?:$|[?#])/i.test(coverGuide.href))
+    coverDocument=coverGuide.href;
+   else coverItem=coverGuide;
   }
   // Some EPUB2 files omit both the cover meta tag and guide. Only use a
   // clearly identified *single* manifest cover image, never an arbitrary
@@ -174,12 +180,23 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
     });
     if(matches.length===1)coverItem=matches[0];
   }
-  let coverPath='';
+  if(!coverItem&&!coverDocument){
+   const docs=[...manifest.values()].filter(item=>
+    /^(?:cover|frontcover|cover-page)$/i.test(item.id||'') &&
+    /^(?:application\/xhtml\+xml|text\/html)$/i.test(item['media-type']||'') &&
+    /(?:^|\/)(?:front[-_]?cover|cover(?:[-_]?page)?)\.x?html?$/i.test(item.href||''));
+   if(docs.length===1)coverDocument=docs[0].href;
+  }
+  let coverPath='',coverDocumentPath='';
   if(coverItem?.href&&!/^[a-z]+:/i.test(coverItem.href)){
     const path=coverItem.href.split(/[?#]/)[0];
     coverPath=joinPath(packagePath,decodeURIComponent(path));
   }
-  return {title,author,description,identifier,subjects,coverPath};
+  if(!coverPath&&coverDocument&&!/^[a-z]+:/i.test(coverDocument)){
+    const path=coverDocument.split(/[?#]/)[0];
+    coverDocumentPath=joinPath(packagePath,decodeURIComponent(path));
+  }
+  return {title,author,description,identifier,subjects,coverPath,coverDocumentPath};
 }
 export async function inspectEpub(file,{includeCover=true}={}){
   if(!file||!/\.epub$/i.test(file.name||''))throw Error('Choose an .epub file');
@@ -196,6 +213,27 @@ export async function inspectEpub(file,{includeCover=true}={}){
   if(!packageBytes)throw Error('EPUB package manifest could not be found');
   const metadata=parsePackageXml(containerText,decoder.decode(packageBytes),packagePath);
   let cover=null,coverType=null;
+  // A guide-marked EPUB2 XHTML page may contain one explicit image reference.
+  // Only accept a single local image in the marked page; ambiguity stays unset.
+  if(includeCover&&!metadata.coverPath&&metadata.coverDocumentPath&&
+     archive.entries.has(metadata.coverDocumentPath)){
+    try{
+      const document=decoder.decode(await readZipEntry(archive,metadata.coverDocumentPath));
+      const refs=[
+       ...[...document.matchAll(/<(?:[\w.-]+:)?img\b[^>]*>/gi)]
+         .map(x=>attrs(x[0]).src),
+       ...[...document.matchAll(/<(?:[\w.-]+:)?image\b[^>]*>/gi)]
+         .map(x=>attrs(x[0]).href||attrs(x[0])['xlink:href'])
+      ].filter(Boolean);
+      if(refs.length===1&&!/^[a-z][\w+.-]*:/i.test(refs[0])&&!refs[0].startsWith('//')){
+        const local=refs[0].split(/[?#]/)[0];
+        const candidate=joinPath(metadata.coverDocumentPath,decodeURIComponent(local));
+        if(archive.entries.has(candidate))metadata.coverPath=candidate;
+      }
+    }catch{
+      // Unsafe, missing, or malformed cover XHTML is not a cover candidate.
+    }
+  }
   if(includeCover&&metadata.coverPath&&archive.entries.has(metadata.coverPath)){
     try{
       const image=await readZipEntry(archive,metadata.coverPath,MAX_COVER_BYTES);
