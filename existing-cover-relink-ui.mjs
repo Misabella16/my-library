@@ -51,7 +51,7 @@ export function initExistingCoverRelink(api,{onUpdated=async()=>{}}={}){
  };
  stopButton.addEventListener('click',()=>{stop=true;controls();
   say('Pause requested; the current page will finish before stopping.');});
- button.addEventListener('click',async()=>{
+ const runAll=async()=>{
   if(running)return;
   if(complete){
    complete=false;cursor='';
@@ -82,12 +82,15 @@ export function initExistingCoverRelink(api,{onUpdated=async()=>{}}={}){
    say('Paused after '+totals.checked+' candidates: '+
     (error.message||'Request failed')+'. Finished changes are saved; retry to resume.');
   }finally{running=false;stop=false;controls();}
- });
+  return {complete,totals:{...totals}};
+ };
+ button.addEventListener('click',runAll);
  historyButton.addEventListener('click',async()=>{
   historyButton.disabled=true;
   try{await refreshHistory();}catch(err){say('History unavailable: '+(err.message||'Request failed'));}
   finally{historyButton.disabled=false;}
  });
  controls();
- return {getState:()=>({cursor,complete,totals:{...totals}})};
+ return {runAll,pause:()=>{if(running)stop=true;},
+  getState:()=>({cursor,complete,totals:{...totals}})};
 }
