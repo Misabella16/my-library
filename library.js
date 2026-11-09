@@ -535,7 +535,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }});
     // Repair controls must be available on the first authenticated visit,
     // including when no new EPUB has been uploaded in this session.
-    initEpubBackfill(api);
+    const storedEpubRepair=initEpubBackfill(api);
     initSiteStudio(api);
     initCalibreCompare(api,{
       onUpdated:()=>refreshCurrent(),
@@ -565,7 +565,35 @@ document.addEventListener('DOMContentLoaded',async()=>{
       }
     });
     initOnlineEnrich(api,{onUpdated:()=>refreshCurrent()});
-    initExistingCoverRelink(api,{onUpdated:()=>refreshCurrent()});
+    const savedCoverRepair=initExistingCoverRelink(api,{onUpdated:()=>refreshCurrent()});
+    const combined=document.getElementById('collection-health-smart-repair');
+    const combinedStatus=document.getElementById('collection-health-smart-status');
+    combined?.addEventListener('click',async()=>{
+      if(combined.disabled)return;
+      combined.disabled=true;
+      try{
+        if(!storedEpubRepair?.repairAll||!savedCoverRepair?.runAll)
+          throw Error('The saved-file recovery controls are unavailable');
+        combinedStatus.textContent='Recovering missing descriptions, tags and embedded covers from all saved EPUBs…';
+        const epub=await storedEpubRepair.repairAll();
+        if(!epub?.complete){
+          combinedStatus.textContent='Saved EPUB repair paused safely after '+
+            (epub?.checked||0)+' files. Select Repair all again to resume from the saved cursor.';
+          return;
+        }
+        combinedStatus.textContent='Saved EPUB metadata complete. Finding existing private covers not displayed…';
+        const cover=await savedCoverRepair.runAll();
+        combinedStatus.textContent=cover?.complete?
+          'Completed saved-file repairs: '+(epub?.applied||0)+' EPUB repairs and '+
+          (cover?.totals?.relinked||0)+' previously hidden covers restored. '+
+          'Use the online repair for books with no available source data.':
+          'Cover relink interrupted. Completed changes remain saved; select Repair all to resume.';
+        await refreshCurrent();
+      }catch(error){
+        combinedStatus.textContent='Repair paused safely: '+(error.message||'Request failed')+
+          '. Completed changes remain saved. Try again when the issue clears.';
+      }finally{combined.disabled=false;}
+    });
     initCollectionHealth(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);
