@@ -13,6 +13,7 @@ import {handleShelfBulkLocationApi} from './shelf-photo-bulk-location-api.mjs';
 import {handleVisualShelvesApi} from './visual-shelves-api.mjs';
 import {handleCollectionHealthApi} from './collection-health-api.mjs';
 import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
+import {handleCalibreRepairApi} from './calibre-repair-api.mjs';
 import {handleShelfLayoutApi} from './visual-shelf-layout-api.mjs';
 import {handleSiteContentApi} from './site-content-api.mjs';
 import {handleShelfSavedReviewApi} from './shelf-saved-review-api.mjs';
@@ -275,6 +276,8 @@ async function serveApi(request,env,path){
   if(siteContentResponse)return siteContentResponse;
   const shelfLayoutResponse=await handleShelfLayoutApi(request,db,env,path);
   if(shelfLayoutResponse)return shelfLayoutResponse;
+  const calibreRepairResponse=await handleCalibreRepairApi(request,db,env,path);
+  if(calibreRepairResponse)return calibreRepairResponse;
   const calibreResponse=await handleCalibreCompareApi(request,db,path);
   if(calibreResponse)return calibreResponse;
   const catalogueHealthResponse=await handleCollectionHealthApi(request,db,path);
