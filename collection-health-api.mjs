@@ -1,3 +1,4 @@
+import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
 // Read-only, owner-authenticated and keyset-paginated catalogue health check.
 // Query only explicit pages; never scan all 10,000 titles on page load.
 const json=(data,status=200)=>new Response(JSON.stringify(data),{
@@ -20,9 +21,8 @@ export async function handleCollectionHealthApi(request,db,path){
   'THEN 1 ELSE 0 END AS missing_tags,'+
   'CASE WHEN NOT EXISTS(SELECT 1 FROM editions e WHERE e.book_id=b.id) '+
   'THEN 1 ELSE 0 END AS missing_editions,'+
-  'CASE WHEN NOT EXISTS(SELECT 1 FROM edition_images i '+
-  'JOIN editions e ON e.id=i.edition_id '+
-  'WHERE e.book_id=b.id AND i.display_cover=1) THEN 1 ELSE 0 END AS missing_cover,'+
+  'CASE WHEN '+PREFERRED_BOOK_COVER_SQL+' IS NULL '+
+  'THEN 1 ELSE 0 END AS missing_cover,'+
   "CASE WHEN b.normalized_title<>'' AND EXISTS("+
   'SELECT 1 FROM books x WHERE x.normalized_title=b.normalized_title '+
   'AND x.archived_at IS NULL AND x.id<>b.id) THEN 1 ELSE 0 END AS possible_duplicate '+
