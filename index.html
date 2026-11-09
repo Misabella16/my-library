@@ -298,7 +298,28 @@
       <div id="online-history-list" class="epub-preview-list"></div>
       <p class="muted">Each online repair action processes up to 12 verified candidates, then stops. This is deliberately limited because Open Library does not permit bulk metadata harvesting through its public API. For thousands of books, use your Calibre library and saved EPUB metadata first; large-scale external data should come from permitted data dumps, not thousands of API requests. External covers are marked unverified until reviewed.</p>
     </section>
-    <div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
+        <section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
+      <p class="section-kicker">✧ ENTIRE LIBRARY · OFFLINE METADATA MATCHING</p>
+      <h3 id="offline-bulk-heading">Repair thousands of books from Open Library's catalogue</h3>
+      <p>Use a locally downloaded Open Library data snapshot to match your entire collection by ISBN, title and author. This avoids the 12-books-per-click online lookup. The Mac matcher never uploads your catalogue to Open Library. Only verified, missing-field changes are sent back to your private site.</p>
+      <div class="collection-health-actions">
+        <button class="btn subtle" id="offline-export" type="button">1. Export my full library catalogue (JSON)</button>
+        <label class="goodreads-file-label" for="offline-file">3. Choose offline matches JSON
+          <input id="offline-file" type="file" accept=".json,application/json">
+        </label>
+        <button class="btn" id="offline-apply" type="button" disabled>Apply ALL verified matches</button>
+        <button class="btn subtle" id="offline-pause" type="button" disabled>Pause</button>
+        <button class="btn subtle" id="offline-history" type="button">Repair history &amp; Undo</button>
+      </div>
+      <p class="muted">2. On your Mac, download the official Open Library editions, works and authors compressed dumps (openlibrary.org/developers/dumps), and run the <code>openlibrary_dump_match.py</code> helper in the My Library GitHub repository. It reads those large files directly from their compressed form. You'll get a small <code>my-library-matches.json</code> file to choose in Step 3.</p>
+      <p class="muted">Large source downloads are approximately 13 GB combined. The processing may take considerable time, so use a drive with ample free space and avoid simultaneously overloading your separate Fic Annex indexing drive.</p>
+      <p class="small-status" id="offline-status" role="status" aria-live="polite">Export the catalogue first. Nothing in your library will be modified until you select Apply ALL.</p>
+      <p class="small-status" id="offline-metrics" aria-live="polite"></p>
+      <div id="offline-results" class="collection-health-results"></div>
+      <div id="offline-history-list" class="epub-preview-list"></div>
+      <p class="muted">Existing descriptions, tags, notes, ratings, special-edition images, copies and EPUBs are preserved. New standard artwork uses Open Library's public cover-ID image links when displayed, not thousands of bulk image downloads. All proposed covers are unverified until reviewed and may be unavailable if Open Library lacks the image. You can pause and resume the import in the same browser tab.</p>
+    </section>
+<div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
     <section class="goodreads-tool" aria-labelledby="goodreads-heading">
       <p class="section-kicker">✧ PHASE 3 · GOODREADS IMPORT & UNDO</p>
       <h3 id="goodreads-heading">Bring your Goodreads shelves into view</h3>
