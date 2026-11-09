@@ -129,7 +129,7 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
   return out;
  };
  run.addEventListener('click',async()=>{
-  if(busy||!file.files?.length)return;
+  if(busy||(!file.files?.length&&!folder?.files?.length))return;
   busy=true;stop=false;comp=null;visible=80;filter.value='all';update();
   try{
    let books;
@@ -208,7 +208,7 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
     // Transfer cover images only from a folder explicitly selected by
     // the owner, and only where no image is already attached on the site.
     for(const entry of batch){
-     if(saveStop)break;
+     // Complete each bounded batch before honoring Pause; never skip a cover.
      const localCover=folderData?.covers.get(String(entry.calibre.calibre_id));
      if(!localCover||entry.book.has_cover||
       !entry.issues.includes('Calibre has a cover; My Library does not display one'))
