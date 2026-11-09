@@ -66,7 +66,8 @@ test('Match by unique ISBN first, then exact title+author; never assume title on
  assert.equal(out.results[0].method,'isbn');
  assert.ok(out.results[0].issues.includes('Missing synopsis'));
  assert.ok(out.results[0].issues.includes('Calibre has a cover; My Library does not display one'));
- assert.equal(out.results[1].status,'matched');
+ assert.equal(out.results[1].status,'metadata_gaps');
+ assert.ok(out.results[1].issues.includes('Digital format not recorded'));
  assert.equal(out.results[2].status,'needs_review');
  assert.equal(out.results[3].status,'calibre_only');
  assert.equal(out.counts.site_only,2,'Unverified same-title candidates remain unmatched');
