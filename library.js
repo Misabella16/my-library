@@ -9,6 +9,7 @@ import {initSiteStudio} from './site-studio-ui.mjs';
 import {initVisualShelves} from './visual-shelves-ui.mjs';
 import {initCollectionHealth} from './collection-health-ui.mjs';
 import {initOnlineEnrich} from './online-enrich-ui.mjs';
+import {preferredDetailCoverId} from './cover-priority.mjs';
 import {initOfflineBulk} from './offline-bulk-ui.mjs';
 import {initExistingCoverRelink} from './existing-cover-relink-ui.mjs';
 import {initCalibreCompare} from './calibre-compare-ui.mjs';
@@ -74,8 +75,7 @@ async function perform(button,work,success='Saved'){
   finally{setBusy(button,false);}
 }
 function currentCover(book) {
-  const img=book?.editions?.flatMap(e=>e.images||[]).find(i=>i.display_cover);
-  return img?.id||null;
+  return preferredDetailCoverId(book);
 }
 function renderGrid(){
   const grid=$('#book-grid');
@@ -571,7 +571,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       prepareSaved:async()=>{
         if(!storedEpubRepair?.repairAll||!savedCoverRepair?.runAll)
           throw Error('Saved EPUB and cover recovery is unavailable');
-        const epub=await storedEpubRepair.repairAll();
+        const epub=await storedEpubRepair.repairAll({coversAndSynopsesOnly:true});
         if(!epub?.complete)return {complete:false};
         const cover=await savedCoverRepair.runAll();
         if(cover?.complete)await refreshCurrent();

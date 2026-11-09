@@ -128,7 +128,30 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   if(opfPath!==packagePath)throw Error('EPUB package path is inconsistent');
   const title=tagValue(packageXml,'title',300);
   const author=tagValue(packageXml,'creator',400);
-  const description=tagValue(packageXml,'description',3000);
+  let description=tagValue(packageXml,'description',3000);
+  // Some EPUB2/EPUB3 publishers put the source description into a metadata
+  // attribute rather than dc:description. Only accept explicit OPF fields:
+  // never infer a synopsis from prose chapters or a cover.
+  if(!description){
+    for(const match of packageXml.matchAll(/<(?:[\w.-]+:)?meta\b[^>]*>/gi)){
+      const attributes=attrs(match[0]);
+      if(['description','dcterms:description','dc:description'].includes(
+        String(attributes.name||attributes.property||'').toLowerCase())){
+        description=cleanText(attributes.content||'',3000);
+        if(description)break;
+      }
+    }
+  }
+  if(!description){
+    for(const match of packageXml.matchAll(/<(?:[\w.-]+:)?meta\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?meta\s*>/gi)){
+      const attributes=attrs(match[0].slice(0,match[0].indexOf('>')+1));
+      if(['description','dcterms:description','dc:description'].includes(
+        String(attributes.name||attributes.property||'').toLowerCase())){
+        description=cleanText(match[1],3000);
+        if(description)break;
+      }
+    }
+  }
   // OPF packages often list a UUID as the primary identifier, followed
   // by a real ISBN. Prefer any validated ISBN-13 for safe edition matching.
   const identifiers=[...packageXml.matchAll(/<(?:[\w.-]+:)?identifier\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?identifier\s*>/gi)]

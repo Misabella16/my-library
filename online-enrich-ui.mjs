@@ -8,7 +8,7 @@ const el=(tag,label,cls)=>{
  return n;
 };
 const MAX_LOOKUPS_PER_DAY=40;
-const CHECKPOINT_KEY='my-library-targeted-repair-progress-v1';
+const CHECKPOINT_KEY='my-library-cover-synopsis-repair-v2';
 const today=()=>new Date().toISOString().slice(0,10);
 const emptyProgress=()=>({lastCompletedId:'',day:today(),todayUsed:0,
  saved:0,synopses:0,covers:0,tags:0,review:0,no_changes:0,
@@ -99,7 +99,8 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
    for(const row of data.books){
     if(seen.has(row.book_id))continue;
     seen.add(row.book_id);
-    if(row.missing_synopsis===1||row.missing_cover===1||row.missing_tags===1)
+    // The targeted online pass is for missing synopses/covers only.
+    if(row.missing_synopsis===1||row.missing_cover===1)
      candidates.push(row);
    }
    pages++;

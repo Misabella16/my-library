@@ -110,7 +110,7 @@ async function lookup(db,id,fetcher,options={}){
   (Number.isSafeInteger(doc.cover_i)?doc.cover_i:null);
  const eligibleCover=!state.hasCover&&Number.isSafeInteger(coverId)&&coverId>0;
  return {status:'verified',state,source:'Open Library',source_url:'https://openlibrary.org'+key,
-  proposed:{synopsis:!text(book.synopsis)?summary:'',tags:!state.hasTags?subjects:[],
+  proposed:{synopsis:!text(book.synopsis)?summary:'',tags:!options.noTags&&!state.hasTags?subjects:[],
    cover_id:eligibleCover?coverId:null},
   match:isbn?'isbn_and_author':'title_and_author'};
 }
@@ -310,7 +310,7 @@ export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=fet
     if(!state){results.push({book_id:ids[i],status:'missing'});continue;}
     // Reuse batched search only for books whose ISBN was included. Fall back
     // to normal title/author matching when the book has no reliable ISBN.
-    const options={state,...(docs&&state.isbn?{docs}:{})};
+    const options={state,noTags:true,...(docs&&state.isbn?{docs}:{})};
     let result;
     try{result=await apply(db,env,ids[i],null,sourceFetch,options);}
     catch(e){return json({results,halt:true,reason:e.status===429?
