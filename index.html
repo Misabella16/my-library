@@ -287,7 +287,7 @@
     <section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
       <p class="section-kicker">✧ RECOMMENDED · NO BIG DOWNLOADS</p>
       <h2 id="online-enrich-heading">Repair missing covers, summaries and tags</h2>
-      <p>No Open Library download required. One click first recovers saved EPUB metadata and artwork, scans the entire library for remaining gaps, then checks only missing books through verified ISBN/author or title/author matching. Your own descriptions, tags, notes, editions, and existing covers stay intact. Online checks are paced and capped to avoid bulk harvesting.</p>
+      <p>No Open Library download required. One click first recovers saved EPUB metadata and artwork, scans the entire library for remaining gaps, then checks only missing books. Compatible ISBN lookups share a single search request (up to four books at a time), and public Open Library responses are cached when available. Every match is still verified by ISBN and author or title and author. Your descriptions, notes, tags and covers stay intact.</p>
       <div class="collection-health-actions">
         <button class="btn" id="online-apply" type="button">Repair missing data (no downloads)</button>
         <button class="btn subtle" id="online-scan" type="button">Scan gaps only</button>
@@ -299,7 +299,7 @@
       <p class="small-status" id="online-summary" aria-live="polite"></p>
       <div id="online-results" class="collection-health-results"></div>
       <div id="online-history-list" class="epub-preview-list"></div>
-      <p class="muted">The site scans the entire collection, but online lookups stop after 40 checked entries per UTC day. Resume the next day on this browser to keep source requests within a small daily budget. Browser-stored progress contains only a book-ID cursor and counts, never your book list or private content. Restart scan from beginning if older or newly added books also need checking. The process runs while this tab is open, not in the background. No match is invented; ambiguous books remain for review.</p>
+      <p class="muted">All books are scanned locally, but online checks are capped at 40 entries per UTC day to respect Open Library's low-volume API guidelines. An ISBN group of up to four books can share one search. Public search and work metadata is cached on a best-effort basis, not guaranteed across every Cloudflare location. Resume the next day from this browser; progress stores only a book-ID cursor and counters. Restart the scan to revisit changed entries without resetting today's limit. Keep this tab open while processing. Uncertain matches go to review, not your library.</p>
     </section>
     <section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
       <p class="section-kicker">✧ FULL LIBRARY REPAIR · START HERE</p>
