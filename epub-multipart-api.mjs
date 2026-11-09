@@ -43,12 +43,19 @@ export async function handleMultipartEpubApi(request,db,env,path,{match,persist}
   const query=new URL(request.url).searchParams;
   const key=query.get('key'),uploadId=query.get('upload_id');
   const number=Number(query.get('part_number')),expected=query.get('sha256');
+  const totalSize=Number(query.get('size'));
   if(!safeKey(key)||!safeUploadId(uploadId)||!Number.isSafeInteger(number)||
-    number<1||number>12||!hashOk(expected))return error('Invalid EPUB transfer part');
+    number<1||!Number.isSafeInteger(totalSize)||
+    totalSize<=SMALL_EPUB_BYTES||totalSize>LARGE_EPUB_BYTES||
+    number>Math.ceil(totalSize/EPUB_PART_BYTES)||!hashOk(expected))
+   return error('Invalid EPUB transfer part');
   const declared=Number(request.headers.get('content-length')||0);
   if(declared>EPUB_PART_BYTES)return error('EPUB part exceeds 8 MB',413);
   const bytes=new Uint8Array(await request.arrayBuffer());
-  if(!bytes.length||bytes.length>EPUB_PART_BYTES)return error('Invalid EPUB part length',413);
+  const requiredLength=Math.min(EPUB_PART_BYTES,totalSize-(number-1)*EPUB_PART_BYTES);
+  if(bytes.length!==requiredLength)return error('Invalid EPUB part length',413);
+  if(number===1&&(bytes[0]!==80||bytes[1]!==75))
+   return error('File is not a ZIP-based EPUB');
   const actual=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
   if(actual!==expected)return error('EPUB part changed during transfer',409);
   const upload=env.BOOK_FILES.resumeMultipartUpload(key,uploadId);
