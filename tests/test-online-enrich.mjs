@@ -57,7 +57,7 @@ function fixture({title='Example Book',author='Writer',synopsis='',image=false,
  };
  const call=(route,{method='GET',data}={})=>handleOnlineEnrichApi(new Request(
   'https://library.example/api/online-enrich/'+route,{method,...(data?{body:JSON.stringify(data)}:{})}),
-  db,env,'/api/online-enrich/'+route,{sourceFetch});
+  db,env,new URL('https://library.example/api/online-enrich/'+route).pathname,{sourceFetch});
  const book=()=>sql.prepare('SELECT * FROM books WHERE id=?').get(bookId);
  return {sql,db,env,call,files,calls,book,close:()=>sql.close()};
 }
