@@ -169,6 +169,7 @@ export function initEpubBackfill(api){
   }finally{
    busy=false;bulkActive=false;pauseRequested=false;update();
   }
+  return {complete:bulkFinished,checked,applied,failed};
  };
  bulk.addEventListener('click',()=>runRepairs(false));
  repairAll?.addEventListener('click',()=>runRepairs(true));
@@ -325,4 +326,6 @@ export function initEpubBackfill(api){
   }finally{busy=false;update();}
  });
  update();
+ return {repairAll:()=>runRepairs(true),pause:()=>{if(bulkActive)pauseRequested=true;},
+  status:()=>({complete:bulkFinished,busy})};
 }
