@@ -134,7 +134,11 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
   say('Pause requested. The current safe repair or page will finish first.');});
  reset.addEventListener('click',()=>{
   if(busy)return;
-  progress=emptyProgress();saveProgress(progress);
+  // Restart the book cursor, not the daily external-source request budget.
+  const priorDay=progress.day,priorUsed=progress.todayUsed;
+  progress=emptyProgress();
+  if(priorDay===today())progress.todayUsed=priorUsed;
+  saveProgress(progress);
   candidates=[];seen.clear();cursor='';scanned=false;done=false;outcomes=[];
   say('Progress reset. Your books and completed repairs are untouched. The next run rescreens gaps.');
   refresh();
