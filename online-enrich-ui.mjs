@@ -172,46 +172,62 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
      'Books with unavailable or ambiguous source records can be reviewed separately.');
     return;
    }
-   for(const row of pending){
+   for(let offset=0;offset<pending.length;){
     if(stop||progress.todayUsed>=MAX_LOOKUPS_PER_DAY)break;
-    say('Checking '+(checked+1)+' of '+Math.min(pending.length,
-     MAX_LOOKUPS_PER_DAY-progress.todayUsed)+': '+row.title+
-     '. Recovering only verified missing fields…');
-    let result;
+    const count=Math.min(4,pending.length-offset,
+     MAX_LOOKUPS_PER_DAY-progress.todayUsed);
+    const group=pending.slice(offset,offset+count);
+    say('Checking '+(checked+1)+'–'+(checked+group.length)+
+     ' of '+Math.min(pending.length,MAX_LOOKUPS_PER_DAY-progress.todayUsed)+
+     ' missing entries. Reusing one search for compatible ISBNs…');
+    let response;
     try{
-     // One server call performs both source verification and guarded write.
-     result=await api('/api/online-enrich/repair-auto',{
-      method:'POST',data:{book_id:row.book_id}
+     response=await api('/api/online-enrich/repair-batch',{
+      method:'POST',data:{book_ids:group.map(x=>x.book_id)}
      });
+     if(!Array.isArray(response.results)||
+       response.results.length>group.length||
+       (!response.halt&&response.results.length!==group.length))
+      throw Error('Incomplete or invalid batch response; retry this group');
     }catch(error){
-     const limited=error.status===429||error.status===503||
-      ['database_read_quota','database_write_quota','database_limit_reached'].includes(
-       error.payload?.code);
-     say((limited?'Source or database limit reached':'The request failed')+
-      '; no unfinished book was marked completed. Resume later. '+(error.message||''));
+     say('Online lookup or database limit reached; the last unfinished book '+
+      'has not been marked checked. Resume later. '+(error.message||''));
      stop=true;break;
     }
-    checked++;progress.todayUsed++;
-    progress.lastCompletedId=row.book_id;
-    if(result.status==='applied'){
-     repairedThisRun++;progress.saved++;
-     progress.synopses+=result.synopsis_filled?1:0;
-     progress.covers+=result.cover_saved?1:0;
-     progress.tags+=Number(result.tags_added||0);
-     push(row,'Repaired '+[
-      result.synopsis_filled?'synopsis':null,
-      result.cover_saved?'cover':null,
-      result.tags_added?result.tags_added+' tags':null
-     ].filter(Boolean).join(', ')+' from verified Open Library data');
-    }else if(result.status==='review'){
-     progress.review++;push(row,result.reason||'Needs manual review');
-    }else{
-     progress.no_changes++;
-     push(row,result.reason||'No usable missing metadata was available');
+    for(let i=0;i<response.results.length;i++){
+     const row=group[i],result=response.results[i];
+     if(result.book_id!==row.book_id){
+      stop=true;say('Unexpected match order. Stopped without advancing the cursor.');
+      break;
+     }
+     checked++;progress.todayUsed++;
+     progress.lastCompletedId=row.book_id;
+     if(result.status==='applied'){
+      repairedThisRun++;progress.saved++;
+      progress.synopses+=result.synopsis_filled?1:0;
+      progress.covers+=result.cover_saved?1:0;
+      progress.tags+=Number(result.tags_added||0);
+      push(row,'Filled '+[
+       result.synopsis_filled?'synopsis':null,
+       result.cover_saved?'cover':null,
+       result.tags_added?result.tags_added+' tags':null
+      ].filter(Boolean).join(', ')+' from verified Open Library metadata');
+     }else if(result.status==='review'||result.status==='missing'){
+      progress.review++;push(row,result.reason||'No confident match; needs review');
+     }else{
+      progress.no_changes++;
+      push(row,result.reason||'No usable missing metadata available');
+     }
+     saveProgress(progress);refresh();
     }
-    saveProgress(progress);refresh();
     if(stop)break;
-    // Keep client-side requests separated even if source lookup is fast.
+    offset+=response.results.length;
+    if(response.halt){
+     say('Source limit or temporary error: '+(response.reason||'Try later')+
+      '. '+checked+' completed checks are safely saved; resume later.');
+     stop=true;break;
+    }
+    // Respect online-source usage even though compatible ISBN lookups are batched.
     await new Promise(resolve=>setTimeout(resolve,2300));
    }
    if(repairedThisRun)await onUpdated();

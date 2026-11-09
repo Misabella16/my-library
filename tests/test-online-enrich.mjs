@@ -178,7 +178,7 @@ test('UI and authenticated worker include online owner repair without Goodreads 
  assert.match(lib,/initOnlineEnrich\(api/);
  assert.match(html,/id="online-apply"/);
  assert.match(ui,/MAX_LOOKUPS_PER_DAY=40/);
- assert.match(ui,/repair-auto/);
+ assert.match(ui,/repair-batch/);
  assert.match(html,/id="online-reset"/);
  assert.doesNotMatch(ui,/goodreads\.com\/api/);
 });
@@ -218,4 +218,63 @@ test('Targeted repair cannot be submitted without a valid UUID',async()=>{
   assert.equal(r.status,400);
   assert.equal(f.calls.length,0);
  }finally{f.close();}
+});
+
+test('One ISBN search batch serves multiple book records with independent validation',async()=>{
+ const f=fixture();
+ const other='55555555-5555-4555-8555-555555555555';
+ try{
+  f.sql.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(other,'Another Novel','Writer','another novel','writer');
+  f.sql.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special,isbn) VALUES(?,?,'Standard','ebook',0,?)")
+   .run('66666666-6666-4666-8666-666666666666',other,'9780140328721');
+  const r=await f.call('repair-batch',{method:'POST',data:{book_ids:[bookId,other]}});
+  assert.equal(r.status,200,await r.clone().text());
+  const data=await r.json();
+  assert.equal(data.batched_isbns,2);
+  assert.equal(data.results.length,2);
+  assert.equal(data.results[0].status,'applied');
+  assert.equal(data.results[1].status,'review');
+  assert.equal(f.calls.filter(x=>x.includes('search.json')).length,1);
+  assert.match(f.calls.find(x=>x.includes('search.json')),/isbn%3A%28/);
+  assert.equal(f.sql.prepare('SELECT synopsis FROM books WHERE id=?').get(other).synopsis,'');
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,1);
+ }finally{f.close();}
+});
+test('Batch validation rejects duplicates and oversized batches before external lookup',async()=>{
+ const f=fixture();
+ try{
+  for(const ids of [[bookId,bookId],[],[bookId,'bad'],Array(5).fill(bookId)]){
+   const response=await f.call('repair-batch',{method:'POST',data:{book_ids:ids}});
+   assert.equal(response.status,400);
+  }
+  assert.equal(f.calls.length,0);
+ }finally{f.close();}
+});
+test('Public metadata is reused from edge cache without exposing user records',async()=>{
+ const f=fixture();
+ const original=globalThis.caches;
+ const map=new Map();
+ globalThis.caches={default:{
+  async match(key){return map.get(key)?.clone()||null;},
+  async put(key,response){map.set(key,response.clone());}
+ }};
+ try{
+  const first=await f.call('preview?book_id='+bookId);
+  assert.equal(first.status,200);
+  assert.equal(f.calls.length,2);
+  const again=await f.call('preview?book_id='+bookId);
+  assert.equal(again.status,200);
+  assert.equal(f.calls.length,2);
+  assert.equal(map.size,2);
+  for(const [key,val] of map){
+   assert.match(key,/^https:\/\/openlibrary\.org\//);
+   const text=await val.text();
+   assert.doesNotMatch(text,/Keep my notes|Keep my review/);
+  }
+ }finally{
+  if(original===undefined)delete globalThis.caches;
+  else globalThis.caches=original;
+  f.close();
+ }
 });
