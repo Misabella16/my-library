@@ -1,6 +1,7 @@
 import {initGoodreadsPreview} from './goodreads-ui.mjs';
 import {initEpubImport} from './epub-ui.mjs';
 import {initEpubTitleCleanup} from './epub-title-cleanup-ui.mjs';
+import {machineTitleReason} from './epub-metadata.mjs';
 import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
@@ -20,7 +21,10 @@ const safeId = x => /^[0-9a-f-]{36}$/i.test(x||'') ? x : '';
 const statuses = {unread:'Want to read',reading:'Reading',read:'Read',paused:'Paused',dnf:'Did not finish'};
 const label = (value,defaultText='Not set') => safe(value||defaultText);
 const options = (values,value) => values.map(([id,text])=>'<option value="'+safe(id)+'" '+(id===value?'selected':'')+'>'+safe(text)+'</option>').join('');
-const bookCover = (title,imgId='') => '<div class="book-cover"><b>'+safe(title)+'</b>'+(safeId(imgId)?'<img loading="lazy" src="/api/images/'+imgId+'" alt="Cover of '+safe(title)+'">':'')+'</div>';
+const bookCover = (title,imgId='') => '<div class="book-cover"><b>'+
+ safe(machineTitleReason(title)?'Title needs review':title)+'</b>'+
+ (safeId(imgId)?'<img loading="lazy" src="/api/images/'+imgId+
+ '" alt="Cover of '+safe(title)+'">':'')+'</div>';
 const bookTags = tags => (tags||[]).map(t=>'<span class="badge">'+safe(t.label)+' <button class="tag-remove" type="button" data-remove-tag="'+safe(t.id)+'" aria-label="Remove '+safe(t.label)+'">×</button></span>').join('');
 const isbnMaybe = s => s?'<span class="muted">ISBN '+safe(s)+'</span>':'';
 function showMessage(msg,isError=false){
@@ -76,7 +80,11 @@ function renderGrid(){
     grid.innerHTML='<div class="empty"><h3>'+(state.query?'No matching titles':'Your library is ready')+'</h3><p>'+(state.query?'Try another search.':'Add your first book, then give it editions, copies, tags and private notes.')+'</p></div>';
   } else {
     grid.innerHTML=books.map(b=>'<button class="book-card '+(state.selectedId===b.id?'selected':'')+'" type="button" data-select-book="'+safe(b.id)+'">'+
-      bookCover(b.title,b.cover_id)+'<div class="book-data"><strong>'+safe(b.title)+'</strong><small>'+label(b.author,'Unknown author')+'</small><br><span class="badge">'+(statuses[b.reading_status]||'Unread')+'</span></div></button>').join('');
+      bookCover(b.title,b.cover_id)+'<div class="book-data"><strong>'+
+      (machineTitleReason(b.title)?'Title needs review':safe(b.title))+'</strong><small>'+
+      (machineTitleReason(b.title)?'Imported label: '+safe(b.title)+' · ':'')+
+      label(b.author,'Unknown author')+'</small><br><span class="badge">'+
+      (statuses[b.reading_status]||'Unread')+'</span></div></button>').join('');
   }
   $('#load-more').hidden=state.books.length>=state.total;
 }
