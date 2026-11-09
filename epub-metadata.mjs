@@ -100,5 +100,6 @@ export function machineTitleReason(value){
    n+Number(ch)*(i%2?3:1),0);
   if((10-sum%10)%10===Number(stripped[12]))return 'isbn_used_as_title';
  }
+ if(/^\d{8,13}\.pdf$/i.test(title))return 'numeric_pdf_filename';
  return '';
 }
