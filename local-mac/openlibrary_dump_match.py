@@ -6,19 +6,23 @@ Usage:
     --editions ol_dump_editions_latest.txt.gz --works ol_dump_works_latest.txt.gz \
     --authors ol_dump_authors_latest.txt.gz --output my-library-matches.json
 
-Requires Python 3.9+. Never accesses the network, the Calibre DB, or the website.
-Data dumps are streamed without decompressing them to disk.
+Requires Python 3.9+. The matcher itself is offline and does not open
+the Calibre DB or contact My Library. With --download, it first downloads the
+official compressed dumps to a chosen folder. It never decompresses the dumps
+to disk. The downloads are approximately 13 GB total.
 """
 import argparse
 import gzip
 import json
 import re
 import sys
+import shutil
 import unicodedata
+import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
-MAX_MATCHES_PER_TITLE = 25
+MAX_MATCHES_PER_TITLE = 100
 MAX_DESCRIPTION = 10000
 MAX_ENTRIES = 100000
 ISBN13_RE = re.compile(r"^(978|979)\d{10}$")
@@ -185,7 +189,7 @@ def build_matches(catalogue, editions_path, works_path, authors_path):
         for bid in isbn_hits | title_hits:
             entries = candidates[bid]
             # A common title alone is not enough evidence; cap collisions.
-            if len(entries) > MAX_MATCHES_PER_TITLE and wk not in entries:
+            if len(entries) >= MAX_MATCHES_PER_TITLE and wk not in entries and bid not in isbn_hits:
                 continue
             old = entries.get(wk, {})
             isbn_match = bid in isbn_hits or old.get("isbn_match", False)
@@ -208,9 +212,13 @@ def build_matches(catalogue, editions_path, works_path, authors_path):
         counts["works_scanned"] += 1
         title_key = normalize(work.get("title"))
         matched_title = title_key in title_targets
+        if not WORK_KEY_RE.fullmatch(key):
+            continue
         if not matched_title and key not in target_keys:
             continue
-        if not WORK_KEY_RE.fullmatch(key):
+        # Common generic titles can have thousands of unrelated works.
+        # Keep all ISBN-linked records, but bound title-only candidates.
+        if matched_title and key not in target_keys and len(title_collisions[title_key]) >= MAX_MATCHES_PER_TITLE:
             continue
         data = {
             "key": key, "title": work.get("title") or "",
@@ -288,15 +296,82 @@ def build_matches(catalogue, editions_path, works_path, authors_path):
             "items": matches, "needs_review": reviews[:2000], "unmatched": misses[:2000]}
 
 
+OFFICIAL_DUMPS = {
+    "editions": "https://openlibrary.org/data/ol_dump_editions_latest.txt.gz",
+    "works": "https://openlibrary.org/data/ol_dump_works_latest.txt.gz",
+    "authors": "https://openlibrary.org/data/ol_dump_authors_latest.txt.gz",
+}
+
+
+def download_dump(url, destination):
+    """Download compressed source bytes only, resuming via HTTP Range when supported."""
+    if destination.exists() and destination.stat().st_size > 1024 * 1024:
+        print("Reusing existing dump:", destination, flush=True)
+        return destination
+    partial = destination.with_suffix(destination.suffix + ".part")
+    have = partial.stat().st_size if partial.exists() else 0
+    headers = {"User-Agent": "MyLibraryPersonalDumpMatcher/1.0"}
+    if have:
+        headers["Range"] = f"bytes={have}-"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=120) as response:
+        status = getattr(response, "status", 200)
+        resume = have > 0 and status == 206
+        mode = "ab" if resume else "wb"
+        if have and not resume:
+            print("Remote server did not resume; restarting this one download.", flush=True)
+        written = have if resume else 0
+        print("Downloading", url, "to", destination, flush=True)
+        with partial.open(mode="wb" if mode == "wb" else "ab") as file:
+            while True:
+                chunk = response.read(1024 * 1024 * 4)
+                if not chunk:
+                    break
+                file.write(chunk)
+                written += len(chunk)
+                if written // (256 * 1024 * 1024) != (written-len(chunk)) // (256*1024*1024):
+                    print(f"  received {written / (1024**3):.2f} GiB", flush=True)
+    if written < 1024 * 1024:
+        raise ValueError("Downloaded file is unexpectedly small; keeping partial for inspection")
+    partial.replace(destination)
+    print("Saved", destination, flush=True)
+    return destination
+
+
+def get_downloads(data_dir):
+    data_dir.mkdir(parents=True, exist_ok=True)
+    # Conservative check: at least 16 GiB free before an estimated 13 GiB
+    # download. This does not promise success if the files grow.
+    free = shutil.disk_usage(data_dir).free
+    if free < 16 * 1024**3:
+        raise ValueError("Choose a disk with at least 16 GiB free for the compressed dumps")
+    return {
+        name: download_dump(url, data_dir / f"ol_dump_{name}_latest.txt.gz")
+        for name, url in OFFICIAL_DUMPS.items()
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    for key in ("catalogue", "editions", "works", "authors", "output"):
-        ap.add_argument("--" + key, required=True, type=Path)
+    ap.add_argument("--catalogue", required=True, type=Path)
+    ap.add_argument("--output", required=True, type=Path)
+    ap.add_argument("--download", action="store_true",
+                    help="Download all three official compressed dumps if absent")
+    ap.add_argument("--data-dir", type=Path, default=Path.home() / "Downloads" / "OpenLibraryDumps")
+    for key in ("editions", "works", "authors"):
+        ap.add_argument("--" + key, type=Path)
     args = ap.parse_args()
-    for key in ("catalogue", "editions", "works", "authors"):
+    if not args.catalogue.is_file():
+        ap.error("Catalogue JSON not found: " + str(args.catalogue))
+    if args.download:
+        found = get_downloads(args.data_dir)
+        for key in ("editions", "works", "authors"):
+            if getattr(args, key) is None:
+                setattr(args, key, found[key])
+    for key in ("editions", "works", "authors"):
         path = getattr(args, key)
-        if not path.is_file():
-            ap.error(f"{key} file not found: {path}")
+        if path is None or not path.is_file():
+            ap.error("Provide --" + key + " path or use --download")
     print("Matching offline, without calling Open Library APIs.", flush=True)
     report = build_matches(args.catalogue, args.editions, args.works, args.authors)
     args.output.parent.mkdir(parents=True, exist_ok=True)
