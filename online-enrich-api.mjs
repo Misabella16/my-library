@@ -311,10 +311,13 @@ export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=fet
     // Reuse batched search only for books whose ISBN was included. Fall back
     // to normal title/author matching when the book has no reliable ISBN.
     const options={state,...(docs&&state.isbn?{docs}:{})};
-    const result=await apply(db,env,ids[i],null,sourceFetch,options);
+    let result;
+    try{result=await apply(db,env,ids[i],null,sourceFetch,options);}
+    catch(e){return json({results,halt:true,reason:e.status===429?
+     'Open Library rate limit reached':'Source unavailable; resume later'});}
     const body=await result.json();
     if(result.status===429||result.status===503)
-     return fail(body.error||'Source unavailable',result.status);
+     return json({results,halt:true,reason:body.error||'Source unavailable'});
     results.push({book_id:ids[i],...body});
    }
    return json({results,batched_isbns:docs?isbns.length:0});
