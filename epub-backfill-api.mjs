@@ -40,7 +40,7 @@ async function linkedFile(db,fileId){
 async function singleUnselectedEpubCover(db,bookId,editionId){
  const results=await many(db,
   "SELECT im.id,im.edition_id,im.origin,im.role,im.display_cover,im.copy_id,"+
-  "im.private_object_key FROM edition_images im JOIN editions e ON e.id=im.edition_id "+
+  "im.private_object_key,im.match_status FROM edition_images im JOIN editions e ON e.id=im.edition_id "+
   "WHERE e.book_id=? LIMIT 2",[bookId]);
  if(results.length!==1)return null;
  const row=results[0];
@@ -245,6 +245,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   const after={file_id:row.id,book_id:row.book_id,description,
    tags:additions,cover_id:coverId,cover_key:coverKey,cover_display:coverDisplay,
    selected_existing_cover_id:selectedCover?.id||null,
+   selected_existing_cover_key:selectedCover?.private_object_key||null,
+   selected_existing_cover_status:selectedCover?.match_status||null,
    prior_updated_at:row.updated_at,
    applied_updated_at:description?now:row.updated_at};
   stmts.push(db.prepare("INSERT INTO import_batches(id,source,status,report,created_at) "+
@@ -298,7 +300,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   }
   if(after.selected_existing_cover_id){
    const selected=await one(db,
-    "SELECT id,edition_id,origin,role,display_cover,copy_id,private_object_key "+
+    "SELECT id,edition_id,origin,role,display_cover,copy_id,private_object_key,match_status "+
     "FROM edition_images WHERE id=?",[after.selected_existing_cover_id]);
    const file=await linkedFile(db,after.file_id);
    const displayed=await one(db,
@@ -306,6 +308,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
     "WHERE ee.book_id=? AND im.display_cover=1",[after.book_id]);
    if(!file||!selected||selected.edition_id!==file.edition_id||
       selected.origin!=='epub'||selected.role!=='cover'||
+      selected.private_object_key!==after.selected_existing_cover_key||
+      selected.match_status!==after.selected_existing_cover_status||
       !selected.private_object_key||selected.copy_id!==null||
       selected.display_cover!==1||displayed?.n!==1)
     return fail('The selected EPUB cover was changed. Nothing was undone.',409);
@@ -314,8 +318,10 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   if(after.selected_existing_cover_id){
    stmts.push(db.prepare(
     "UPDATE edition_images SET display_cover=0 "+
-    "WHERE id=? AND origin='epub' AND role='cover' AND display_cover=1")
-    .bind(after.selected_existing_cover_id));
+    "WHERE id=? AND origin='epub' AND role='cover' AND display_cover=1 "+
+    "AND private_object_key=? AND match_status=?")
+    .bind(after.selected_existing_cover_id,after.selected_existing_cover_key,
+      after.selected_existing_cover_status));
   }
   if(after.cover_id){
    stmts.push(db.prepare(
