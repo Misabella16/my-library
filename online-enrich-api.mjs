@@ -26,7 +26,15 @@ const tagList=input=>(Array.isArray(input)?[...new Set(input.filter(s=>
 const workKey=key=>/^(?:\/works\/)?OL\d+W$/.test(key||'')?('/works/'+String(key).replace(/^\/works\//,'')):'';
 const read=async(db,sql,...args)=>db.prepare(sql).bind(...args).first();
 const rows=async(db,sql,...args)=>(await db.prepare(sql).bind(...args).all()).results||[];
+// Cache only public Open Library responses. A Worker cache is best-effort and
+// per location, not a durable database. Never cache a 429/5xx or user data.
+const sourceCache=()=>{try{return typeof caches!=='undefined'?caches.default:null;}catch{return null;}};
 const requestData=async(fetcher,url)=>{
+ const cache=sourceCache();
+ if(cache)try{
+  const stored=await cache.match(url);
+  if(stored)return await stored.json();
+ }catch{}
  const response=await fetcher(url,{method:'GET',redirect:'manual',headers:{
   accept:'application/json','user-agent':'MyLibraryPersonalCatalogue/1.0 (manual book lookup)'
  }});
@@ -36,7 +44,14 @@ const requestData=async(fetcher,url)=>{
  if(Number(response.headers.get('content-length')||0)>550000)throw Error('Metadata response too large');
  const body=await response.text();
  if(body.length>550000)throw Error('Metadata response too large');
- return JSON.parse(body);
+ const parsed=JSON.parse(body);
+ if(cache)try{
+  const ttl=url.includes('/works/')?604800:86400;
+  await cache.put(url,new Response(body,{headers:{
+   'content-type':'application/json','cache-control':'public, max-age='+ttl
+  }}));
+ }catch{}
+ return parsed;
 };
 async function record(db,id){
  const book=await read(db,'SELECT id,title,author,synopsis,updated_at,archived_at '+
@@ -65,8 +80,8 @@ export function verifiedOpenLibraryDoc(book,doc,isbn=''){
   extractIsbn13(i)===isbn);
  return exactTitle||exactIsbn;
 }
-async function lookup(db,id,fetcher){
- const state=await record(db,id);
+async function lookup(db,id,fetcher,options={}){
+ const state=options.state||await record(db,id);
  if(!state)return {status:'missing'};
  const {book,isbn}=state;
  if(!validAuthor(book.author)||(!isbn&&machineTitleReason(book.title)))
@@ -75,9 +90,14 @@ async function lookup(db,id,fetcher){
   fields:'key,title,author_name,isbn,cover_i,first_sentence,subject'});
  if(isbn)params.set('isbn',isbn);
  else{params.set('title',book.title.slice(0,180));params.set('author',book.author.slice(0,130));}
- const search=await requestData(fetcher,'https://openlibrary.org/search.json?'+params);
+ const search=options.docs?{docs:options.docs}:
+  await requestData(fetcher,'https://openlibrary.org/search.json?'+params);
  const docs=Array.isArray(search?.docs)?search.docs:[];
- const exact=docs.filter(d=>verifiedOpenLibraryDoc(book,d,isbn));
+ // Batch results must contain the actual requested ISBN. Do not accidentally
+ // choose an unrelated edition with the same title and author.
+ const exact=docs.filter(d=>verifiedOpenLibraryDoc(book,d,isbn)&&
+  (!options.docs||!isbn||(Array.isArray(d.isbn)&&
+   d.isbn.some(value=>extractIsbn13(value)===isbn))));
  if(exact.length!==1)return {status:'review',
   reason:exact.length?'Multiple possible Open Library matches':'No verified Open Library match',state};
  const doc=exact[0],key=workKey(doc.key);
@@ -104,8 +124,8 @@ async function imageBytes(fetcher,id){
   data[0]!==255||data[1]!==216||data[2]!==255)return null;
  return data;
 }
-async function apply(db,env,id,expected,fetcher){
- const found=await lookup(db,id,fetcher);
+async function apply(db,env,id,expected,fetcher,options={}){
+ const found=await lookup(db,id,fetcher,options);
  if(found.status!=='verified')return json({status:found.status,reason:found.reason||''});
  const {state,proposed,source_url}=found;
  const b=state.book;
@@ -255,6 +275,51 @@ export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=fet
    return json(result);
   }catch(e){return fail(e.status===429?'Open Library rate limit. Try again later.':
    'Open Library metadata unavailable',e.status||503);}
+ }
+ if(end==='repair-batch'&&request.method==='POST'){
+  let data;
+  try{
+   const raw=await request.text();
+   if(raw.length>1200)return fail('Batch too large',413);
+   data=JSON.parse(raw);
+  }catch{return fail('Invalid batch request');}
+  const ids=data?.book_ids;
+  if(!Array.isArray(ids)||ids.length<1||ids.length>4||
+   ids.some(x=>!uuid(x))||new Set(ids).size!==ids.length)
+   return fail('Provide one to four unique book IDs');
+  try{
+   // A single search can retrieve works for several ISBNs, reducing requests.
+   // Title-only books retain individual queries and all decisions are checked
+   // against each book's current D1 record before writing.
+   const states=await Promise.all(ids.map(id=>record(db,id)));
+   const isbns=[...new Set(states.map(x=>x?.isbn).filter(Boolean))];
+   let docs=null;
+   if(isbns.length>=2){
+    const params=new URLSearchParams({
+     q:'isbn:('+isbns.join(' OR ')+')',
+     fields:'key,title,author_name,isbn,cover_i,first_sentence,subject',
+     limit:'50'
+    });
+    const search=await requestData(sourceFetch,
+     'https://openlibrary.org/search.json?'+params);
+    docs=Array.isArray(search?.docs)?search.docs:[];
+   }
+   const results=[];
+   for(let i=0;i<ids.length;i++){
+    const state=states[i];
+    if(!state){results.push({book_id:ids[i],status:'missing'});continue;}
+    // Reuse batched search only for books whose ISBN was included. Fall back
+    // to normal title/author matching when the book has no reliable ISBN.
+    const options={state,...(docs&&state.isbn?{docs}:{})};
+    const result=await apply(db,env,ids[i],null,sourceFetch,options);
+    const body=await result.json();
+    if(result.status===429||result.status===503)
+     return fail(body.error||'Source unavailable',result.status);
+    results.push({book_id:ids[i],...body});
+   }
+   return json({results,batched_isbns:docs?isbns.length:0});
+  }catch(e){return fail(e.status===429?'Open Library rate limit. Try later.':
+   'Online batch unavailable; completed repairs remain saved',e.status||503);}
  }
  if(['repair','repair-auto','undo'].includes(end)&&request.method==='POST'){
   let data;try{
