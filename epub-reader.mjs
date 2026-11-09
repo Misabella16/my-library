@@ -1,7 +1,8 @@
 import {extractIsbn13} from './epub-isbn.mjs';
 // Local EPUB (ZIP + OPF) inspection for private My Library imports.
 // Does not contact a server, fetch external XML, or execute book contents.
-export const MAX_EPUB_BYTES=24*1024*1024;
+// Large files travel in 8 MiB chunks through R2 multipart upload.
+export const MAX_EPUB_BYTES=96*1024*1024;
 const MAX_ZIP_ENTRIES=4000;
 const MAX_XML_BYTES=2*1024*1024;
 const MAX_COVER_BYTES=5*1024*1024;
@@ -182,7 +183,7 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
 }
 export async function inspectEpub(file,{includeCover=true}={}){
   if(!file||!/\.epub$/i.test(file.name||''))throw Error('Choose an .epub file');
-  if(file.size===0||file.size>MAX_EPUB_BYTES)throw Error('EPUB must be smaller than 24 MB');
+  if(file.size===0||file.size>MAX_EPUB_BYTES)throw Error('EPUB must be no larger than 96 MB');
   const bytes=new Uint8Array(await file.arrayBuffer());
   const archive=zipEntries(bytes);
   const container=await readZipEntry(archive,'META-INF/container.xml');

@@ -541,8 +541,9 @@ test('Oversized EPUB still displays a cleaned title, stays blocked, and preserve
  const f=fixture(0);
  try{
   const filename='Textual Poachers (z-library.sk, ilib.sk, z-lib.sk).epub';
-  const file=new File([new Uint8Array(24*1024*1024+1)],filename,
+  const file=new File([new Uint8Array([80,75,3,4])],filename,
    {type:'application/epub+zip'});
+  Object.defineProperty(file,'size',{value:96*1024*1024+1}); // Size-only preview guard
   f.get('epub-files').files=[file];
   await f.get('epub-files').dispatch('change');
   await f.get('preview-epubs').dispatch('click');
@@ -550,7 +551,7 @@ test('Oversized EPUB still displays a cleaned title, stays blocked, and preserve
   assert.equal(card.children[0].textContent,'Textual Poachers');
   assert.match(card.children[1].textContent,/Textual Poachers \(z-library.sk, ilib.sk, z-lib.sk\)\.epub/);
   assert.match(card.children[2].textContent,/Too large/);
-  assert.match(card.children.find(x=>x.className==='epub-preview-note').textContent,/24 MB/);
+  assert.match(card.children.find(x=>x.className==='epub-preview-note').textContent,/96 MB/);
   assert.equal(f.get('upload-epubs').disabled,true);
   assert.equal(f.get('epub-save-all').disabled,true);
   assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,0);

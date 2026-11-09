@@ -13,7 +13,7 @@ const labels={
  already_uploaded:'Already uploaded',needs_review:'Needs review',
  same_file:'Duplicate in this selection',uploaded:'Saved',
  upload_failed:'Upload failed',possible_duplicate:'Possible duplicate EPUB',
- oversized:'Too large (over 24 MB)',unreadable:'Could not inspect EPUB'
+ oversized:'Too large (over 96 MB)',unreadable:'Could not inspect EPUB'
 };
 const canImport=x=>!x?.excluded&&['new','match','upload_failed'].includes(x?.match?.status);
 const create=(tag,className,text)=>{
@@ -341,7 +341,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
       if(file.size>MAX_EPUB_BYTES){
        entry.match={status:'oversized'};
        throw Error('This EPUB is '+(file.size/1048576).toFixed(1)+
-        ' MB. Current upload limit: 24 MB. Name cleanup is preview-only.');
+        ' MB. Current upload limit: 96 MB. Name cleanup is preview-only.');
       }
       // Inspect sequentially: no persistent file bytes or cover blobs
       // held in memory during thousand-book previews.
@@ -417,6 +417,49 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    if(previewPauseButton)previewPauseButton.disabled=true;
    previewButton.disabled=false;render();}
  });
+
+ // Books above 24 MiB are transferred privately to R2 in uniform 8 MiB
+ // chunks, so no Worker request needs to buffer the entire EPUB.
+ const uploadLargeEpub=async(entry,fresh,metadata)=>{
+  const partSize=8*1024*1024;
+  const start=await api('/api/epubs/multipart/start',{method:'POST',data:{
+   filename:entry.file.name,size:entry.file.size,sha256:metadata.sha256,
+   title:metadata.title,author:metadata.author,identifier:metadata.identifier
+  }});
+  if(start.status==='already_uploaded'||start.status==='needs_review')return start;
+  if(!start.key||!start.upload_id||start.part_size!==partSize)
+   throw Error('Chunked EPUB transfer could not start');
+  const parts=[];
+  try{
+   for(let offset=0,number=1;offset<entry.file.size;offset+=partSize,number++){
+    if(pauseRequested)throw Error('Paused during this EPUB. The file was not saved. Resume to retry.');
+    const chunk=entry.file.slice(offset,offset+partSize);
+    const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',await chunk.arrayBuffer()));
+    const sha256=Array.from(hash,x=>x.toString(16).padStart(2,'0')).join('');
+    const query=new URLSearchParams({
+     key:start.key,upload_id:start.upload_id,part_number:String(number),
+     size:String(entry.file.size),sha256
+    });
+    const uploaded=await api('/api/epubs/multipart/part?'+query,{method:'POST',
+     raw:chunk,contentType:'application/octet-stream'});
+    parts.push({partNumber:uploaded.part_number,etag:uploaded.etag});
+    inform('Uploading '+entry.file.name+' · part '+number+' of '+
+     Math.ceil(entry.file.size/partSize)+' (8 MB chunks)');
+   }
+   const form=new FormData();
+   form.set('key',start.key);form.set('upload_id',start.upload_id);
+   form.set('size',String(entry.file.size));form.set('filename',entry.file.name);
+   form.set('metadata',JSON.stringify(metadata));form.set('parts',JSON.stringify(parts));
+   if(fresh.cover)form.set('cover',fresh.cover,'embedded-cover'+
+     (fresh.coverType==='image/png'?'.png':
+      fresh.coverType==='image/webp'?'.webp':'.jpg'));
+   return await api('/api/epubs/multipart/complete',{method:'POST',formData:form});
+  }catch(error){
+   try{await api('/api/epubs/multipart/abort',{method:'POST',
+    data:{key:start.key,upload_id:start.upload_id}});}catch{}
+   throw error;
+  }
+ };
  const saveEligible=async(saveAll=false)=>{
   if(running||!previewComplete)return;
   const eligible=items.filter(canImport).slice(0,saveAll?MAX_SELECTION:SAVE_RUN_LIMIT);
@@ -448,7 +491,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      sha256:fresh.sha256,
      ...(entry.match.book_id?{book_id:entry.match.book_id}:{})
     }));
-    const result=await api('/api/epubs/upload',{method:'POST',formData:form});
+    const result=entry.file.size>24*1024*1024
+     ?await uploadLargeEpub(entry,fresh,JSON.parse(form.get('metadata')))
+     :await api('/api/epubs/upload',{method:'POST',formData:form});
     // Retain canonical book and EPUB identifiers for the review CSV.
     if(result.uploaded){
       entry.uploadResult=result;
