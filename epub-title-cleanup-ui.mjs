@@ -12,6 +12,12 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  const scanAll=root.querySelector('#epub-title-scan-all');
  const isbnLookup=root.querySelector('#epub-title-isbn-lookup');
  const isbnStatus=root.querySelector('#epub-title-isbn-status');
+ const autoRun=root.querySelector('#epub-title-auto-repair');
+ const autoPause=root.querySelector('#epub-title-auto-pause');
+ const autoStatus=root.querySelector('#epub-title-auto-status');
+ const autoHistory=root.querySelector('#epub-title-auto-history');
+ const autoHistoryList=root.querySelector('#epub-title-auto-history-list');
+ const reviewFilter=root.querySelector('#epub-title-review-filter');
  const save=root.querySelector('#epub-title-apply');
  const undo=root.querySelector('#epub-title-undo');
  const status=root.querySelector('#epub-title-status');
@@ -19,10 +25,15 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  const all=new Map(),history=[];
  let cursor='',bookFinished=false,sourceCursor='',sourceFinished=false;
  let finished=false,busy=false,checked=0,sourceChecked=0,shown=60;
+ let autoActive=false,autoPauseRequested=false,autoOffset=0,autoOrder=null;
+ let reviewOnly=false;
  const say=value=>{status.textContent=value;};
  const pending=()=>[...all.values()].filter(row=>row.checked&&!row.fixed);
  function controls(){
-  scan.disabled=busy||finished;scanAll.disabled=busy||finished;
+  scan.disabled=busy||autoActive||finished;scanAll.disabled=busy||autoActive||finished;
+  if(autoRun)autoRun.disabled=busy||autoActive;
+  if(autoPause)autoPause.disabled=!autoActive||autoPauseRequested;
+  if(autoHistory)autoHistory.disabled=busy||autoActive;
   save.disabled=busy||!pending().length;undo.disabled=busy||!history.length;
   if(isbnLookup)isbnLookup.disabled=busy||!bookFinished||
    ![...all.values()].some(row=>row.machine_reason==='isbn_used_as_title'&&
@@ -31,7 +42,8 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  }
  function render(){
   results.replaceChildren();
-  const items=[...all.values()];
+  const items=[...all.values()].filter(row=>!reviewOnly||
+   (!row.fixed&&row.auto_status&&row.auto_status!=='applied'));
   for(const row of items.slice(0,shown)){
    const card=node('article',undefined,'epub-title-cleanup-result');
    const tick=node('input');tick.type='checkbox';tick.checked=!!row.checked;
@@ -63,6 +75,8 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
    }
    if(row.isbn_status==='not_found')
     copy.append(node('span','No reliable Open Library title found for this ISBN.','muted'));
+   if(row.auto_status==='review')
+    copy.append(node('span','Needs review: '+(row.auto_reason||'No verified match'),'muted'));
    if(row.fixed)copy.append(node('span','Saved','epub-preview-label'));
    if(row.error)copy.append(node('span',row.error,'muted'));
    const open=node('button','Open book','btn subtle mini');
@@ -75,6 +89,8 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
    more.type='button';more.addEventListener('click',()=>{shown+=60;render();});
    results.append(more);
   }
+  if(reviewFilter)reviewFilter.textContent=reviewOnly?'Show all candidates':
+   'Show unresolved review queue';
   controls();
  }
 
@@ -107,6 +123,12 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
   if(!Array.isArray(data.candidates)||typeof data.scanned!=='number')
    throw Error('Incomplete saved-EPUB title preview');
   sourceChecked+=data.scanned;
+  for(const src of data.sources||[]){
+   const row=all.get(src.id);
+   if(row&&!row.fixed&&src.source_file_id&&
+      !(row.source_file_ids||[]).includes(src.source_file_id))
+    row.source_file_ids=[...(row.source_file_ids||[]),src.source_file_id].slice(0,6);
+  }
   for(const suggestion of data.candidates){
    const row=all.get(suggestion.id);
    if(!row||row.fixed)continue;
@@ -116,6 +138,7 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
     continue;
    }
    if(row.error?.startsWith('Conflicting'))continue;
+   row.source_file_id=suggestion.source_file_id;
    row.proposed_title=suggestion.proposed_title;
    row.source=suggestion.source;
    row.safe_match=!!suggestion.safe_match;
@@ -213,6 +236,120 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
   }finally{busy=false;render();}
  });
 
+
+ const drawAutoHistory=async()=>{
+  if(!autoHistoryList)return;
+  const response=await api('/api/books/auto-title-repair/history');
+  if(!Array.isArray(response?.changes))throw Error('Incomplete title repair history');
+  autoHistoryList.replaceChildren();
+  for(const entry of response.changes){
+   const line=node('article',undefined,'epub-title-cleanup-result');
+   const text=node('div',undefined,'epub-title-cleanup-labels');
+   text.append(node('strong',entry.title||'Untitled'),
+    node('span','Previous: '+entry.previous_title,'muted'),
+    node('span','Source: '+entry.source+
+     (entry.undone_at?' · Undone':' · Applied'),'muted'));
+   line.append(text);
+   if(!entry.undone_at){
+    const undoOne=node('button','Undo this correction','btn subtle mini');
+    undoOne.type='button';undoOne.addEventListener('click',async()=>{
+     if(busy||autoActive)return;
+     undoOne.disabled=true;
+     try{
+      await api('/api/books/auto-title-repair/undo',{method:'POST',
+       data:{change_id:entry.change_id}});
+      const row=all.get(entry.book_id);
+      if(row){row.fixed=false;row.checked=false;row.title=entry.previous_title;
+       row.error='Previous title restored; rescan for new corrections.';}
+      if(autoStatus)autoStatus.textContent='Restored the previous title. Newer edits remain protected.';
+      await drawAutoHistory();
+      await onUpdated();
+     }catch(error){
+      if(autoStatus)autoStatus.textContent='Undo needs review: '+(error.message||'Request failed');
+      undoOne.disabled=false;
+     }
+    });
+    line.append(undoOne);
+   }
+   autoHistoryList.append(line);
+  }
+  if(!response.changes.length)
+   autoHistoryList.append(node('p','No automatic title corrections yet.','muted'));
+ };
+ autoHistory?.addEventListener('click',async()=>{
+  if(busy||autoActive)return;
+  busy=true;controls();
+  try{await drawAutoHistory();}
+  catch(error){if(autoStatus)autoStatus.textContent='Cannot load Undo history: '+
+   (error.message||'Request failed');}
+  finally{busy=false;controls();}
+ });
+ autoPause?.addEventListener('click',()=>{
+  if(!autoActive)return;
+  autoPauseRequested=true;
+  if(autoStatus)autoStatus.textContent='Pausing after the current small repair batch…';
+  controls();
+ });
+ autoRun?.addEventListener('click',async()=>{
+  if(busy||autoActive)return;
+  autoActive=true;autoPauseRequested=false;controls();
+  if(autoStatus)autoStatus.textContent='Scanning existing catalogue and saved EPUB metadata…';
+  try{
+   if(!finished)await start(true);
+   if(!finished){
+    if(autoStatus)autoStatus.textContent='The library scan stopped. Click Auto-repair again to resume.';
+    return;
+   }
+   if(!autoOrder)autoOrder=[...all.values()].filter(row=>!row.fixed&&
+    (row.machine_reason||row.proposed_title)).map(row=>row.id);
+   const candidates=autoOrder.map(id=>all.get(id)).filter(Boolean);
+   // Keep a single cursor in the open tab. All accepted repairs are also
+   // recorded in the database for Undo after a browser refresh.
+   let repaired=0,review=0,unmatched=0;
+   while(autoOffset<candidates.length&&!autoPauseRequested){
+    const batch=candidates.slice(autoOffset,autoOffset+6);
+    const result=await api('/api/books/auto-title-repair/batch',{
+     method:'POST',data:{items:batch.map(row=>({
+      id:row.id,expected_updated_at:row.updated_at,
+      source_file_ids:row.source_file_ids||[]
+     }))}
+    });
+    if(!Array.isArray(result?.results))
+     throw Error('Incomplete automatic repair batch');
+    for(const entry of result.results){
+     const row=all.get(entry.id);if(!row)continue;
+     row.auto_status=entry.status;
+     if(entry.status==='applied'){
+      row.fixed=true;row.checked=false;row.error='';
+      row.proposed_title=entry.title;repaired++;
+     }else if(entry.status==='review'){
+      row.checked=false;row.auto_reason=entry.reason||'Ambiguous title';review++;
+     }else{
+      row.checked=false;row.auto_reason=entry.reason||entry.status;unmatched++;
+     }
+    }
+    autoOffset+=batch.length;
+    if(autoStatus)autoStatus.textContent='Processed '+autoOffset+' of '+candidates.length+
+     ' suspicious titles · '+repaired+' repaired · '+review+' require review · '+
+     unmatched+' unmatched. Undo history is saved.';
+    render();
+    if(autoOffset<candidates.length)
+     await new Promise(resolve=>setTimeout(resolve,1200));
+   }
+   if(autoStatus)autoStatus.textContent+=(autoPauseRequested?
+    ' Paused safely; resume to continue.':
+    ' Repair pass complete. Review unresolved titles below.');
+   if(repaired)await onUpdated();
+  }catch(error){
+   if(autoStatus)autoStatus.textContent='Automatic repair paused safely at '+
+    autoOffset+' records: '+(error.message||'Service unavailable')+
+    '. No unchecked records were skipped; choose Auto-repair to resume.';
+  }finally{autoActive=false;autoPauseRequested=false;controls();render();}
+ });
+
+ reviewFilter?.addEventListener('click',()=>{
+  reviewOnly=!reviewOnly;shown=60;render();
+ });
  scan.addEventListener('click',()=>start(false));
  scanAll.addEventListener('click',()=>start(true));
  save.addEventListener('click',async()=>{
@@ -273,7 +410,7 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  render();
  return {refresh:()=>{if(busy)return;all.clear();cursor='';sourceCursor='';
   bookFinished=false;sourceFinished=false;finished=false;checked=0;
-  sourceChecked=0;shown=60;history.length=0;
+  sourceChecked=0;shown=60;history.length=0;autoOffset=0;autoOrder=null;
   if(isbnStatus)isbnStatus.textContent='No ISBN lookups run yet.';
   render();}};
 }
