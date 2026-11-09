@@ -47,8 +47,16 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
  let progress=readProgress(),candidates=[],seen=new Set(),cursor='',
   busy=false,stop=false,scanned=false,done=false,outcomes=[];
  const say=message=>{status.textContent=message;};
+ const rollover=()=>{
+  if(progress.day!==today()){
+   progress.day=today();
+   progress.todayUsed=0;
+   saveProgress(progress);
+  }
+ };
  const remaining=()=>candidates.filter(x=>x.book_id>progress.lastCompletedId);
  const controls=()=>{
+  rollover();
   scan.disabled=busy;
   apply.disabled=busy||(scanned&&done&&!remaining().length)||
    progress.todayUsed>=MAX_LOOKUPS_PER_DAY;
@@ -207,8 +215,11 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{},
     say('Checked '+checked+' books in this run; '+repairedThisRun+
      ' repaired. Reached the daily source-friendly limit ('+
      MAX_LOOKUPS_PER_DAY+'). Resume tomorrow; progress is saved on this browser.');
-   else if(stop)say('Paused after '+checked+' books; progress is saved. Click Resume to continue.');
-   else say('Checked '+checked+' remaining candidates; '+repairedThisRun+
+   else if(stop){
+    if(!status.textContent.includes('limit reached')&&
+      !status.textContent.includes('request failed'))
+     say('Paused after '+checked+' books; progress is saved. Click Resume to continue.');
+   }else say('Checked '+checked+' remaining candidates; '+repairedThisRun+
     ' repaired. Any unresolved matches remain in the review list.');
   }catch(error){say('Paused safely: '+(error.message||'Unexpected issue')+
    '. Completed changes are saved; resume when ready.');}
