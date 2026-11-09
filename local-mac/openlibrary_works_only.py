@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import sys
 import urllib.request
 from collections import defaultdict
@@ -201,10 +202,48 @@ def match_works_only(catalogue, works_path, authors_path, *, progress=False):
     }
 
 
+
+def save_matched_cache(db_path, report):
+    """Keep only verified library-specific matches in a small local SQLite file."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_path.touch(mode=0o600, exist_ok=True)
+    os.chmod(db_path, 0o600)
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute("""
+          CREATE TABLE IF NOT EXISTS openlibrary_work_matches (
+            book_id TEXT PRIMARY KEY,
+            source_work TEXT NOT NULL,
+            source_title TEXT NOT NULL,
+            source_author TEXT NOT NULL,
+            synopsis TEXT NOT NULL,
+            subjects_json TEXT NOT NULL,
+            cover_id INTEGER,
+            expected_updated_at TEXT NOT NULL
+          )
+        """)
+        with connection:
+            connection.execute("DELETE FROM openlibrary_work_matches")
+            connection.executemany("""
+              INSERT INTO openlibrary_work_matches
+              (book_id,source_work,source_title,source_author,synopsis,
+               subjects_json,cover_id,expected_updated_at)
+              VALUES (?,?,?,?,?,?,?,?)
+            """, [
+                (row["book_id"], row["source_work"], row["source_title"],
+                 row["source_author"], row["synopsis"], json.dumps(row["tags"]),
+                 row["cover_id"], row["expected_updated_at"])
+                for row in report["items"]
+            ])
+    finally:
+        connection.close()
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--catalogue", required=True, type=Path)
     p.add_argument("--output", required=True, type=Path)
+    p.add_argument("--cache-db", type=Path, help="Where to store a small SQLite cache of verified matches")
     p.add_argument("--works", type=Path, help="Path to existing compressed Works dump")
     p.add_argument("--authors", type=Path, help="Path to existing compressed Authors dump")
     p.add_argument("--download", action="store_true", help="Fetch missing Works + Authors only")
@@ -221,11 +260,14 @@ def main(argv=None):
         with os.fdopen(fd, "w", encoding="utf-8") as out:
             json.dump(result, out, ensure_ascii=False, separators=(",", ":"))
         os.chmod(args.output, 0o600)
+        cache_db = args.cache_db or args.output.with_suffix(".sqlite")
+        save_matched_cache(cache_db, result)
     except (OSError, ValueError, EOFError, UnicodeError) as error:
         p.exit(1, f"Offline matching failed safely: {error}\n")
     print(json.dumps(result["counts"], indent=2))
     print("Import verified matches using My Library -> Imports & Undo -> Offline matching:")
     print(args.output)
+    print("Local SQLite matched-metadata cache:", cache_db)
     if result["counts"]["needs_review"]:
         print("Ambiguous titles were held for review; none were auto-applied.")
 
