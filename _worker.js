@@ -14,6 +14,7 @@ import {handleShelfBulkLocationApi} from './shelf-photo-bulk-location-api.mjs';
 import {handleVisualShelvesApi} from './visual-shelves-api.mjs';
 import {handleCollectionHealthApi} from './collection-health-api.mjs';
 import {handleOnlineEnrichApi} from './online-enrich-api.mjs';
+import {handleOfflineBulkApi} from './offline-bulk-api.mjs';
 import {handleExistingCoverRelinkApi} from './existing-cover-relink-api.mjs';
 import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
 import {handleCalibreRepairApi} from './calibre-repair-api.mjs';
@@ -174,7 +175,7 @@ function secureHeaders(response,api=false){
   out.headers.set('referrer-policy','no-referrer');
   out.headers.set('x-frame-options','DENY');
   out.headers.set('permissions-policy','camera=(), microphone=(), geolocation=()');
-  if(!api) out.headers.set('content-security-policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  if(!api) out.headers.set('content-security-policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://covers.openlibrary.org; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   return out;
 }
 function checkWriteOrigin(request){
@@ -283,6 +284,8 @@ async function serveApi(request,env,path){
   if(calibreRepairResponse)return calibreRepairResponse;
   const calibreResponse=await handleCalibreCompareApi(request,db,path);
   if(calibreResponse)return calibreResponse;
+  const offlineBulkResponse=await handleOfflineBulkApi(request,db,env,path);
+  if(offlineBulkResponse)return offlineBulkResponse;
   const onlineEnrichResponse=await handleOnlineEnrichApi(request,db,env,path);
   if(onlineEnrichResponse)return onlineEnrichResponse;
   const existingCoverRelink=await handleExistingCoverRelinkApi(request,db,env,path);
@@ -508,7 +511,14 @@ async function serveApi(request,env,path){
   const imageMatch=/^\/api\/images\/([0-9a-f-]{36})$/.exec(path);
   if(imageMatch&&method==='GET'){
     if(!env.BOOK_FILES) return fail('Private image storage is not configured',503);
-    const image=await getOne(db,'SELECT private_object_key FROM edition_images WHERE id=?',[imageMatch[1]]);
+    const image=await getOne(db,
+      'SELECT private_object_key,image_url FROM edition_images WHERE id=?',[imageMatch[1]]);
+    // Only an Open Library ID-based URL created by the authenticated dump
+    // import may redirect the browser. No user-controlled URL is ever fetched.
+    if(image?.image_url&&/^https:\/\/covers\.openlibrary\.org\/b\/id\/[1-9][0-9]{0,9}-M\.jpg\?default=false$/.test(image.image_url))
+      return new Response(null,{status:302,headers:{
+        location:image.image_url,'cache-control':'private, no-store','referrer-policy':'no-referrer'
+      }});
     if(!image?.private_object_key) return fail('Image not found',404);
     const object=await env.BOOK_FILES.get(image.private_object_key);
     if(!object) return fail('Image not found',404);
