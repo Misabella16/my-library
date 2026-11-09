@@ -10,7 +10,8 @@ const one=(db,sql,args=[])=>db.prepare(sql).bind(...args).first();
 const many=async(db,sql,args=[])=>((await db.prepare(sql).bind(...args).all()).results||[]);
 const clean=(x,max)=>typeof x==='string'?x.trim().slice(0,max):'';
 const validId=x=>typeof x==='string'&&/^[0-9a-f-]{36}$/i.test(x);
-const COVER_CHECK_VERSION=1;
+// EPUB2 XHTML covers are newly recognized; retry older negative checks once.
+const COVER_CHECK_VERSION=2;
 const coverAlreadyChecked=(version,hash,sha)=>version===COVER_CHECK_VERSION&&hash===sha;
 function unpack(value){
  let metadata={};
