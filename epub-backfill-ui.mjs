@@ -101,7 +101,7 @@ export function initEpubBackfill(api){
   pauseButton.disabled=true;
   status.textContent='Pause requested. The current EPUB will finish before stopping.';
  });
- const runRepairs=async(repairEntireCatalogue=false)=>{
+ const runRepairs=async(repairEntireCatalogue=false,coversAndSynopsesOnly=false)=>{
   if(busy)return;
   bulkActive=true;pauseRequested=false;
   busy=true;update();
@@ -120,7 +120,8 @@ export function initEpubBackfill(api){
      // its daily quota halfway through a page, the failed item must be first
      // in the next click, not silently skipped with the rest of that page.
      if(item.synopsis_missing)missingSynopsis++;
-     if(!item.synopsis&&!item.synopsis_recheck&&!item.subjects?.length&&
+     if(!item.synopsis&&!item.synopsis_recheck&&
+       (coversAndSynopsesOnly||!item.subjects?.length)&&
        !item.cover_missing&&!item.cover_unselected){
       unchanged++;
       if(item.synopsis_source_unavailable)noSourceSynopsis++;
@@ -130,7 +131,8 @@ export function initEpubBackfill(api){
      }else{
       try{
        const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
-        file_id:item.file_id,expected_updated_at:item.expected_updated_at
+        file_id:item.file_id,expected_updated_at:item.expected_updated_at,
+        only_cover_synopsis:coversAndSynopsesOnly
        }});
        if(outcome.status==='applied'){
         changes.push(outcome.change_id);applied++;
@@ -195,7 +197,7 @@ export function initEpubBackfill(api){
   if(busy)return;
   bulkCursor='';bulkFinished=false;failedQueue.clear();reportRows=[];
   changes=[];status.textContent='Starting a new saved-EPUB scan of missing covers and descriptions.';
-  update();await runRepairs(true);
+  update();await runRepairs(true,true);
  });
  retryButton?.addEventListener('click',async()=>{
   if(busy||!failedQueue.size)return;
@@ -350,6 +352,7 @@ export function initEpubBackfill(api){
   }finally{busy=false;update();}
  });
  update();
- return {repairAll:()=>runRepairs(true),pause:()=>{if(bulkActive)pauseRequested=true;},
+ return {repairAll:({coversAndSynopsesOnly=false}={})=>
+   runRepairs(true,coversAndSynopsesOnly),pause:()=>{if(bulkActive)pauseRequested=true;},
   status:()=>({complete:bulkFinished,busy})};
 }
