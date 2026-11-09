@@ -80,7 +80,9 @@ async function lookup(db,id,fetcher){
  const exact=docs.filter(d=>verifiedOpenLibraryDoc(book,d,isbn));
  if(exact.length!==1)return {status:'review',
   reason:exact.length?'Multiple possible Open Library matches':'No verified Open Library match',state};
- const doc=exact[0],key=workKey(doc.key),work=await requestData(fetcher,'https://openlibrary.org'+key+'.json');
+ const doc=exact[0],key=workKey(doc.key);
+ await new Promise(resolve=>setTimeout(resolve,1100));
+ const work=await requestData(fetcher,'https://openlibrary.org'+key+'.json');
  if(!work||workKey(work.key)!==key)return {status:'review',reason:'Work record could not be verified',state};
  const summary=description(work.description);
  const subjects=tagList(work.subjects||doc.subject);
@@ -116,7 +118,10 @@ async function apply(db,env,id,expected,fetcher){
  // Do not choose between ambiguous editions or alter special-edition artwork.
  const canCover=!!proposed.cover_id&&!state.hasCover&&(!!chosen||mayCreate)&&!!env.BOOK_FILES;
  let bytes=null;
- if(canCover)try{bytes=await imageBytes(fetcher,proposed.cover_id);}catch{}
+ if(canCover)try{
+  await new Promise(resolve=>setTimeout(resolve,1100));
+  bytes=await imageBytes(fetcher,proposed.cover_id);
+ }catch{}
  if(!synopsis&&!tags.length&&!bytes)return json({status:'no_changes',
   reason:'No new synopsis, tags, or usable cover found'});
  const now=new Date().toISOString(),coverId=bytes?crypto.randomUUID():null,
