@@ -23,7 +23,7 @@ const description=value=>{
 const tagList=input=>(Array.isArray(input)?[...new Set(input.filter(s=>
  typeof s==='string'&&s.trim().length>=3&&s.trim().length<=75)
   .map(s=>s.trim()))].slice(0,8):[]);
-const allowedWork=key=>/^\/works\/OL\d+W$/.test(key||'');
+const workKey=key=>/^(?:\/works\/)?OL\d+W$/.test(key||'')?('/works/'+String(key).replace(/^\/works\//,'')):'';
 const read=async(db,sql,...args)=>db.prepare(sql).bind(...args).first();
 const rows=async(db,sql,...args)=>(await db.prepare(sql).bind(...args).all()).results||[];
 const requestData=async(fetcher,url)=>{
@@ -57,7 +57,7 @@ async function record(db,id){
  return {book,editions:ed,isbn:isbnSet.length===1?isbnSet[0]:'',hasCover,hasTags};
 }
 export function verifiedOpenLibraryDoc(book,doc,isbn=''){
- if(!doc||!allowedWork(doc.key)||!validAuthor(book.author))return false;
+ if(!doc||!workKey(doc.key)||!validAuthor(book.author))return false;
  const authors=Array.isArray(doc.author_name)?doc.author_name:[];
  if(!authors.some(a=>normalizeAuthor(a)===normalizeAuthor(book.author)))return false;
  const exactTitle=norm(doc.title)===norm(book.title)&&!machineTitleReason(book.title);
@@ -80,14 +80,14 @@ async function lookup(db,id,fetcher){
  const exact=docs.filter(d=>verifiedOpenLibraryDoc(book,d,isbn));
  if(exact.length!==1)return {status:'review',
   reason:exact.length?'Multiple possible Open Library matches':'No verified Open Library match',state};
- const doc=exact[0],work=await requestData(fetcher,'https://openlibrary.org'+doc.key+'.json');
- if(!work||work.key!==doc.key)return {status:'review',reason:'Work record could not be verified',state};
+ const doc=exact[0],key=workKey(doc.key),work=await requestData(fetcher,'https://openlibrary.org'+key+'.json');
+ if(!work||workKey(work.key)!==key)return {status:'review',reason:'Work record could not be verified',state};
  const summary=description(work.description);
  const subjects=tagList(work.subjects||doc.subject);
  const coverId=(Array.isArray(work.covers)?work.covers.find(Number.isSafeInteger):null)||
   (Number.isSafeInteger(doc.cover_i)?doc.cover_i:null);
  const eligibleCover=!state.hasCover&&Number.isSafeInteger(coverId)&&coverId>0;
- return {status:'verified',state,source:'Open Library',source_url:'https://openlibrary.org'+doc.key,
+ return {status:'verified',state,source:'Open Library',source_url:'https://openlibrary.org'+key,
   proposed:{synopsis:!text(book.synopsis)?summary:'',tags:!state.hasTags?subjects:[],
    cover_id:eligibleCover?coverId:null},
   match:isbn?'isbn_and_author':'title_and_author'};
