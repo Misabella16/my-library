@@ -142,10 +142,9 @@ async function undo(db,changeId){
    statements.push(db.prepare('DELETE FROM editions WHERE id=? AND book_id=? '+
     'AND NOT EXISTS(SELECT 1 FROM edition_images WHERE edition_id=?) '+
     'AND NOT EXISTS(SELECT 1 FROM copies WHERE edition_id=?) '+
-    'AND NOT EXISTS(SELECT 1 FROM epub_files WHERE edition_id=?) '+
-    'AND NOT EXISTS(SELECT 1 FROM digital_files WHERE edition_id=?)')
+    'AND NOT EXISTS(SELECT 1 FROM epub_files WHERE edition_id=?)')
     .bind(after.edition_id,log.entity_id,after.edition_id,after.edition_id,
-     after.edition_id,after.edition_id));
+     after.edition_id));
  }
  statements.push(db.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=? '+
   'AND updated_at=? AND synopsis=?')
