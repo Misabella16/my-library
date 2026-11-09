@@ -58,6 +58,10 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
   metrics.append(el('strong',rows.length+' books checked'));
   for(const [key,label] of HEALTH_FLAGS)
    metrics.append(el('span',label+': '+counts[key],'health-metric'));
+  // Every stored EPUB references an edition. If there is no edition, the
+  // saved-EPUB repair cannot possibly supply a cover for that book.
+  const noSource=rows.filter(row=>row.missing_cover===1&&row.missing_editions===1).length;
+  metrics.append(el('span','Covers with no edition to repair: '+noSource,'health-metric'));
   results.replaceChildren();
   const visible=filtered();
   if(!visible.length)results.append(el('p',
@@ -69,6 +73,8 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
    details.append(el('strong',row.title||'Untitled'),el('p',row.author||'Unknown author','muted'));
    const issues=healthProblems(row);
    details.append(el('p',issues.length?issues.join(' · '):'No issues found','muted'));
+   if(row.missing_cover===1&&row.missing_editions===1)
+    details.append(el('p','No linked edition or EPUB. Stored-EPUB repair cannot fix this cover.','muted'));
    const open=el('button','Open book','btn subtle mini');open.type='button';
    open.addEventListener('click',async()=>{
     open.disabled=true;
@@ -122,7 +128,7 @@ export function initCollectionHealth(api,{onSelectBook=async()=>{}}={}){
     if(pages%5===0||done){
      say('Checked '+rows.length.toLocaleString()+' books'+
       (done?' · Entire active catalogue scanned.':' · Scanning automatically…')+
-      ' This report is read-only. Possible duplicates require review.');
+      ' This is a read-only snapshot. Rescan after EPUB repairs to update counts.');
      render();
      // Keep the browser usable during long scans and let Pause respond.
      await new Promise(resolve=>setTimeout(resolve,0));
