@@ -148,7 +148,7 @@ test('Comparison is wired into authenticated My Library and does not POST any Ca
  const ui=readFileSync(new URL('../calibre-compare-ui.mjs',import.meta.url),'utf8');
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
  assert.match(worker,/handleCalibreCompareApi\(request,db,path\)/);
- assert.match(library,/initCalibreCompare\(api\)/);
+ assert.match(library,/initCalibreCompare\(api(?:,|\))/);
  assert.match(html,/id="calibre-compare-run"/);
  assert.match(ui,/selected\.text\(\)/);
  assert.match(ui,/\/api\/calibre\/catalogue/);
