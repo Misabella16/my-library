@@ -24,7 +24,7 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  const all=new Map(),history=[];
  let cursor='',bookFinished=false,sourceCursor='',sourceFinished=false;
  let finished=false,busy=false,checked=0,sourceChecked=0,shown=60;
- let autoActive=false,autoPauseRequested=false,autoOffset=0;
+ let autoActive=false,autoPauseRequested=false,autoOffset=0,autoOrder=null;
  const say=value=>{status.textContent=value;};
  const pending=()=>[...all.values()].filter(row=>row.checked&&!row.fixed);
  function controls(){
@@ -295,8 +295,9 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
     if(autoStatus)autoStatus.textContent='The library scan stopped. Click Auto-repair again to resume.';
     return;
    }
-   const candidates=[...all.values()].filter(row=>!row.fixed&&
-    (row.machine_reason||row.proposed_title));
+   if(!autoOrder)autoOrder=[...all.values()].filter(row=>!row.fixed&&
+    (row.machine_reason||row.proposed_title)).map(row=>row.id);
+   const candidates=autoOrder.map(id=>all.get(id)).filter(Boolean);
    // Keep a single cursor in the open tab. All accepted repairs are also
    // recorded in the database for Undo after a browser refresh.
    let repaired=0,review=0,unmatched=0;
@@ -401,7 +402,7 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  render();
  return {refresh:()=>{if(busy)return;all.clear();cursor='';sourceCursor='';
   bookFinished=false;sourceFinished=false;finished=false;checked=0;
-  sourceChecked=0;shown=60;history.length=0;autoOffset=0;
+  sourceChecked=0;shown=60;history.length=0;autoOffset=0;autoOrder=null;
   if(isbnStatus)isbnStatus.textContent='No ISBN lookups run yet.';
   render();}};
 }
