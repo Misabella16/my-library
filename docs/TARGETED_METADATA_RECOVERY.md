@@ -52,3 +52,28 @@ They are **not required** for normal targeted repair.
 
 Open Library developer guidance:
 https://openlibrary.org/developers/api
+
+## Faster source-friendly lookup (2026-11)
+
+- The online repair now sends at most **four selected book IDs per request**.
+  Multiple books with distinct, usable ISBNs are resolved by one
+  `search.json?q=isbn:(... OR ...)` call, supported by the official Open
+  Library Search API. Title-only entries use the existing individual query.
+- Every returned document must still have the requested ISBN **and** the
+  correct author for grouped lookups; the original per-book record is
+  independently checked before a conditional D1 update.
+- Public search and work responses are cached in Cloudflare's edge cache for
+  1 day and 7 days respectively, where the cache API is available. Cached
+  source JSON contains no My Library notes, reviews or EPUB contents.
+  Cache availability is best-effort: different Cloudflare locations can miss
+  independently, and evicted entries may be refetched.
+- On source errors, the batch returns already completed result statuses
+  without falsely advancing the browser's last-completed cursor. Previously
+  applied changes remain protected by their existing Undo logs.
+- The daily budget remains **40 book entries per UTC day** and is not
+  enlarged or reset by restarting a scan. It is an application precaution,
+  **not** an official Open Library daily quota. This is targeted maintenance,
+  not a method to harvest thousands of catalogue records via the API.
+- Multiple editions belonging to one existing book entry are already matched
+  as one book; duplicate active title/author identities are constrained by the
+  book database. We do not merge ambiguous works or special editions.
