@@ -1,38 +1,71 @@
-// Owner-triggered, small and paced Open Library matching. Designed for
-// missing fields after local Calibre/EPUB and Goodreads imports, not bulk API
-// harvesting. Never overwrites the user's own metadata or existing artwork.
+// Targeted, owner-only recovery. One click: saved-file recovery, keyset scan,
+// then a bounded and paced daily batch of verified Open Library lookups.
+// No catalogue dumps and no mass external API harvesting.
 const el=(tag,label,cls)=>{
  const n=document.createElement(tag);
  if(label!==undefined)n.textContent=String(label);
  if(cls)n.className=cls;
  return n;
 };
-export function initOnlineEnrich(api,{onUpdated=async()=>{}}={}){
+const MAX_LOOKUPS_PER_DAY=40;
+const CHECKPOINT_KEY='my-library-targeted-repair-progress-v1';
+const today=()=>new Date().toISOString().slice(0,10);
+const emptyProgress=()=>({lastCompletedId:'',day:today(),todayUsed:0,
+ saved:0,synopses:0,covers:0,tags:0,review:0,no_changes:0,
+ savedFirstDone:false});
+function readProgress(){
+ try{
+  const raw=JSON.parse(localStorage.getItem(CHECKPOINT_KEY)||'null');
+  if(!raw||typeof raw!=='object')return emptyProgress();
+  const result={...emptyProgress()};
+  if(typeof raw.lastCompletedId==='string'&&
+    /^[0-9a-f-]{36}$/i.test(raw.lastCompletedId))
+   result.lastCompletedId=raw.lastCompletedId;
+  for(const k of ['saved','synopses','covers','tags','review','no_changes']){
+   if(Number.isSafeInteger(raw[k])&&raw[k]>=0)result[k]=raw[k];
+  }
+  result.savedFirstDone=raw.savedFirstDone===true;
+  if(raw.day===today()&&Number.isSafeInteger(raw.todayUsed))
+   result.todayUsed=Math.max(0,Math.min(MAX_LOOKUPS_PER_DAY,raw.todayUsed));
+  return result;
+ }catch{return emptyProgress();}
+}
+function saveProgress(progress){
+ // Store only a non-content book-ID cursor and counters. Never cache private
+ // titles, notes, summaries, EPUB metadata, account credentials or book lists.
+ try{localStorage.setItem(CHECKPOINT_KEY,JSON.stringify(progress));}catch{}
+}
+export function initOnlineEnrich(api,{onUpdated=async()=>{},
+ prepareSaved=async()=>({complete:true})}={}){
  const root=document.getElementById('online-enrich');
  if(!root)return null;
  const $=name=>root.querySelector('#online-'+name);
  const scan=$('scan'),apply=$('apply'),pause=$('pause'),
-  status=$('status'),summary=$('summary'),results=$('results'),
+  reset=$('reset'),status=$('status'),summary=$('summary'),results=$('results'),
   historyBtn=$('history-btn'),historyList=$('history-list');
- if([scan,apply,pause,status,summary,results,historyBtn,historyList].some(x=>!x))return null;
- let candidates=[],seen=new Set(),cursor='',scanned=false,busy=false,
-  stop=false,done=false,worked=new Set(),outcomes=[],counts={
-   saved:0,synopses:0,tags:0,covers:0,review:0,no_changes:0
-  };
+ if([scan,apply,pause,reset,status,summary,results,historyBtn,historyList].some(x=>!x))return null;
+ let progress=readProgress(),candidates=[],seen=new Set(),cursor='',
+  busy=false,stop=false,scanned=false,done=false,outcomes=[];
  const say=message=>{status.textContent=message;};
+ const remaining=()=>candidates.filter(x=>x.book_id>progress.lastCompletedId);
  const controls=()=>{
   scan.disabled=busy;
-  apply.disabled=busy||!scanned||!candidates.some(x=>!worked.has(x.book_id));
-  apply.textContent=candidates.some(x=>!worked.has(x.book_id))?
-   'Repair next verified matches online':'All checked; rescan if needed';
+  apply.disabled=busy||(scanned&&done&&!remaining().length)||
+   progress.todayUsed>=MAX_LOOKUPS_PER_DAY;
   pause.disabled=!busy||stop;
+  reset.disabled=busy;
+  apply.textContent=busy?'Repairing missing metadata…':
+   progress.todayUsed>=MAX_LOOKUPS_PER_DAY?
+   'Daily online limit reached':progress.lastCompletedId?
+   'Resume targeted repair':'Repair missing data (no downloads)';
  };
  const refresh=()=>{
-  summary.textContent=seen.size.toLocaleString()+' library records scanned · '+
-   candidates.length.toLocaleString()+' need missing fields · '+
-   worked.size+' looked up · '+counts.saved+' repaired · '+
-   counts.synopses+' summaries · '+counts.covers+' covers · '+
-   counts.tags+' tags · '+counts.review+' need review';
+  summary.textContent=seen.size.toLocaleString()+' books scanned · '+
+   candidates.length.toLocaleString()+' with missing fields · '+
+   progress.saved+' repaired · '+progress.synopses+' synopses · '+
+   progress.covers+' covers · '+progress.tags+' tags · '+progress.review+
+   ' review · '+progress.todayUsed+'/'+MAX_LOOKUPS_PER_DAY+
+   ' online checks today';
   results.replaceChildren();
   for(const x of outcomes.slice(-40).reverse()){
    const card=el('article',undefined,'health-result');
@@ -46,115 +79,139 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{}}={}){
   outcomes.push({title:row.title,message});
   if(outcomes.length>100)outcomes=outcomes.slice(-100);
  };
+ async function scanLibrary(){
+  // Restart the read-only scan to incorporate EPUB and saved-cover repairs.
+  candidates=[];seen=new Set();cursor='';done=false;scanned=false;
+  let pages=0;
+  while(!done&&!stop){
+   const params=new URLSearchParams();
+   if(cursor)params.set('cursor',cursor);
+   const data=await api('/api/catalogue/health'+(params.size?'?'+params:''));
+   if(!Array.isArray(data?.books))throw Error('Invalid catalogue page');
+   for(const row of data.books){
+    if(seen.has(row.book_id))continue;
+    seen.add(row.book_id);
+    if(row.missing_synopsis===1||row.missing_cover===1||row.missing_tags===1)
+     candidates.push(row);
+   }
+   pages++;
+   done=!data.has_more;
+   if(!done){
+    if(!data.books.length||!data.next_cursor||data.next_cursor===cursor)
+     throw Error('Catalogue pagination could not advance');
+    cursor=data.next_cursor;
+   }
+   if(pages%5===0||done){
+    say('Scanned '+seen.size.toLocaleString()+' books'+
+     (done?'; ready to repair verified missing details.':'…'));
+    refresh();
+    await new Promise(resolve=>setTimeout(resolve,0));
+   }
+  }
+  scanned=done;
+  return done;
+ }
  scan.addEventListener('click',async()=>{
   if(busy)return;
-  if(done){
-   candidates=[];seen.clear();cursor='';done=false;scanned=false;
-   worked.clear();outcomes=[];counts={
-    saved:0,synopses:0,tags:0,covers:0,review:0,no_changes:0
-   };
-  }
   busy=true;stop=false;controls();
-  let pages=0;
   try{
-   while(!done&&!stop){
-    const params=new URLSearchParams();
-    if(cursor)params.set('cursor',cursor);
-    const data=await api('/api/catalogue/health'+(params.size?'?'+params:''));
-    if(!Array.isArray(data?.books))throw Error('Invalid catalogue page');
-    for(const row of data.books){
-     if(seen.has(row.book_id))continue;
-     seen.add(row.book_id);
-     if(row.missing_synopsis===1||row.missing_cover===1||row.missing_tags===1)
-      candidates.push(row);
-    }
-    pages++;
-    done=!data.has_more;
-    if(!done){
-     if(!data.books.length||!data.next_cursor||data.next_cursor===cursor)
-      throw Error('Catalogue pagination could not advance');
-     cursor=data.next_cursor;
-    }
-    if(pages%5===0||done){
-     scanned=done;
-     say('Scanned '+seen.size.toLocaleString()+' books'+
-      (done?'. Select Repair to look up verified gaps in small, source-friendly groups.':
-       '. Reading the next catalogue page…'));
-     refresh();
-     await new Promise(resolve=>setTimeout(resolve,0));
-    }
-   }
-   if(stop) say('Scan paused after '+seen.size+' books. Click Resume scan to continue.');
-  }catch(error){say('Stopped safely: '+(error.message||'Unknown error')+
-   '. Previously found candidates remain available; resume when ready.');}
+   const complete=await scanLibrary();
+   say(complete?'Found '+candidates.length.toLocaleString()+
+    ' books with gaps. The repair button will use saved EPUBs first, then a small online batch.':
+    'Scan paused; no changes made. Scan again to restart.');
+  }catch(error){say('Scan stopped safely: '+(error.message||'Request failed'));}
   finally{busy=false;stop=false;refresh();}
  });
- pause.addEventListener('click',()=>{stop=true;pause.disabled=true;
-  say('Pause requested. The current lookup or catalogue page will finish first.');});
+ pause.addEventListener('click',()=>{stop=true;controls();
+  say('Pause requested. The current safe repair or page will finish first.');});
+ reset.addEventListener('click',()=>{
+  if(busy)return;
+  progress=emptyProgress();saveProgress(progress);
+  candidates=[];seen.clear();cursor='';scanned=false;done=false;outcomes=[];
+  say('Progress reset. Your books and completed repairs are untouched. The next run rescreens gaps.');
+  refresh();
+ });
  apply.addEventListener('click',async()=>{
-  if(busy||!scanned)return;
+  if(busy||progress.todayUsed>=MAX_LOOKUPS_PER_DAY)return;
   busy=true;stop=false;controls();
-  // A deliberate per-action limit protects the public API. A source data dump
-  // or personal Calibre is the correct route for thousands of books.
-  const batch=candidates.filter(x=>!worked.has(x.book_id)).slice(0,12);
-  let savedInRun=0,processed=0;
+  let repairedThisRun=0,checked=0;
   try{
-   for(const row of batch){
-    if(stop)break;
+   if(!progress.savedFirstDone){
+    say('First recovering existing EPUB summaries, tags and saved cover images…');
+    const saved=await prepareSaved();
+    if(!saved?.complete){
+     say('Saved-file recovery paused. Resume it first; online checks have not started.');
+     return;
+    }
+    progress.savedFirstDone=true;saveProgress(progress);
+    // Saved-file operations may have filled missing fields.
+    scanned=false;
+   }
+   if(!scanned){
+    say('Scanning your catalogue for remaining gaps…');
+    if(!await scanLibrary()){
+     say('Catalogue scan paused. Click Resume targeted repair to continue.');
+     return;
+    }
+   }
+   const pending=remaining();
+   if(!pending.length){
+    say('No unchecked missing-field entries remain after the current scan. '+
+     'Books with unavailable or ambiguous source records can be reviewed separately.');
+    return;
+   }
+   for(const row of pending){
+    if(stop||progress.todayUsed>=MAX_LOOKUPS_PER_DAY)break;
+    say('Checking '+(checked+1)+' of '+Math.min(pending.length,
+     MAX_LOOKUPS_PER_DAY-progress.todayUsed)+': '+row.title+
+     '. Recovering only verified missing fields…');
+    let result;
     try{
-     say('Checking '+(processed+1)+' of '+batch.length+': '+row.title+'…');
-     const preview=await api('/api/online-enrich/preview?book_id='+encodeURIComponent(row.book_id));
-     if(preview.status!=='verified'){
-      worked.add(row.book_id);counts.review++;
-      push(row,preview.reason||'No confidently verified match found');
-     }else if(!preview.proposed?.synopsis&&!preview.proposed?.tags?.length&&
-       !preview.proposed?.cover_id){
-      worked.add(row.book_id);counts.no_changes++;
-      push(row,'Verified, but no usable missing metadata was available');
-     }else{
-      const applied=await api('/api/online-enrich/repair',{method:'POST',data:{
-       book_id:row.book_id,expected_updated_at:preview.book.updated_at
-      }});
-      worked.add(row.book_id);
-      if(applied.status==='applied'){
-       savedInRun++;counts.saved++;
-       counts.synopses+=applied.synopsis_filled?1:0;
-       counts.covers+=applied.cover_saved?1:0;
-       counts.tags+=Number(applied.tags_added||0);
-       push(row,'Filled '+[
-        applied.synopsis_filled?'synopsis':null,
-        applied.cover_saved?'cover':null,
-        applied.tags_added?applied.tags_added+' tags':null
-       ].filter(Boolean).join(', ')+' from a verified Open Library match');
-      }else{
-       counts.no_changes++;
-       push(row,applied.reason||'No missing information was changed');
-      }
-     }
+     // One server call performs both source verification and guarded write.
+     result=await api('/api/online-enrich/repair-auto',{
+      method:'POST',data:{book_id:row.book_id}
+     });
     }catch(error){
-     const quota=error.status===429||error.status===503||
+     const limited=error.status===429||error.status===503||
       ['database_read_quota','database_write_quota','database_limit_reached'].includes(
        error.payload?.code);
-     push(row,'Could not complete: '+(error.message||'Request failed'));
-     if(quota){
-      say('Source or database limit reached; saved changes are preserved. Resume later.');
-      stop=true;
-     }else{
-      worked.add(row.book_id);counts.review++;
-     }
+     say((limited?'Source or database limit reached':'The request failed')+
+      '; no unfinished book was marked completed. Resume later. '+(error.message||''));
+     stop=true;break;
     }
-    processed++;
-    refresh();
+    checked++;progress.todayUsed++;
+    progress.lastCompletedId=row.book_id;
+    if(result.status==='applied'){
+     repairedThisRun++;progress.saved++;
+     progress.synopses+=result.synopsis_filled?1:0;
+     progress.covers+=result.cover_saved?1:0;
+     progress.tags+=Number(result.tags_added||0);
+     push(row,'Repaired '+[
+      result.synopsis_filled?'synopsis':null,
+      result.cover_saved?'cover':null,
+      result.tags_added?result.tags_added+' tags':null
+     ].filter(Boolean).join(', ')+' from verified Open Library data');
+    }else if(result.status==='review'){
+     progress.review++;push(row,result.reason||'Needs manual review');
+    }else{
+     progress.no_changes++;
+     push(row,result.reason||'No usable missing metadata was available');
+    }
+    saveProgress(progress);refresh();
     if(stop)break;
-    // Metadata lookup has its own pacing; this further separates owner actions.
-    await new Promise(resolve=>setTimeout(resolve,1400));
+    // Keep client-side requests separated even if source lookup is fast.
+    await new Promise(resolve=>setTimeout(resolve,2300));
    }
-   if(savedInRun)await onUpdated();
-   if(!stop) say('Checked '+processed+' books, saved '+savedInRun+
-    ' verified repairs. Choose Repair again for the next source-friendly group. '+
-    'Ambiguous titles, missing source data, and existing values remain untouched.');
-  }catch(e){say('Stopped after '+processed+' books: '+(e.message||'Unexpected issue')+
-   '. No completed changes were reversed.');}
+   if(repairedThisRun)await onUpdated();
+   if(progress.todayUsed>=MAX_LOOKUPS_PER_DAY)
+    say('Checked '+checked+' books in this run; '+repairedThisRun+
+     ' repaired. Reached the daily source-friendly limit ('+
+     MAX_LOOKUPS_PER_DAY+'). Resume tomorrow; progress is saved on this browser.');
+   else if(stop)say('Paused after '+checked+' books; progress is saved. Click Resume to continue.');
+   else say('Checked '+checked+' remaining candidates; '+repairedThisRun+
+    ' repaired. Any unresolved matches remain in the review list.');
+  }catch(error){say('Paused safely: '+(error.message||'Unexpected issue')+
+   '. Completed changes are saved; resume when ready.');}
   finally{busy=false;stop=false;refresh();}
  });
  const readHistory=async()=>{
@@ -188,6 +245,8 @@ export function initOnlineEnrich(api,{onUpdated=async()=>{}}={}){
   try{await readHistory();}catch(e){say('Could not load history: '+e.message);}
   finally{historyBtn.disabled=false;}
  });
+
  refresh();
- return {getState:()=>({scanned,done,candidates:candidates.length,checked:worked.size,counts})};
+ return {getState:()=>({scanned,done,candidates:candidates.length,
+  checked:progress.todayUsed,counts:{...progress}})};
 }
