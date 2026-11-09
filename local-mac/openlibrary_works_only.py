@@ -239,6 +239,69 @@ def save_matched_cache(db_path, report):
         connection.close()
 
 
+
+def report_from_cache(catalogue, db_path):
+    """Recreate proposals from the small matched subset, without rescanning dumps.
+
+    This is safe only for books with the same verified title and author.
+    Any newly imported or renamed books will require a fresh Works pass.
+    """
+    if not db_path.is_file():
+        raise ValueError(f"SQLite cache not found: {db_path}")
+    books = read_catalogue(catalogue)
+    with sqlite3.connect(db_path) as db:
+        saved = {r[0]: r for r in db.execute("""
+          SELECT book_id,source_work,source_title,source_author,synopsis,
+                 subjects_json,cover_id FROM openlibrary_work_matches
+        """)}
+    matches, missing = [], []
+    for book in books:
+        record = saved.get(book["id"])
+        if not record or (normalize(record[2]) != book["title_key"]
+                         or normalize(record[3]) != book["author_key"]
+                         or not WORK_KEY_RE.fullmatch(record[1])):
+            missing.append({"book_id": book["id"], "title": book["title"],
+                            "reason": "not_in_verified_local_cache"})
+            continue
+        tags = json.loads(record[5]) if book["needs_tags"] else []
+        synopsis = record[4] if book["needs_synopsis"] else ""
+        cover = record[6] if book["needs_cover"] else None
+        if not synopsis and not tags and not cover:
+            missing.append({"book_id": book["id"], "title": book["title"],
+                            "reason": "no_missing_metadata_in_local_cache"})
+            continue
+        matches.append({
+            "book_id": book["id"],
+            "expected_updated_at": book["updated_at"],
+            "title": book["title"],
+            "author": book["author"],
+            "source_title": record[2],
+            "source_author": record[3],
+            "source_work": record[1],
+            "source_edition": "",
+            "match_type": "title_author",
+            "matched_isbn": "",
+            "synopsis": synopsis,
+            "tags": tags,
+            "cover_id": cover,
+        })
+    return {
+        "format": "my-library-openlibrary-matches-v1",
+        "source": "Verified local SQLite Open Library works cache",
+        "counts": {
+            "works_scanned": 0,
+            "authors_scanned": 0,
+            "books_needing_data": len(books),
+            "verified_matches": len(matches),
+            "needs_review": 0,
+            "unmatched": len(missing),
+        },
+        "items": matches,
+        "needs_review": [],
+        "unmatched": missing[:2000],
+    }
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--catalogue", required=True, type=Path)
@@ -246,22 +309,29 @@ def main(argv=None):
     p.add_argument("--cache-db", type=Path, help="Where to store a small SQLite cache of verified matches")
     p.add_argument("--works", type=Path, help="Path to existing compressed Works dump")
     p.add_argument("--authors", type=Path, help="Path to existing compressed Authors dump")
+    p.add_argument("--from-cache", action="store_true", help="Use a prior verified SQLite cache without scanning dumps")
     p.add_argument("--download", action="store_true", help="Fetch missing Works + Authors only")
     p.add_argument("--data-dir", type=Path, default=Path.home() / "Downloads" / "OpenLibraryDumps")
     args = p.parse_args(argv)
     if not args.catalogue.is_file():
         p.error(f"Catalogue not found: {args.catalogue}")
     try:
-        paths = required_dumps(args)
-        result = match_works_only(args.catalogue, paths["works"], paths["authors"], progress=True)
+        cache_db = args.cache_db or args.output.with_suffix(".sqlite")
+        if args.from_cache:
+            if args.download or args.works or args.authors:
+                raise ValueError("--from-cache cannot be combined with dump arguments")
+            result = report_from_cache(args.catalogue, cache_db)
+        else:
+            paths = required_dumps(args)
+            result = match_works_only(args.catalogue, paths["works"], paths["authors"], progress=True)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
         fd = os.open(args.output, flags, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as out:
             json.dump(result, out, ensure_ascii=False, separators=(",", ":"))
         os.chmod(args.output, 0o600)
-        cache_db = args.cache_db or args.output.with_suffix(".sqlite")
-        save_matched_cache(cache_db, result)
+        if not args.from_cache:
+            save_matched_cache(cache_db, result)
     except (OSError, ValueError, EOFError, UnicodeError) as error:
         p.exit(1, f"Offline matching failed safely: {error}\n")
     print(json.dumps(result["counts"], indent=2))
