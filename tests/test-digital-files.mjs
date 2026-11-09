@@ -179,6 +179,18 @@ test('Title only and wrong author cannot hijack an existing book',async()=>{
   assert.equal(num(f.sqlite,'digital_files'),0);
  }finally{f.close();}
 });
+test('Unknown-author Calibre entries require review instead of creating anonymous duplicates',async()=>{
+ const f=fixture();try{
+  const bytes=pdf(),sha=await hash(bytes);
+  const preview=await f.call('preview',{method:'POST',body:JSON.stringify({items:[
+   {filename:'unidentified.pdf',size:bytes.length,sha256:sha,
+    title:'Unidentified Novel',author:'Unknown'}
+  ]})});
+  assert.equal((await preview.json()).results[0].status,'needs_review');
+  assert.equal(num(f.sqlite,'books'),0);
+  assert.equal(f.objects.size,0);
+ }finally{f.close();}
+});
 test('Removing a digital file is reversible without deleting the stored original',async()=>{
  const f=fixture();try{
   const first=await (await f.upload('book.pdf',pdf())).json();
