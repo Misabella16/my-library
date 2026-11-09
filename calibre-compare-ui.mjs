@@ -106,6 +106,19 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onUpdated=async()=>
    'A book marked unmatched could still be an uncertain duplicate.');
   update();
  };
+ // A selected file/folder must enable Compare. Existing comparison results
+ // become stale when the source changes, so never offer repair until rescanned.
+ const changed=()=>{
+  if(busy||saving)return;
+  comp=null;folderData=null;saveOrder=null;saveOffset=0;visible=80;
+  filter.value='all';metrics.replaceChildren();results.replaceChildren();
+  if(repairStatus)repairStatus.textContent='New Calibre source selected. Compare again before repairing.';
+  say('Calibre source selected. Choose Compare entire libraries.');
+  update();
+ };
+ file.addEventListener('change',changed);
+ folder?.addEventListener('change',changed);
+
  const fetchCatalogue=async type=>{
   let cursor='',seen=new Set(),out=[],pages=0;
   while(!stop){
