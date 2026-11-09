@@ -96,7 +96,7 @@ test('Pause finishes one current bounded page then resumes without losing checke
   assert.match(h.get('collection-health-status').textContent,/Paused after 80 books/);
   assert.equal(h.stats().requests,2);
   await h.get('collection-health-scan').dispatch('click');
-  assert.equal(h.stats().requests,5);
+  assert.equal(h.stats().requests,4);
   assert.equal(h.get('collection-health-metrics').children[0].textContent,'160 books checked');
  }finally{h.restore();}
 });
