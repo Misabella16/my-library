@@ -571,7 +571,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       prepareSaved:async()=>{
         if(!storedEpubRepair?.repairAll||!savedCoverRepair?.runAll)
           throw Error('Saved EPUB and cover recovery is unavailable');
-        const epub=await storedEpubRepair.repairAll();
+        const epub=await storedEpubRepair.repairAll({coversAndSynopsesOnly:true});
         if(!epub?.complete)return {complete:false};
         const cover=await savedCoverRepair.runAll();
         if(cover?.complete)await refreshCurrent();
