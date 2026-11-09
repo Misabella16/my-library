@@ -52,7 +52,7 @@ function fixture(){
  }};
  const post=(path,body,contentType)=>handleEpubApi(new Request('https://my-library.example'+path,{
   method:'POST',body,headers:contentType?{'content-type':contentType}:{}
- }),db,env,path);
+ }),db,env,new URL('https://my-library.example'+path).pathname);
  return {sqlite,db,env,objects,sessions,post,close:()=>sqlite.close()};
 }
 const hex=bytes=>Array.from(bytes,v=>v.toString(16).padStart(2,'0')).join('');
