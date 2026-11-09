@@ -498,10 +498,10 @@
         <p class="small-status" id="epub-title-auto-status" role="status" aria-live="polite">The automatic repair checks verified ISBN and saved EPUB matches, preserves edits, and leaves uncertain books for review. Undo is saved permanently.</p>
         <div id="epub-title-auto-history-list" class="epub-preview-list" aria-live="polite"></div>
         <div class="epub-preview-list" id="epub-title-results" aria-live="polite"></div>
-      </section></details><details class="imports-disclosure"><summary>Offline Open Library snapshot matching (optional)</summary><section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
+      </section></details><details class="imports-disclosure"><summary>Local-first Open Library Works repair (no Editions download)</summary><section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
       <p class="section-kicker">✧ OPTIONAL · ADVANCED</p>
-      <h2 id="offline-bulk-heading">Import matches from an existing Open Library snapshot</h2>
-      <p>Use a locally downloaded Open Library data snapshot to match your entire collection by ISBN, title and author. This optional tool is for people who already use large offline snapshots. The main repair above needs no snapshot. The Mac matcher never uploads your catalogue to Open Library. Only verified, missing-field changes are sent back to your private site.</p>
+      <h2 id="offline-bulk-heading">Repair missing metadata locally using Open Library Works</h2>
+      <p>When Cloudflare D1 is busy or online checks are slow, use the Works + Authors dumps locally to match your whole collection by verified title and author. You do <strong>not</strong> need the large Editions dump. Local matching uses no D1 reads; only safe missing-field proposals are uploaded back to this private site. Existing covers, notes and special editions stay protected.</p>
       <div class="collection-health-actions">
         <button class="btn subtle" id="offline-export" type="button">1. Export my full library catalogue (JSON)</button>
         <label class="goodreads-file-label" for="offline-file">3. Choose offline matches JSON
@@ -511,7 +511,7 @@
         <button class="btn subtle" id="offline-pause" type="button" disabled>Pause</button>
         <button class="btn subtle" id="offline-history" type="button">Repair history &amp; Undo</button>
       </div>
-      <p class="muted">2. On your Mac, download the official Open Library editions, works and authors compressed dumps (openlibrary.org/developers/dumps), and run the <code>openlibrary_dump_match.py</code> helper in the My Library GitHub repository. It reads those large files directly from their compressed form. You'll get a small <code>my-library-matches.json</code> file to choose in Step 3.</p>
+      <p class="muted">2. On your Mac, run <code>python3 local-mac/openlibrary_works_only.py --catalogue ~/Downloads/my-library-catalogue.json --download --output ~/Downloads/my-library-matches.json</code> from the My Library repository folder. This downloads or reuses only <strong>Works + Authors</strong>, streams the compressed files, and saves a small SQLite matched-metadata cache locally. If you already have the dumps, pass <code>--works PATH --authors PATH</code> instead of downloading. Choose the output JSON in Step 3. Read <strong>docs/OPENLIBRARY_WORKS_ONLY.md</strong> in GitHub for the complete guide.</p>
       <p class="muted">Large source downloads can be many gigabytes. The processing may take considerable time, so use a drive with ample free space and avoid simultaneously overloading your separate Fic Annex indexing drive.</p>
       <p class="small-status" id="offline-status" role="status" aria-live="polite">Export the catalogue first. Nothing in your library will be modified until you select Apply ALL.</p>
       <p class="small-status" id="offline-metrics" aria-live="polite"></p>
