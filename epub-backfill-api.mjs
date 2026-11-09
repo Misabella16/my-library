@@ -167,7 +167,8 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
   let description=!row.synopsis?.trim()?cached.synopsis:'';
   const existing=await many(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id WHERE bt.book_id=?',[row.book_id]);
   const present=new Set(existing.map(tag=>tag.label.toLocaleLowerCase()));
-  const additions=tags.filter(label=>!present.has(label.toLocaleLowerCase()));
+  const additions=data.only_cover_synopsis===true?[]:
+   tags.filter(label=>!present.has(label.toLocaleLowerCase()));
   const coverCount=await one(db,
    "SELECT COALESCE(SUM(CASE WHEN role='cover' THEN 1 ELSE 0 END),0) AS n, "+
    "COALESCE(SUM(CASE WHEN display_cover=1 THEN 1 ELSE 0 END),0) AS selected "+
