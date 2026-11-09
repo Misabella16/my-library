@@ -161,10 +161,10 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
     coverDocument=coverGuide.href;
    else coverItem=coverGuide;
   }
-  // Some EPUB2 files omit both the cover meta tag and guide. Only use a
-  // clearly identified *single* manifest cover image, never an arbitrary
-  // illustration or the first image in the EPUB.
-  if(!coverItem){
+  // Use manifest-name fallback only when an explicit EPUB2 cover guide
+  // doesn't already point to XHTML. The guided page may be ambiguous or
+  // intentionally contain no usable image.
+  if(!coverItem&&!coverDocument){
     const matches=[...manifest.values()].filter(a=>{
       const type=(a['media-type']||'').toLowerCase();
       if(!['image/png','image/jpeg','image/webp'].includes(type))return false;
