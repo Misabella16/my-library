@@ -14,6 +14,7 @@ import {handleShelfBulkLocationApi} from './shelf-photo-bulk-location-api.mjs';
 import {handleVisualShelvesApi} from './visual-shelves-api.mjs';
 import {handleCollectionHealthApi} from './collection-health-api.mjs';
 import {handleOnlineEnrichApi} from './online-enrich-api.mjs';
+import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
 import {handleOfflineBulkApi} from './offline-bulk-api.mjs';
 import {handleExistingCoverRelinkApi} from './existing-cover-relink-api.mjs';
 import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
@@ -219,7 +220,10 @@ async function bookDetail(db,bookId){
     getAll(db,'SELECT s.id,s.name,s.origin FROM shelves s JOIN book_shelves bs ON bs.shelf_id=s.id WHERE bs.book_id=? ORDER BY s.name',[bookId]),
     getAll(db,'SELECT * FROM editions WHERE book_id=? ORDER BY is_special DESC,edition_name',[bookId]),
     getAll(db,'SELECT c.* FROM copies c JOIN editions e ON e.id=c.edition_id WHERE e.book_id=? ORDER BY c.created_at',[bookId]),
-    getAll(db,'SELECT im.id,im.edition_id,im.copy_id,im.role,im.origin,im.credit,im.match_status,im.display_cover FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=? ORDER BY im.created_at',[bookId])
+    getAll(db,'SELECT im.id,im.edition_id,im.copy_id,im.role,im.origin,im.credit,im.match_status,im.display_cover,'+
+     'CASE WHEN im.private_object_key IS NOT NULL THEN 1 ELSE 0 END AS has_saved_asset,'+
+     'im.created_at FROM edition_images im JOIN editions e ON e.id=im.edition_id '+
+     'WHERE e.book_id=? ORDER BY im.created_at',[bookId])
   ]);
   return {...book,tags,shelves,editions:editions.map(e=>({...e,copies:copies.filter(c=>c.edition_id===e.id),images:images.filter(i=>i.edition_id===e.id)}))};
 }
@@ -330,7 +334,7 @@ async function serveApi(request,env,path){
     const count=includeTotal?await getOne(db,'SELECT COUNT(*) AS total'+where,args):null;
     const books=await getAll(db,
       'SELECT b.id,b.title,b.author,b.goodreads_id,b.reading_status,b.rating,b.synopsis,b.updated_at,'+
-      '(SELECT im.id FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=b.id AND im.display_cover=1 ORDER BY e.is_special DESC,e.created_at LIMIT 1) AS cover_id'+
+      PREFERRED_BOOK_COVER_SQL+' AS cover_id'+
       // Use the active identity index for paging instead of a full
       // title COLLATE NOCASE sort of thousands of imported books.
       where+' ORDER BY b.normalized_title,b.normalized_author,b.id LIMIT ? OFFSET ?',[...args,limit,offset]);
