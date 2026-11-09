@@ -193,7 +193,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
         object.body instanceof ArrayBuffer?object.body:
         ArrayBuffer.isView(object.body)?object.body:new Uint8Array(0);
     if(bytes?.byteLength<=MAX_EPUB_BYTES&&bytes?.byteLength>0){
-     const file=new File([bytes],/\\.epub$/i.test(row.original_filename||'')
+     const file=new File([bytes],/\.epub$/i.test(row.original_filename||'')
       ?row.original_filename:'stored.epub',{type:'application/epub+zip'});
      const inspected=await inspectEpub(file,{includeCover:needsCover});
      if(inspected.sha256!==row.sha256)return fail('Saved EPUB integrity check failed',409);
@@ -239,7 +239,9 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    if(mark)await mark.run();
    return json({status:previous?'already_processed':'no_changes',
     file_id:row.id,cover_checked:checkedNoCover,description_rechecked:descriptionRechecked,
-    source_synopsis_unavailable:!!row.synopsis?.trim()?false:!description,
+    source_synopsis_unavailable:!row.synopsis?.trim()&&!description&&
+     (descriptionRechecked||descriptionAlreadyChecked(
+      cached.descriptionCheckedVersion,cached.descriptionCheckedHash,row.sha256)),
     source_cover_unavailable:checkedNoCover,source_epub_missing:sourceMissing});
   }
   const now=new Date().toISOString(),batchId=crypto.randomUUID(),changeId=crypto.randomUUID();
