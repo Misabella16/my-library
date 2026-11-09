@@ -325,16 +325,25 @@
     <section class="epub-tool surface" id="calibre-compare" aria-labelledby="calibre-compare-heading">
       <p class="section-kicker">✧ MY LIBRARIES · CROSS-CHECK</p>
       <h3 id="calibre-compare-heading">Compare your Calibre library</h3>
-      <p>Use a Calibre catalogue CSV, or the richer JSON made with <code>calibredb list --for-machine</code>. The file stays in your browser. Compare all books, ISBNs and editions against My Library to find missing entries, suspicious matches, summary and tag gaps, and Calibre cover opportunities. This preview never edits either catalogue or uploads your ebooks.</p>
+      <p>Use a Calibre catalogue CSV, or the richer JSON made with <code>calibredb list --for-machine</code>. The file stays in your browser. Choose your Calibre library folder to read its metadata.opf and cover.jpg files, or use a CSV/JSON catalogue if you only want metadata. Compare everything, then use Repair matched books to safely fill missing information and transfer real covers. The separate EPUB action uses My Library's existing private uploader with duplicate checks. Automatic changes have Undo and never replace your existing artwork, notes, or collector editions.</p>
       <div class="goodreads-actions">
         <label class="goodreads-file-label" for="calibre-file">Choose Calibre CSV or JSON
           <input id="calibre-file" type="file" accept=".csv,.json,text/csv,application/json">
         </label>
+        <label class="goodreads-file-label" for="calibre-folder">Or choose your entire Calibre library folder
+          <input id="calibre-folder" type="file" accept=".opf,.epub,.pdf,.azw3,.mobi,.jpg,.jpeg,.png,.webp" webkitdirectory directory multiple>
+        </label>
         <button class="btn" id="calibre-compare-run" type="button" disabled>Compare entire libraries</button>
         <button class="btn subtle" id="calibre-compare-pause" type="button" disabled>Stop comparison</button>
         <button class="btn subtle" id="calibre-compare-export" type="button" disabled>Download comparison report</button>
+        <button class="btn" id="calibre-apply" type="button" disabled>Repair matched books: titles, authors, tags, summaries &amp; covers</button>
+        <button class="btn subtle" id="calibre-apply-pause" type="button" disabled>Pause repairs</button>
+        <button class="btn subtle" id="calibre-import-epubs" type="button" disabled>Send missing Calibre EPUBs to private importer</button>
+        <button class="btn subtle" id="calibre-undo-history" type="button">Calibre repair history &amp; Undo</button>
       </div>
-      <p id="calibre-compare-status" class="small-status" role="status" aria-live="polite">Choose your Calibre export. The website will read your catalogue in small, low-D1-cost pages.</p>
+      <p id="calibre-compare-status" class="small-status" role="status" aria-live="polite">Choose your Calibre export OR the Calibre library folder, which contains metadata.opf and cover.jpg files. Only matched repairs you initiate write to My Library.</p>
+      <p id="calibre-repair-status" class="small-status" role="status" aria-live="polite">Repair can fill missing metadata and attach actual Calibre cover images. Original files remain on your Mac; EPUB imports use the existing duplicate-safe uploader.</p>
+      <div id="calibre-undo-list" class="epub-preview-list" aria-live="polite"></div>
       <div id="calibre-compare-metrics" class="goodreads-stats" aria-live="polite"></div>
       <label class="epub-filter-label" for="calibre-compare-filter">Show comparison
         <select id="calibre-compare-filter" disabled>
@@ -349,7 +358,7 @@
       </label>
       <div id="calibre-compare-results" class="epub-preview-list"></div>
       <button class="btn subtle" id="calibre-compare-more" type="button" hidden>Show next 80 matches</button>
-      <p class="goodreads-private-note">Calibre cover availability is a hint, not an uploaded image. A metadata export cannot transfer the original covers or ebook files. Unmatched records may require review, and no books are automatically merged.</p>
+      <p class="goodreads-private-note">Selecting the actual Calibre folder enables real cover uploads and EPUB imports. CSV/JSON exports alone can fill descriptions, tags, and verified titles but do not contain image or ebook bytes. No special-edition covers or personal notes are overwritten, and ambiguous matches remain for review.</p>
     </section>
     <section class="epub-tool surface" aria-labelledby="epub-heading">
       <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
