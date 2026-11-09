@@ -1,6 +1,7 @@
 import {handleGoodreadsApi} from './goodreads-import-api.mjs';
 import {handleGoodreadsSyncApi} from './goodreads-sync-api.mjs';
 import {handleEpubApi} from './epub-import-api.mjs';
+import {handleEpubMultipartApi} from './epub-large-upload-api.mjs';
 import {handleEpubTitleCleanupApi} from './epub-title-cleanup-api.mjs';
 import {handleEpubBackfillApi} from './epub-backfill-api.mjs';
 import {handleEbookCoverLookup} from './ebook-cover-lookup-api.mjs';
@@ -290,6 +291,8 @@ async function serveApi(request,env,path){
   if(backfillResponse)return backfillResponse;
   const titleCleanupResponse=await handleEpubTitleCleanupApi(request,db,path);
   if(titleCleanupResponse)return titleCleanupResponse;
+  const largeEpubResponse=await handleEpubMultipartApi(request,db,env,path);
+  if(largeEpubResponse)return largeEpubResponse;
   const epubResponse=await handleEpubApi(request,db,env,path);
   if(epubResponse)return epubResponse;
   if(path==='/api/books'&&method==='GET') {
