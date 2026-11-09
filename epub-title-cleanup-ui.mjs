@@ -10,6 +10,8 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  if(!root)return null;
  const scan=root.querySelector('#epub-title-scan');
  const scanAll=root.querySelector('#epub-title-scan-all');
+ const isbnLookup=root.querySelector('#epub-title-isbn-lookup');
+ const isbnStatus=root.querySelector('#epub-title-isbn-status');
  const save=root.querySelector('#epub-title-apply');
  const undo=root.querySelector('#epub-title-undo');
  const status=root.querySelector('#epub-title-status');
@@ -22,6 +24,9 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  function controls(){
   scan.disabled=busy||finished;scanAll.disabled=busy||finished;
   save.disabled=busy||!pending().length;undo.disabled=busy||!history.length;
+  if(isbnLookup)isbnLookup.disabled=busy||!bookFinished||
+   ![...all.values()].some(row=>row.machine_reason==='isbn_used_as_title'&&
+    !row.fixed&&!row.isbn_checked);
   scan.textContent=finished?'Scan complete':bookFinished?'Check linked EPUB metadata':'Scan next 50 books';
  }
  function render(){
@@ -46,6 +51,18 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
     copy.append(node('span',row.reason==='isbn_used_as_title'?
      'An ISBN was imported as a title. A verified lookup is needed.':
      'A file identifier was imported as a title.','muted'));
+   if(row.source==='open_library_isbn'){
+    copy.append(node('span','Open Library · ISBN '+row.source_isbn+
+     (row.safe_match?' · Author matches':' · Author needs review'),'muted'));
+    if(row.proposed_authors?.length)
+     copy.append(node('span','Catalogue authors: '+row.proposed_authors.join(', '),'muted'));
+    if(/^https:\/\/openlibrary\.org\/isbn\/[0-9X]+$/.test(row.source_url||'')){
+     const link=node('a','View Open Library source');link.href=row.source_url;
+     link.target='_blank';link.rel='noopener noreferrer';copy.append(link);
+    }
+   }
+   if(row.isbn_status==='not_found')
+    copy.append(node('span','No reliable Open Library title found for this ISBN.','muted'));
    if(row.fixed)copy.append(node('span','Saved','epub-preview-label'));
    if(row.error)copy.append(node('span',row.error,'muted'));
    const open=node('button','Open book','btn subtle mini');
@@ -73,7 +90,8 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
   checked+=data.scanned;
   for(const row of data.candidates){
    if(!row?.id||all.has(row.id))continue;
-   all.set(row.id,{...row,checked:!!row.proposed_title,fixed:false,error:''});
+   all.set(row.id,{...row,machine_reason:row.reason,checked:!!row.proposed_title,
+    fixed:false,error:'',isbn_checked:false});
   }
   bookFinished=!data.has_more;
   if(data.has_more&&(!data.next_cursor||data.next_cursor===cursor))
@@ -129,6 +147,72 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
     '. Earlier suggestions remain available; click again to resume.');
   }finally{busy=false;render();}
  };
+ // External metadata is looked up only after the owner initiates this action.
+ // Each batch sends ten or fewer validated ISBN-derived book IDs to our
+ // private Worker, which makes a single Open Library request per batch.
+ isbnLookup?.addEventListener('click',async()=>{
+  if(busy||!bookFinished)return;
+  const candidates=[...all.values()].filter(row=>
+   row.machine_reason==='isbn_used_as_title'&&!row.fixed&&!row.isbn_checked);
+  if(!candidates.length){isbnStatus.textContent='No ISBN-only titles remain to check.';return;}
+  busy=true;controls();
+  let lookedUp=0,matched=0,review=0,unavailable=0;
+  try{
+   for(let i=0;i<candidates.length;i+=10){
+    const batch=candidates.slice(i,i+10);
+    const response=await api('/api/epubs/title-cleanup/isbn-lookup',{
+     method:'POST',
+     data:{items:batch.map(row=>({id:row.id,expected_updated_at:row.updated_at}))}
+    });
+    if(!Array.isArray(response?.results))
+     throw Error('Incomplete ISBN lookup response');
+    for(const result of response.results){
+     const row=all.get(result.id);
+     if(!row||row.fixed||row.isbn_checked)continue;
+     row.isbn_checked=true;
+     row.isbn_status=result.status;
+     lookedUp++;
+     if(result.status==='matched'&&result.proposed_title){
+      if(row.proposed_title&&row.proposed_title!==result.proposed_title){
+       row.checked=false;
+       row.safe_match=false;
+       row.error='Conflicting EPUB and Open Library titles. Review this book manually.';
+       review++;
+      }else{
+       row.proposed_title=result.proposed_title;
+       row.source='open_library_isbn';
+       row.source_isbn=result.source_isbn;
+       row.source_url=result.source_url;
+       row.proposed_authors=result.proposed_authors||[];
+       row.safe_match=!!result.safe_match;
+       row.checked=!!result.safe_match;
+       row.reason=result.reason;
+       row.error='';
+       matched++;
+       if(!result.safe_match)review++;
+      }
+     }else{
+      unavailable++;
+      if(result.status==='changed')
+       row.error='Book changed since the scan. Scan again before repairing.';
+     }
+    }
+    isbnStatus.textContent='Checked '+lookedUp+' of '+candidates.length+
+     ' ISBN titles · '+matched+' suggestions · '+review+
+     ' need author or source review · '+unavailable+' unmatched.';
+    if(i+10<candidates.length){
+     // Open Library permits one anonymous request per second.
+     await new Promise(resolve=>setTimeout(resolve,1200));
+    }
+   }
+   isbnStatus.textContent+=' Lookup complete. No titles were changed. Review suggestions below.';
+  }catch(error){
+   isbnStatus.textContent='ISBN lookup paused after '+lookedUp+' records: '+
+    (error.message||'Service unavailable')+
+    '. Already returned suggestions remain; click again to continue.';
+  }finally{busy=false;render();}
+ });
+
  scan.addEventListener('click',()=>start(false));
  scanAll.addEventListener('click',()=>start(true));
  save.addEventListener('click',async()=>{
@@ -189,5 +273,7 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  render();
  return {refresh:()=>{if(busy)return;all.clear();cursor='';sourceCursor='';
   bookFinished=false;sourceFinished=false;finished=false;checked=0;
-  sourceChecked=0;shown=60;history.length=0;render();}};
+  sourceChecked=0;shown=60;history.length=0;
+  if(isbnStatus)isbnStatus.textContent='No ISBN lookups run yet.';
+  render();}};
 }
