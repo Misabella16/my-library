@@ -177,6 +177,45 @@ test('UI and authenticated worker include online owner repair without Goodreads 
  assert.match(worker,/handleOnlineEnrichApi\(request,db,env,path\)/);
  assert.match(lib,/initOnlineEnrich\(api/);
  assert.match(html,/id="online-apply"/);
- assert.match(ui,/slice\(0,12\)/);
+ assert.match(ui,/MAX_LOOKUPS_PER_DAY=40/);
+ assert.match(ui,/repair-auto/);
+ assert.match(html,/id="online-reset"/);
  assert.doesNotMatch(ui,/goodreads\.com\/api/);
+});
+
+test('One-request targeted repair saves verified missing fields and preserves Undo',async()=>{
+ const f=fixture();
+ try{
+  const r=await f.call('repair-auto',{method:'POST',data:{book_id:bookId}});
+  assert.equal(r.status,201,await r.clone().text());
+  const result=await r.json();
+  assert.equal(result.status,'applied');
+  assert.equal(result.synopsis_filled,true);
+  assert.equal(result.cover_saved,true);
+  assert.equal(f.book().synopsis,'An authentic summary');
+  // Unlike preview + repair, the search and work are fetched only once.
+  assert.equal(f.calls.filter(x=>x.includes('search.json')).length,1);
+  assert.equal(f.calls.filter(x=>x.includes('/works/OL123W.json')).length,1);
+  const undo=await f.call('undo',{method:'POST',data:{change_id:result.change_id}});
+  assert.equal(undo.status,200,await undo.clone().text());
+  assert.equal(f.book().synopsis,'');
+  assert.equal(f.files.size,0);
+ }finally{f.close();}
+});
+test('Targeted repair safely reviews conflicting book identity without writing',async()=>{
+ const f=fixture({author:'Someone Else'});
+ try{
+  const r=await f.call('repair-auto',{method:'POST',data:{book_id:bookId}});
+  assert.equal(r.status,200);
+  assert.equal((await r.json()).status,'review');
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
+ }finally{f.close();}
+});
+test('Targeted repair cannot be submitted without a valid UUID',async()=>{
+ const f=fixture();
+ try{
+  const r=await f.call('repair-auto',{method:'POST',data:{book_id:'invalid'}});
+  assert.equal(r.status,400);
+  assert.equal(f.calls.length,0);
+ }finally{f.close();}
 });

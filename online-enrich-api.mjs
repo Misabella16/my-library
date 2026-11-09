@@ -109,7 +109,10 @@ async function apply(db,env,id,expected,fetcher){
  if(found.status!=='verified')return json({status:found.status,reason:found.reason||''});
  const {state,proposed,source_url}=found;
  const b=state.book;
- if(b.updated_at!==expected)return json({status:'changed',reason:'The book changed since scanning'},409);
+ // Auto repair reads the current timestamp on the server. The conditional D1
+ // UPDATE below still refuses to overwrite a concurrent owner edit.
+ const safeExpected=expected===null?b.updated_at:expected;
+ if(b.updated_at!==safeExpected)return json({status:'changed',reason:'The book changed since scanning'},409);
  const synopsis=proposed.synopsis||'',tags=proposed.tags;
  const alternatives=state.editions.filter(e=>e.is_special===0);
  const ebook=alternatives.filter(e=>e.format==='ebook');
@@ -135,7 +138,7 @@ async function apply(db,env,id,expected,fetcher){
   source_url,source:'Open Library'};
  const updates=[db.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=? '+
    'AND updated_at=? AND synopsis=? AND archived_at IS NULL')
-   .bind(after.synopsis,now,id,expected,b.synopsis)];
+   .bind(after.synopsis,now,id,safeExpected,b.synopsis)];
  for(const tag of tags){
   updates.push(db.prepare("INSERT OR IGNORE INTO tags(id,label,kind) "+
    "SELECT ?,?,'imported' WHERE EXISTS(SELECT 1 FROM books WHERE id=? AND updated_at=?)")
@@ -253,7 +256,7 @@ export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=fet
   }catch(e){return fail(e.status===429?'Open Library rate limit. Try again later.':
    'Open Library metadata unavailable',e.status||503);}
  }
- if(['repair','undo'].includes(end)&&request.method==='POST'){
+ if(['repair','repair-auto','undo'].includes(end)&&request.method==='POST'){
   let data;try{
    const input=await request.text();if(input.length>3000)return fail('Request too large',413);
    data=JSON.parse(input);
@@ -262,9 +265,14 @@ export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=fet
    if(!uuid(data?.change_id))return fail('Invalid history ID');
    return undo(db,env,data.change_id);
   }
-  if(!uuid(data?.book_id)||typeof data.expected_updated_at!=='string'||
-   data.expected_updated_at.length>100)return fail('Invalid book selection');
-  try{return await apply(db,env,data.book_id,data.expected_updated_at,sourceFetch);}
+  if(!uuid(data?.book_id))return fail('Invalid book selection');
+  // One owner-triggered request now performs lookup + safe repair, avoiding
+  // the redundant preview-and-lookup pair for every book. The older repair
+  // route retains its explicit optimistic-concurrency contract.
+  if(end==='repair'&&(typeof data.expected_updated_at!=='string'||
+   data.expected_updated_at.length>100))return fail('Invalid book timestamp');
+  try{return await apply(db,env,data.book_id,
+   end==='repair-auto'?null:data.expected_updated_at,sourceFetch);}
   catch(e){return fail(e.status===429?'Open Library rate limit. Try again later.':
    'Online metadata lookup unavailable; no new changes saved',e.status||503);}
  }

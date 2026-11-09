@@ -239,27 +239,7 @@
   </section>
   <section class="tab-panel" id="imports" hidden>
     <div class="site-section-artwork" data-site-section-image="importsBanner" hidden></div>
-    <section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
-      <p class="section-kicker">✧ FULL LIBRARY REPAIR · START HERE</p>
-      <h2 id="offline-bulk-heading">Repair your entire library: missing covers and synopses</h2>
-      <p>Use a locally downloaded Open Library data snapshot to match your entire collection by ISBN, title and author. This avoids the 12-books-per-click online lookup. The Mac matcher never uploads your catalogue to Open Library. Only verified, missing-field changes are sent back to your private site.</p>
-      <div class="collection-health-actions">
-        <button class="btn subtle" id="offline-export" type="button">1. Export my full library catalogue (JSON)</button>
-        <label class="goodreads-file-label" for="offline-file">3. Choose offline matches JSON
-          <input id="offline-file" type="file" accept=".json,application/json">
-        </label>
-        <button class="btn" id="offline-apply" type="button" disabled>Apply ALL verified matches</button>
-        <button class="btn subtle" id="offline-pause" type="button" disabled>Pause</button>
-        <button class="btn subtle" id="offline-history" type="button">Repair history &amp; Undo</button>
-      </div>
-      <p class="muted">2. On your Mac, download the official Open Library editions, works and authors compressed dumps (openlibrary.org/developers/dumps), and run the <code>openlibrary_dump_match.py</code> helper in the My Library GitHub repository. It reads those large files directly from their compressed form. You'll get a small <code>my-library-matches.json</code> file to choose in Step 3.</p>
-      <p class="muted">Large source downloads can be many gigabytes. The processing may take considerable time, so use a drive with ample free space and avoid simultaneously overloading your separate Fic Annex indexing drive.</p>
-      <p class="small-status" id="offline-status" role="status" aria-live="polite">Export the catalogue first. Nothing in your library will be modified until you select Apply ALL.</p>
-      <p class="small-status" id="offline-metrics" aria-live="polite"></p>
-      <div id="offline-results" class="collection-health-results"></div>
-      <div id="offline-history-list" class="epub-preview-list"></div>
-      <p class="muted">Existing descriptions, tags, notes, ratings, special-edition images, copies and EPUBs are preserved. New standard artwork uses Open Library's public cover-ID image links when displayed, not thousands of bulk image downloads. All proposed covers are unverified until reviewed and may be unavailable if Open Library lacks the image. You can pause and resume the import in the same browser tab.</p>
-    </section>
+
 
     <section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
       <p class="section-kicker">✧ CATALOGUE HEALTH</p>
@@ -305,20 +285,42 @@
       <p class="muted">This repairs missing display selections only. Use saved EPUB repair, Calibre repair, or verified online matching for books with no usable cover image.</p>
     </section>
     <section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
-      <p class="section-kicker">✧ VERIFIED ONLINE METADATA REPAIR</p>
-      <h3 id="online-enrich-heading">Find missing book summaries, tags and covers online</h3>
-      <p>My Library can research missing details using Open Library's public catalogue. It requires a verified ISBN and author, or a matching title and author. It only fills blanks and never replaces your own synopsis, tags, notes, special-edition artwork or existing covers. Goodreads CSV sync above remains available for your personal shelves, reviews, ratings and dates.</p>
+      <p class="section-kicker">✧ RECOMMENDED · NO BIG DOWNLOADS</p>
+      <h2 id="online-enrich-heading">Repair missing covers, summaries and tags</h2>
+      <p>No Open Library download required. One click first recovers saved EPUB metadata and artwork, scans the entire library for remaining gaps, then checks only missing books through verified ISBN/author or title/author matching. Your own descriptions, tags, notes, editions, and existing covers stay intact. Online checks are paced and capped to avoid bulk harvesting.</p>
       <div class="collection-health-actions">
-        <button class="btn subtle" id="online-scan" type="button">Scan my whole library for gaps</button>
-        <button class="btn" id="online-apply" type="button" disabled>Repair next verified matches online</button>
+        <button class="btn" id="online-apply" type="button">Repair missing data (no downloads)</button>
+        <button class="btn subtle" id="online-scan" type="button">Scan gaps only</button>
         <button class="btn subtle" id="online-pause" type="button" disabled>Pause</button>
+        <button class="btn subtle" id="online-reset" type="button">Restart scan from beginning</button>
         <button class="btn subtle" id="online-history-btn" type="button">Online repair history &amp; Undo</button>
       </div>
-      <p class="small-status" id="online-status" role="status" aria-live="polite">First scan your existing library. Online matching is opt-in and paced to respect source limits; it never runs automatically on page load.</p>
+      <p class="small-status" id="online-status" role="status" aria-live="polite">Ready. Select Repair to recover saved EPUBs and artwork first, then scan every book and check missing records online. Keep the tab open while working. Pause or resume without losing completed edits.</p>
       <p class="small-status" id="online-summary" aria-live="polite"></p>
       <div id="online-results" class="collection-health-results"></div>
       <div id="online-history-list" class="epub-preview-list"></div>
-      <p class="muted">Each online repair action processes up to 12 verified candidates, then stops. This is deliberately limited because Open Library does not permit bulk metadata harvesting through its public API. For thousands of books, use your Calibre library and saved EPUB metadata first; large-scale external data should come from permitted data dumps, not thousands of API requests. External covers are marked unverified until reviewed.</p>
+      <p class="muted">The site scans the entire collection, but online lookups stop after 40 checked entries per UTC day. Resume the next day on this browser to keep source requests within a small daily budget. Browser-stored progress contains only a book-ID cursor and counts, never your book list or private content. Restart scan from beginning if older or newly added books also need checking. The process runs while this tab is open, not in the background. No match is invented; ambiguous books remain for review.</p>
+    </section>
+    <section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
+      <p class="section-kicker">✧ FULL LIBRARY REPAIR · START HERE</p>
+      <h2 id="offline-bulk-heading">Repair your entire library: missing covers and synopses</h2>
+      <p>Use a locally downloaded Open Library data snapshot to match your entire collection by ISBN, title and author. This avoids the 12-books-per-click online lookup. The Mac matcher never uploads your catalogue to Open Library. Only verified, missing-field changes are sent back to your private site.</p>
+      <div class="collection-health-actions">
+        <button class="btn subtle" id="offline-export" type="button">1. Export my full library catalogue (JSON)</button>
+        <label class="goodreads-file-label" for="offline-file">3. Choose offline matches JSON
+          <input id="offline-file" type="file" accept=".json,application/json">
+        </label>
+        <button class="btn" id="offline-apply" type="button" disabled>Apply ALL verified matches</button>
+        <button class="btn subtle" id="offline-pause" type="button" disabled>Pause</button>
+        <button class="btn subtle" id="offline-history" type="button">Repair history &amp; Undo</button>
+      </div>
+      <p class="muted">2. On your Mac, download the official Open Library editions, works and authors compressed dumps (openlibrary.org/developers/dumps), and run the <code>openlibrary_dump_match.py</code> helper in the My Library GitHub repository. It reads those large files directly from their compressed form. You'll get a small <code>my-library-matches.json</code> file to choose in Step 3.</p>
+      <p class="muted">Large source downloads can be many gigabytes. The processing may take considerable time, so use a drive with ample free space and avoid simultaneously overloading your separate Fic Annex indexing drive.</p>
+      <p class="small-status" id="offline-status" role="status" aria-live="polite">Export the catalogue first. Nothing in your library will be modified until you select Apply ALL.</p>
+      <p class="small-status" id="offline-metrics" aria-live="polite"></p>
+      <div id="offline-results" class="collection-health-results"></div>
+      <div id="offline-history-list" class="epub-preview-list"></div>
+      <p class="muted">Existing descriptions, tags, notes, ratings, special-edition images, copies and EPUBs are preserved. New standard artwork uses Open Library's public cover-ID image links when displayed, not thousands of bulk image downloads. All proposed covers are unverified until reviewed and may be unavailable if Open Library lacks the image. You can pause and resume the import in the same browser tab.</p>
     </section>
     
 <div class="surface"><h2 data-site-text="importsTitle">Imports & Undo</h2><p data-site-text="importsDescription">Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.</p>
