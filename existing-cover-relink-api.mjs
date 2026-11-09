@@ -4,7 +4,7 @@
 const HEAD={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEAD});
 const fail=(error,status=400)=>json({error},status);
-const uuid=x=>typeof x==='string'&&/^[0-9a-f]{8}-(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(x);
+const uuid=x=>typeof x==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(x);
 const first=(db,sql,...args)=>db.prepare(sql).bind(...args).first();
 const rows=async(db,sql,...args)=>(await db.prepare(sql).bind(...args).all()).results||[];
 const parse=async request=>{
