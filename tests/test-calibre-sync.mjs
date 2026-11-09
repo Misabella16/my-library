@@ -14,14 +14,14 @@ test('One-click Calibre sync requires selected local folder, never CSV-only expo
  assert.match(code,/syncButton\?\.addEventListener\('click',async\(\)=>\{/);
 });
 
-test('Sync compares, repairs, refreshes and only previews selected EPUBs',()=>{
+test('Sync compares once, repairs, and only previews selected EPUBs',()=>{
  const sync=code.slice(code.indexOf("syncButton?.addEventListener('click'"),
   code.indexOf("otherBridge?.addEventListener('click'"));
  assert.match(sync,/await compareSelected\(\)/);
  assert.match(sync,/await repairMatched\(\)/);
  assert.match(sync,/const count=prepareEpubs\(\)\|\|0/);
  assert.ok(sync.indexOf('await compareSelected()')<sync.indexOf('await repairMatched()'));
- assert.ok(sync.lastIndexOf('await compareSelected()')>sync.indexOf('await repairMatched()'));
+ assert.equal(sync.split('await compareSelected()').length-1,1,'avoid redundant D1 full scans');
  assert.doesNotMatch(sync,/\/api\/epubs\/upload|saveEligible|saveAllButton|onImportDigitalFiles/);
  assert.match(code,/const siteHasEpub=new Set\(siteEpubs\.map/);
  assert.match(code,/onImportEpubs\(selected\)/);
