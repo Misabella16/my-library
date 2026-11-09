@@ -334,4 +334,6 @@ test('Folder-only Calibre comparison works without requiring a CSV/JSON export',
  const ui=readFileSync(new URL('../calibre-compare-ui.mjs',import.meta.url),'utf8');
  assert.match(ui,/if\(busy\|\|\(!file\.files\?\.length&&!folder\?\.files\?\.length\)\)return;/);
  assert.match(ui,/folderData=await readCalibreFolder/);
+ assert.match(ui,/folder\?\.addEventListener\('change',changed\)/);
+ assert.match(ui,/file\.addEventListener\('change',changed\)/);
 });
