@@ -24,6 +24,7 @@ export function initEpubBackfill(api){
  const historyList=root.querySelector('#epub-backfill-history-list');
  const bulk=root.querySelector('#epub-backfill-bulk');
  const repairAll=root.querySelector('#epub-backfill-all');
+ const rescan=root.querySelector('#epub-backfill-rescan');
  const pauseButton=root.querySelector('#epub-backfill-pause');
  const retryButton=root.querySelector('#epub-backfill-retry');
  const reportButton=root.querySelector('#epub-backfill-report');
@@ -38,10 +39,12 @@ export function initEpubBackfill(api){
   if(healthExport)healthExport.disabled=busy||healthRows.length===0;
   bulk.disabled=busy||bulkFinished;
   if(repairAll)repairAll.disabled=busy||bulkFinished;
+  if(rescan)rescan.disabled=busy;
   if(pauseButton)pauseButton.disabled=!bulkActive||pauseRequested;
   if(retryButton)retryButton.disabled=busy||!failedQueue.size;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
-  apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing||x.cover_unselected);
+  apply.disabled=busy||!items.some(x=>x.synopsis||x.synopsis_recheck||
+   x.subjects?.length||x.cover_missing||x.cover_unselected);
   next.disabled=busy||!nextCursor;
   undo.disabled=busy||changes.length===0;
  };
@@ -50,7 +53,9 @@ export function initEpubBackfill(api){
   for(const item of items){
    const section=el('article',undefined,'epub-preview-card');
    section.append(el('strong',item.title||'Untitled'));
-   section.append(el('p',(item.synopsis?'Missing synopsis · ':'')+
+   section.append(el('p',(item.synopsis?'Description ready to recover · ':
+    item.synopsis_recheck?'Missing synopsis: reopen saved EPUB once · ':
+    item.synopsis_source_unavailable?'EPUB contains no usable synopsis · ':'')+
     (item.subjects?.length||0)+' EPUB subjects available · '+
     (item.cover_unavailable?'No embedded EPUB cover found (checked)':
       item.cover_unselected?'Saved EPUB cover found, not displayed (repairable)':
@@ -100,7 +105,8 @@ export function initEpubBackfill(api){
   if(busy)return;
   bulkActive=true;pauseRequested=false;
   busy=true;update();
-  let after=bulkCursor,checked=0,applied=0,unchanged=0,failed=0,recovered=0,selected=0;
+  let after=bulkCursor,checked=0,applied=0,unchanged=0,failed=0,recovered=0,selected=0,
+   missingSynopsis=0,reinspection=0,noSourceSynopsis=0,skippedComplete=0;
   const target=repairEntireCatalogue?10000:50;
   try{
    while(checked<target&&!pauseRequested){
@@ -113,9 +119,14 @@ export function initEpubBackfill(api){
      // Commit the cursor only AFTER handling an item. If Cloudflare reaches
      // its daily quota halfway through a page, the failed item must be first
      // in the next click, not silently skipped with the rest of that page.
-     if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing&&!item.cover_unselected){
+     if(item.synopsis_missing)missingSynopsis++;
+     if(!item.synopsis&&!item.synopsis_recheck&&!item.subjects?.length&&
+       !item.cover_missing&&!item.cover_unselected){
       unchanged++;
-      reportRows.push({file_id:item.file_id,title:item.title,status:'no_changes'});
+      if(item.synopsis_source_unavailable)noSourceSynopsis++;
+      else if(!item.synopsis_missing)skippedComplete++;
+      reportRows.push({file_id:item.file_id,title:item.title,status:'no_changes',
+       synopsis_source_unavailable:!!item.synopsis_source_unavailable});
      }else{
       try{
        const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
@@ -126,6 +137,8 @@ export function initEpubBackfill(api){
          if(outcome.cover_added)recovered++;
          if(outcome.cover_selected)selected++;
        }else unchanged++;
+       if(outcome.description_rechecked)reinspection++;
+       if(outcome.source_synopsis_unavailable)noSourceSynopsis++;
        reportRows.push({file_id:item.file_id,title:item.title,status:outcome.status,
         synopsis_filled:outcome.synopsis_filled,
         tags_added:outcome.tags_added,cover_added:outcome.cover_added,
@@ -158,7 +171,12 @@ export function initEpubBackfill(api){
    status.textContent=(pauseRequested?'Paused safely. Press Repair next 50 to resume. ':'')+
     'Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
     unchanged+' unchanged · '+failed+' need refresh or review · '+
-     recovered+' covers extracted · '+selected+' existing covers displayed. '+
+     recovered+' covers extracted · '+selected+' existing covers displayed · '+
+     missingSynopsis+' missing book synopses · '+reinspection+
+     ' source EPUBs reinspected · '+noSourceSynopsis+
+     ' EPUBs with no usable source synopsis · '+skippedComplete+
+     ' already-complete records. '+
+     'Books whose EPUBs contain no summary can still use targeted online matching. '+
      'Run Catalogue Health scan again to refresh its earlier counts.'+
     (bulkFinished?' Entire saved EPUB catalogue scanned.':
      repairEntireCatalogue?' You can resume the next group of saved EPUBs.':
@@ -173,6 +191,12 @@ export function initEpubBackfill(api){
  };
  bulk.addEventListener('click',()=>runRepairs(false));
  repairAll?.addEventListener('click',()=>runRepairs(true));
+ rescan?.addEventListener('click',async()=>{
+  if(busy)return;
+  bulkCursor='';bulkFinished=false;failedQueue.clear();reportRows=[];
+  changes=[];status.textContent='Starting a new saved-EPUB scan of missing covers and descriptions.';
+  update();await runRepairs(true);
+ });
  retryButton?.addEventListener('click',async()=>{
   if(busy||!failedQueue.size)return;
   busy=true;update();
