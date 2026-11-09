@@ -186,3 +186,68 @@ test('Batch size is bounded and history omits private notes and object URLs',asy
   assert.equal(JSON.stringify(history).includes('private_object_key'),false);
  }finally{f.close();}
 });
+
+
+class FakeElement{
+ constructor(id=''){this.id=id;this.textContent='';this.disabled=false;
+  this.children=[];this.listeners={};this.checked=false;this.value='';
+  this.className='';this.hidden=false;}
+ append(...elements){this.children.push(...elements);}
+ replaceChildren(...elements){this.children=[...elements];}
+ setAttribute(){}
+ addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}
+ async click(){for(const fn of this.listeners.click||[])await fn();}
+}
+test('One click scans, repairs, leaves ambiguous books for review and exposes durable Undo',async()=>{
+ const {initEpubTitleCleanup}=await import('../epub-title-cleanup-ui.mjs');
+ const names=['epub-title-scan','epub-title-scan-all','epub-title-isbn-lookup',
+  'epub-title-isbn-status','epub-title-apply','epub-title-undo',
+  'epub-title-status','epub-title-results','epub-title-auto-repair',
+  'epub-title-auto-pause','epub-title-auto-status','epub-title-auto-history',
+  'epub-title-auto-history-list','epub-title-review-filter'];
+ const refs=new Map(names.map(name=>[name,new FakeElement(name)]));
+ const root=new FakeElement('root');root.querySelector=id=>refs.get(id.slice(1));
+ const previous=globalThis.document;
+ globalThis.document={getElementById:id=>id==='epub-title-cleanup'?root:null,
+  createElement:tag=>new FakeElement(tag)};
+ const isbn=uid(1),pdf=uid(2),calls=[];
+ let updated=0;
+ const api=async(path,options)=>{
+  calls.push(path);
+  if(path==='/api/epubs/title-cleanup/preview')
+   return {scanned:2,has_more:false,candidates:[
+    {id:isbn,title:'0316285064 (N)',author:'Joshua Cooper Ramo',
+     updated_at:'2026-11-08',reason:'isbn_used_as_title',proposed_title:''},
+    {id:pdf,title:'0321485173.pdf',author:'Unknown',
+     updated_at:'2026-11-08',reason:'numeric_pdf_filename',proposed_title:''}
+   ]};
+  if(path==='/api/epubs/title-cleanup/sources')
+   return {scanned:0,has_more:false,candidates:[],sources:[]};
+  if(path==='/api/books/auto-title-repair/batch'){
+   assert.equal(options.method,'POST');
+   assert.equal(options.data.items.length,2);
+   return {results:[
+    {id:isbn,status:'applied',title:'The Seventh Sense',source:'open_library_isbn',
+     change_id:uid(9)},
+    {id:pdf,status:'review',reason:'No verifiable source'}
+   ]};
+  }
+  if(path==='/api/books/auto-title-repair/history')
+   return {changes:[{change_id:uid(9),book_id:isbn,
+    title:'The Seventh Sense',previous_title:'0316285064 (N)',
+    source:'open_library_isbn',undone_at:null}]};
+  throw Error('Unexpected API call '+path);
+ };
+ try{
+  initEpubTitleCleanup(api,{onUpdated:async()=>{updated++;}});
+  await refs.get('epub-title-auto-repair').click();
+  assert.equal(calls.filter(x=>x.includes('auto-title-repair/batch')).length,1);
+  assert.equal(updated,1);
+  assert.match(refs.get('epub-title-auto-status').textContent,/Repair pass complete/);
+  await refs.get('epub-title-review-filter').click();
+  assert.equal(refs.get('epub-title-results').children.length,1);
+  await refs.get('epub-title-auto-history').click();
+  assert.equal(refs.get('epub-title-auto-history-list').children.length,1);
+  assert.equal(calls.some(x=>x.includes('/undo')),false);
+ }finally{globalThis.document=previous;}
+});
