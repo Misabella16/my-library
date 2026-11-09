@@ -6,8 +6,8 @@ export function initExistingCoverRelink(api,{onUpdated=async()=>{}}={}){
  const button=root.querySelector('#relink-existing-start'),
   stopButton=root.querySelector('#relink-existing-stop'),
   status=root.querySelector('#relink-existing-status'),
-  historyButton=root.querySelector('#relink-existing-history'),
-  historyList=root.querySelector('#relink-existing-history-list');
+  historyButton=(document.getElementById('relink-existing-history')||root.querySelector('#relink-existing-history')),
+  historyList=(document.getElementById('relink-existing-history-list')||root.querySelector('#relink-existing-history-list'));
  if(!button||!stopButton||!status||!historyButton||!historyList)return null;
  let cursor='',running=false,stop=false,complete=false;
  const totals={checked:0,relinked:0,ambiguous:0,unavailable:0};
@@ -51,7 +51,7 @@ export function initExistingCoverRelink(api,{onUpdated=async()=>{}}={}){
  };
  stopButton.addEventListener('click',()=>{stop=true;controls();
   say('Pause requested; the current page will finish before stopping.');});
- const runAll=async()=>{
+ const runAll=async({onProgress=()=>{}}={})=>{
   if(running)return;
   if(complete){
    complete=false;cursor='';
@@ -72,6 +72,7 @@ export function initExistingCoverRelink(api,{onUpdated=async()=>{}}={}){
      totals.checked+' candidates examined · '+totals.ambiguous+
      ' ambiguous · '+totals.unavailable+' missing files.'+
      (complete?' Complete.':' Continuing automatically…'));
+    onProgress({...totals});
     // Yield the UI so Pause is responsive, even on large catalogues.
     await new Promise(resolve=>setTimeout(resolve,0));
    }
@@ -82,7 +83,7 @@ export function initExistingCoverRelink(api,{onUpdated=async()=>{}}={}){
    say('Paused after '+totals.checked+' candidates: '+
     (error.message||'Request failed')+'. Finished changes are saved; retry to resume.');
   }finally{running=false;stop=false;controls();}
-  return {complete,totals:{...totals}};
+  return {complete,totals:{...totals},reason:status.textContent};
  };
  button.addEventListener('click',runAll);
  historyButton.addEventListener('click',async()=>{
@@ -92,5 +93,6 @@ export function initExistingCoverRelink(api,{onUpdated=async()=>{}}={}){
  });
  controls();
  return {runAll,pause:()=>{if(running)stop=true;},
-  getState:()=>({cursor,complete,totals:{...totals}})};
+  getState:()=>({cursor,complete,running,totals:{...totals}})};
 }
+

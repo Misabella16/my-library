@@ -191,3 +191,19 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
  #collection-health-scan,#collection-health-pause,#collection-health-repair,
  #collection-health-export,#collection-health-more{width:100%}
 }
+
+
+/* Imports: one primary repair, with optional tools progressively disclosed. */
+#imports > .surface, #imports > .imports-disclosure { margin-bottom: 1.25rem; }
+.imports-disclosure { margin: 1rem 0; border: 1px solid var(--line, #d7cbc5); border-radius: 12px; padding: 1rem; }
+.imports-disclosure > summary, .repair-options > summary { cursor: pointer; font-weight: 600; padding: .5rem; }
+.imports-disclosure[open] > summary { margin-bottom: 1rem; }
+#imports nav a { padding: .5rem .75rem; }
+#imports [inert] { opacity: .65; }
+#imports [id] { scroll-margin-top: 1rem; }
+#imports .collection-health-actions, #imports .goodreads-actions { flex-wrap: wrap; }
+@media (max-width: 640px) {
+ .imports-disclosure { padding: .65rem; }
+ #imports .surface { min-width: 0; }
+ #imports button, #imports input { max-width: 100%; }
+}

@@ -67,13 +67,9 @@ function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1,pauseAfterFirst=false
  initEpubBackfill(api);
  return {refs,calls,applied,get:key=>refs.get(key),restore(){globalThis.document=old;}};
 }
-test('One click repairs up to 50 stored EPUBs and the next click continues from cursor',async()=>{
+test('Legacy repair button also continues past 50 without another click',async()=>{
  const f=fixture(55);
  try{
-  await f.get('epub-backfill-bulk').click();
-  assert.equal(f.applied.length,50);
-  assert.match(f.get('epub-backfill-status').textContent,/Repair next 50/);
-  assert.equal(f.get('epub-backfill-bulk').disabled,false);
   await f.get('epub-backfill-bulk').click();
   assert.equal(f.applied.length,55);
   assert.equal(new Set(f.applied).size,55);
@@ -123,21 +119,14 @@ test('Quota interruption halfway through a page resumes at failed EPUB rather th
  }finally{f.restore();}
 });
 
-test('Read-only health check scans at most 50 EPUB records without writes',async()=>{
+test('Read-only health check continues past 50 records without writes',async()=>{
  const f=fixture(55);
  try{
   await f.get('epub-backfill-health').click();
-  assert.match(f.get('epub-backfill-health-status').textContent,/Scanned 50 saved EPUBs/);
-  assert.match(f.get('epub-backfill-health-status').textContent,/50 with missing subject tags/);
-  assert.equal(f.calls.filter(p=>p.startsWith('/api/epubs/backfill/preview?')).length,5);
-  assert.equal(f.calls.filter(p=>p==='/api/epubs/backfill/apply').length,0);
-  assert.equal(f.get('epub-backfill-bulk').disabled,false);
-  assert.equal(f.get('epub-backfill-health').disabled,false);
-  await f.get('epub-backfill-health').click();
-  assert.match(f.get('epub-backfill-health-status').textContent,/Scanned 5 saved EPUBs in this batch \(55 total\)/);
-  assert.equal(f.get('epub-backfill-health').disabled,true);
+  assert.match(f.get('epub-backfill-health-status').textContent,/Scanned 55 saved EPUBs/);
   assert.equal(f.calls.filter(p=>p.startsWith('/api/epubs/backfill/preview?')).length,6);
   assert.equal(f.calls.filter(p=>p==='/api/epubs/backfill/apply').length,0);
+  assert.equal(f.get('epub-backfill-health').disabled,true);
  }finally{f.restore();}
 });
 test('Health summary does not count complete books as needing repair',()=>{
@@ -267,4 +256,16 @@ test('Unselected saved EPUB cover is a repairable issue in health report',()=>{
  const csv=epubHealthCsv([item]);
  assert.match(csv,/Cover saved but not displayed/);
  assert.match(csv,/"false","false","false","true","false","true"/);
+});
+
+
+test('Pause on the final page does not incorrectly mark unprocessed EPUBs complete',async()=>{
+ const f=fixture(8,{pauseAfterFirst:true});
+ try{
+  await f.get('epub-backfill-all').click();
+  assert.equal(f.applied.length,1);
+  assert.equal(f.get('epub-backfill-all').disabled,false);
+  await f.get('epub-backfill-all').click();
+  assert.equal(f.applied.length,8);
+ }finally{f.restore();}
 });
