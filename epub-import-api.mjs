@@ -179,6 +179,120 @@ export async function batchPreviewEpub(db,items){
   });
   return outcomes;
 }
+// Shared commit path for small multipart-form and large staged R2 uploads.
+// No duplicates, physical copies, or special-edition cover overwrites.
+export async function commitStoredEpub(db,env,{fileName,metadata,actual,coverBytes=null,ctype=null,
+ bytes=null,storedKey=null,storedFileId=null}){
+ const title=cleanEpubTitle(metadata.title),author=cleanEpubAuthor(metadata.author);
+ const subjectList=Array.isArray(metadata.subjects)?metadata.subjects.slice(0,8):[];
+ if(subjectList.some(tag=>typeof tag!=='string'||!tag.trim()||tag.trim().length>90))
+  return bad('Invalid EPUB subject tags');
+ const subjects=[...new Map(subjectList.map(tag=>[tag.trim().toLocaleLowerCase(),tag.trim()])).values()];
+    const matched=await matchEpub(db,{title,author,sha256:actual,identifier:metadata.identifier});
+    if(matched.status==='already_uploaded')return json({...matched,uploaded:false});
+    if(matched.status==='needs_review')return json(matched,409);
+    const desiredId=clean(metadata.book_id,40);
+    if(desiredId && (matched.status!=='match'||matched.book_id!==desiredId))
+      return bad('The target book changed since preview. Re-preview this EPUB.',409);
+    if(matched.status==='new' && !normalizeEpubText(title))return bad('Title is required');
+    const bookId=matched.status==='match'?matched.book_id:uuid();
+    // A unique R2 key per attempted import prevents failed concurrent requests
+    // from deleting a successful import's file when cleanup runs.
+    const fileId=storedFileId||uuid();
+    const key=storedKey||'epubs/'+actual.slice(0,2)+'/'+fileId+'.epub';
+    const coverId=coverBytes?uuid():null;
+    const coverKey=coverBytes?'epub-covers/'+actual.slice(0,2)+'/'+actual+'-'+coverId+
+      (ctype==='image/png'?'.png':ctype==='image/webp'?'.webp':'.jpg'):null;
+    const uploaded=[];
+    try{
+      // R2 blobs are saved before the atomic SQL batch. If SQL rejects the
+      // file for any reason, the newly written blobs are removed.
+      if(bytes)await env.BOOK_FILES.put(key,bytes,{httpMetadata:{contentType:'application/epub+zip'}});
+      uploaded.push(key);
+      if(coverBytes){
+        await env.BOOK_FILES.put(coverKey,coverBytes,{httpMetadata:{contentType:ctype}});
+        uploaded.push(coverKey);
+      }
+      const ts=new Date().toISOString(),editionId=uuid(),batchId=uuid();
+      const statements=[];
+      if(matched.status==='new'){
+        statements.push(db.prepare(
+          'INSERT INTO books (id,title,author,normalized_title,normalized_author,synopsis,created_at,updated_at) '+
+          'VALUES (?,?,?,?,?,?,?,?)'
+        ).bind(bookId,title,author,normalizeEpubText(title),normalizeEpubText(author),
+          clean(metadata.description,3000),ts,ts));
+      }
+      // Fill only truly missing synopsis text. The WHERE guard runs inside
+      // the same transaction as the EPUB record, so concurrent manual edits
+      // always win. This never replaces an existing Goodreads or user synopsis.
+      const epubSynopsis=clean(metadata.description,3000);
+      if(matched.status==='match'&&epubSynopsis){
+        statements.push(db.prepare(
+          "UPDATE books SET synopsis=?,updated_at=? WHERE id=? AND archived_at IS NULL AND trim(synopsis)=''"
+        ).bind(epubSynopsis,ts,bookId));
+      }
+      // Only use explicit EPUB OPF subjects. Tags are added, never removed
+      // or fabricated, and a successful import's book record remains intact.
+      for(const subject of subjects){
+        const tagId=uuid();
+        statements.push(db.prepare(
+          "INSERT OR IGNORE INTO tags(id,label,kind) VALUES (?,?,'imported')"
+        ).bind(tagId,subject));
+        statements.push(db.prepare(
+          "INSERT OR IGNORE INTO book_tags(book_id,tag_id,source) "+
+          "SELECT ?,id,'epub' FROM tags WHERE label=? COLLATE NOCASE"
+        ).bind(bookId,subject));
+      }
+      // Never attach EPUB artwork to special or physical editions.
+      const ebook=await one(db,
+        "SELECT id FROM editions WHERE book_id=? AND format='ebook' AND is_special=0 ORDER BY created_at LIMIT 1",
+        [bookId]);
+      const targetEdition=ebook?.id||editionId;
+      if(!ebook){
+        statements.push(db.prepare(
+          "INSERT INTO editions(id,book_id,edition_name,format,is_special,created_at,updated_at) "+
+          "VALUES (?,?,'Standard','ebook',0,?,?)"
+        ).bind(editionId,bookId,ts,ts));
+      }
+      const titleSafe=clean(fileName,500);
+      statements.push(db.prepare(
+        'INSERT INTO import_batches(id,source,status,report,created_at) VALUES '+
+        "(?,'epub','complete',?,?)"
+      ).bind(batchId,JSON.stringify({created:matched.status==='new'?1:0,uploaded:1}),ts));
+      statements.push(db.prepare(
+        'INSERT INTO epub_files(id,sha256,original_filename,cleaned_title,private_object_key,metadata_json,'+
+        'book_id,edition_id,batch_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)'
+      ).bind(fileId,actual,titleSafe,normalizeEpubText(title),key,JSON.stringify({
+        title,author,description:clean(metadata.description,3000),
+        identifier:clean(metadata.identifier,250),subjects,cover_extracted:!!coverBytes
+      }),bookId,targetEdition,batchId,ts));
+      if(coverBytes){
+        const existing=ebook?await one(db,
+          'SELECT id FROM edition_images WHERE edition_id=? AND display_cover=1',[targetEdition]):null;
+        statements.push(db.prepare(
+          'INSERT INTO edition_images(id,edition_id,origin,private_object_key,role,match_status,display_cover) '+
+          'VALUES (?,?,'+"'epub'"+',?,'+"'cover'"+','+"'unverified'"+',?)'
+        ).bind(coverId,targetEdition,coverKey,existing?0:1));
+      }
+      statements.push(db.prepare(
+        'INSERT INTO change_log(id,batch_id,action,entity_type,entity_id,after_json,created_at) '+
+        "VALUES (?,?,'epub_import','epub_files',?, ?,?)"
+      ).bind(uuid(),batchId,fileId,JSON.stringify({book_id:bookId,edition_id:targetEdition,
+        cover_id:coverId,sha256:actual}),ts));
+      await db.batch(statements);
+      return json({status:'uploaded',uploaded:true,book_id:bookId,
+        book_created:matched.status==='new',edition_id:targetEdition,
+        cover_extracted:!!coverBytes,file_id:fileId,batch_id:batchId},201);
+    }catch(error){
+      // Only delete keys this request added. Never delete an existing digest
+      // already referenced by another EPUB record.
+      for(const objectKey of uploaded){try{await env.BOOK_FILES.delete(objectKey);}catch{}}
+      if(/UNIQUE|constraint/i.test(String(error)))
+        return bad('EPUB was already imported or the matching book changed. Re-preview to continue.',409);
+      throw error;
+    }
+}
+
 export async function handleEpubApi(request,db,env,path){
   const method=request.method;
   // List files only when the owner explicitly opens the EPUB section.
@@ -254,109 +368,7 @@ export async function handleEpubApi(request,db,env,path){
       ctype=coverType(coverBytes);
       if(!ctype)return bad('EPUB cover must be JPEG, PNG, or WebP');
     }
-    const matched=await matchEpub(db,{title,author,sha256:actual,identifier:metadata.identifier});
-    if(matched.status==='already_uploaded')return json({...matched,uploaded:false});
-    if(matched.status==='needs_review')return json(matched,409);
-    const desiredId=clean(metadata.book_id,40);
-    if(desiredId && (matched.status!=='match'||matched.book_id!==desiredId))
-      return bad('The target book changed since preview. Re-preview this EPUB.',409);
-    if(matched.status==='new' && !normalizeEpubText(title))return bad('Title is required');
-    const bookId=matched.status==='match'?matched.book_id:uuid();
-    // A unique R2 key per attempted import prevents failed concurrent requests
-    // from deleting a successful import's file when cleanup runs.
-    const fileId=uuid();
-    const key='epubs/'+actual.slice(0,2)+'/'+fileId+'.epub';
-    const coverId=coverBytes?uuid():null;
-    const coverKey=coverBytes?'epub-covers/'+actual.slice(0,2)+'/'+actual+'-'+coverId+
-      (ctype==='image/png'?'.png':ctype==='image/webp'?'.webp':'.jpg'):null;
-    const uploaded=[];
-    try{
-      // R2 blobs are saved before the atomic SQL batch. If SQL rejects the
-      // file for any reason, the newly written blobs are removed.
-      await env.BOOK_FILES.put(key,bytes,{httpMetadata:{contentType:'application/epub+zip'}});
-      uploaded.push(key);
-      if(coverBytes){
-        await env.BOOK_FILES.put(coverKey,coverBytes,{httpMetadata:{contentType:ctype}});
-        uploaded.push(coverKey);
-      }
-      const ts=new Date().toISOString(),editionId=uuid(),batchId=uuid();
-      const statements=[];
-      if(matched.status==='new'){
-        statements.push(db.prepare(
-          'INSERT INTO books (id,title,author,normalized_title,normalized_author,synopsis,created_at,updated_at) '+
-          'VALUES (?,?,?,?,?,?,?,?)'
-        ).bind(bookId,title,author,normalizeEpubText(title),normalizeEpubText(author),
-          clean(metadata.description,3000),ts,ts));
-      }
-      // Fill only truly missing synopsis text. The WHERE guard runs inside
-      // the same transaction as the EPUB record, so concurrent manual edits
-      // always win. This never replaces an existing Goodreads or user synopsis.
-      const epubSynopsis=clean(metadata.description,3000);
-      if(matched.status==='match'&&epubSynopsis){
-        statements.push(db.prepare(
-          "UPDATE books SET synopsis=?,updated_at=? WHERE id=? AND archived_at IS NULL AND trim(synopsis)=''"
-        ).bind(epubSynopsis,ts,bookId));
-      }
-      // Only use explicit EPUB OPF subjects. Tags are added, never removed
-      // or fabricated, and a successful import's book record remains intact.
-      for(const subject of subjects){
-        const tagId=uuid();
-        statements.push(db.prepare(
-          "INSERT OR IGNORE INTO tags(id,label,kind) VALUES (?,?,'imported')"
-        ).bind(tagId,subject));
-        statements.push(db.prepare(
-          "INSERT OR IGNORE INTO book_tags(book_id,tag_id,source) "+
-          "SELECT ?,id,'epub' FROM tags WHERE label=? COLLATE NOCASE"
-        ).bind(bookId,subject));
-      }
-      // Never attach EPUB artwork to special or physical editions.
-      const ebook=await one(db,
-        "SELECT id FROM editions WHERE book_id=? AND format='ebook' AND is_special=0 ORDER BY created_at LIMIT 1",
-        [bookId]);
-      const targetEdition=ebook?.id||editionId;
-      if(!ebook){
-        statements.push(db.prepare(
-          "INSERT INTO editions(id,book_id,edition_name,format,is_special,created_at,updated_at) "+
-          "VALUES (?,?,'Standard','ebook',0,?,?)"
-        ).bind(editionId,bookId,ts,ts));
-      }
-      const titleSafe=clean(file.name,500);
-      statements.push(db.prepare(
-        'INSERT INTO import_batches(id,source,status,report,created_at) VALUES '+
-        "(?,'epub','complete',?,?)"
-      ).bind(batchId,JSON.stringify({created:matched.status==='new'?1:0,uploaded:1}),ts));
-      statements.push(db.prepare(
-        'INSERT INTO epub_files(id,sha256,original_filename,cleaned_title,private_object_key,metadata_json,'+
-        'book_id,edition_id,batch_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)'
-      ).bind(fileId,actual,titleSafe,normalizeEpubText(title),key,JSON.stringify({
-        title,author,description:clean(metadata.description,3000),
-        identifier:clean(metadata.identifier,250),subjects,cover_extracted:!!coverBytes
-      }),bookId,targetEdition,batchId,ts));
-      if(coverBytes){
-        const existing=ebook?await one(db,
-          'SELECT id FROM edition_images WHERE edition_id=? AND display_cover=1',[targetEdition]):null;
-        statements.push(db.prepare(
-          'INSERT INTO edition_images(id,edition_id,origin,private_object_key,role,match_status,display_cover) '+
-          'VALUES (?,?,'+"'epub'"+',?,'+"'cover'"+','+"'unverified'"+',?)'
-        ).bind(coverId,targetEdition,coverKey,existing?0:1));
-      }
-      statements.push(db.prepare(
-        'INSERT INTO change_log(id,batch_id,action,entity_type,entity_id,after_json,created_at) '+
-        "VALUES (?,?,'epub_import','epub_files',?, ?,?)"
-      ).bind(uuid(),batchId,fileId,JSON.stringify({book_id:bookId,edition_id:targetEdition,
-        cover_id:coverId,sha256:actual}),ts));
-      await db.batch(statements);
-      return json({status:'uploaded',uploaded:true,book_id:bookId,
-        book_created:matched.status==='new',edition_id:targetEdition,
-        cover_extracted:!!coverBytes,file_id:fileId,batch_id:batchId},201);
-    }catch(error){
-      // Only delete keys this request added. Never delete an existing digest
-      // already referenced by another EPUB record.
-      for(const objectKey of uploaded){try{await env.BOOK_FILES.delete(objectKey);}catch{}}
-      if(/UNIQUE|constraint/i.test(String(error)))
-        return bad('EPUB was already imported or the matching book changed. Re-preview to continue.',409);
-      throw error;
-    }
+    return commitStoredEpub(db,env,{fileName:file.name,metadata,actual,coverBytes,ctype,bytes});
   }
   return null;
 }
