@@ -62,7 +62,7 @@ function fixture(){
    headers:content_type?{'content-type':content_type}:undefined,
    body:payload instanceof Uint8Array?payload:
     payload===undefined?undefined:JSON.stringify(payload)
-  }),db,env,'/api/calibre/'+route);
+  }),db,env,new URL('https://private.example/api/calibre/'+route).pathname);
  const enrichment=(b,calibre,source_file_id)=>({
   book_id:b.id,expected_updated_at:b.updated_at,calibre,
   ...(source_file_id?{source_file_id}:{})
