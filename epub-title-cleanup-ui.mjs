@@ -17,6 +17,7 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  const autoStatus=root.querySelector('#epub-title-auto-status');
  const autoHistory=root.querySelector('#epub-title-auto-history');
  const autoHistoryList=root.querySelector('#epub-title-auto-history-list');
+ const reviewFilter=root.querySelector('#epub-title-review-filter');
  const save=root.querySelector('#epub-title-apply');
  const undo=root.querySelector('#epub-title-undo');
  const status=root.querySelector('#epub-title-status');
@@ -25,6 +26,7 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  let cursor='',bookFinished=false,sourceCursor='',sourceFinished=false;
  let finished=false,busy=false,checked=0,sourceChecked=0,shown=60;
  let autoActive=false,autoPauseRequested=false,autoOffset=0,autoOrder=null;
+ let reviewOnly=false;
  const say=value=>{status.textContent=value;};
  const pending=()=>[...all.values()].filter(row=>row.checked&&!row.fixed);
  function controls(){
@@ -40,7 +42,8 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
  }
  function render(){
   results.replaceChildren();
-  const items=[...all.values()];
+  const items=[...all.values()].filter(row=>!reviewOnly||
+   (!row.fixed&&row.auto_status&&row.auto_status!=='applied'));
   for(const row of items.slice(0,shown)){
    const card=node('article',undefined,'epub-title-cleanup-result');
    const tick=node('input');tick.type='checkbox';tick.checked=!!row.checked;
@@ -342,6 +345,9 @@ export function initEpubTitleCleanup(api,{onUpdated=async()=>{},onSelectBook=asy
   }finally{autoActive=false;autoPauseRequested=false;controls();render();}
  });
 
+ reviewFilter?.addEventListener('click',()=>{
+  reviewOnly=!reviewOnly;shown=60;render();
+ });
  scan.addEventListener('click',()=>start(false));
  scanAll.addEventListener('click',()=>start(true));
  save.addEventListener('click',async()=>{
