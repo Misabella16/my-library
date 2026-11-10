@@ -4,6 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {webcrypto} from 'node:crypto';
 import {handleOfflineBulkApi,verifyOfflineMatch,openLibraryCoverDisplayUrl} from '../offline-bulk-api.mjs';
+import {explainOfflineBulkFailure} from '../offline-bulk-ui.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const bookId='11111111-1111-4111-8111-111111111111';
 const edId='22222222-2222-4222-8222-222222222222';
@@ -157,4 +158,21 @@ test('API and UI are owner-only, bounded, and need explicit action',async()=>{
   assert.match(html,/id="offline-export"/);
   assert.match(html,/id="offline-apply"/);
  }finally{f.close();}
+});
+
+test('Offline import reports ambiguous network failures rather than asserting no database writes',()=>{
+ const load=explainOfflineBulkFailure(new TypeError('Load failed'));
+ assert.match(load,/Load failed/);
+ assert.match(load,/may still have saved/);
+ const quota=explainOfflineBulkFailure({message:'limit',payload:{code:'database_read_quota'}});
+ assert.match(quota,/daily allowance/);
+ const session=explainOfflineBulkFailure({message:'Forbidden',status:403});
+ assert.match(session,/Cloudflare Access/);
+ const transient=explainOfflineBulkFailure({message:'D1 failed',payload:{code:'database_temporarily_unavailable'}});
+ assert.match(transient,/inspect repair history/);
+ const ui=readFileSync(new URL('../offline-bulk-ui.mjs',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ assert.match(ui,/api\('\/api\/health'\)/);
+ assert.match(ui,/cursor===0\?1:Math\.min\(4/);
+ assert.match(html,/id="offline-check-connection"/);
 });
