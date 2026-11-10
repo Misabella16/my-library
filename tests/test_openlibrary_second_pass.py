@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "local-mac"))
 from openlibrary_second_pass import (
     title_variants, work_titles, scan_local, review_second_pass, load_previous,
-    atomic_json, write_csv, normalize,
+    atomic_json, write_csv, normalize, main,
 )
 
 
@@ -127,6 +127,27 @@ class ReviewOnlyTests(unittest.TestCase):
                          "title_candidate_author_unverified")
         self.assertFalse(review[0]["candidates"][0]["author_verified"])
         self.assertFalse(unresolved)
+
+
+    def test_isbn_only_reuses_saved_report_without_dump_scans(self):
+        report_path = self.root / "second-pass.json"
+        atomic_json(report_path, {
+            "format": "my-library-openlibrary-second-pass-review-v1",
+            "counts": {"isbn_online_requests": 0},
+            "review": [{
+                "book_id": "book-id", "title": "Example Book", "author": "Writer",
+                "isbns": [], "reason": "title_candidate_author_unverified",
+                "candidates": [],
+            }],
+            "unresolved": []
+        })
+        main(["--isbn-only", "--isbn-lookups", "1",
+              "--output", str(report_path)])
+        result = json.loads(report_path.read_text())
+        self.assertEqual(result["counts"]["isbn_online_requests"], 0)
+        self.assertTrue(report_path.with_suffix(".csv").exists())
+        self.assertFalse(self.works.exists())
+        self.assertFalse(self.authors.exists())
 
     def test_preserve_first_pass_and_write_review_files_only(self):
         previous = self.root / "first.json"
