@@ -9,13 +9,13 @@ const bookId='11111111-1111-4111-8111-111111111111';
 const edId='22222222-2222-4222-8222-222222222222';
 const coverBytes=Uint8Array.from([255,216,255,224,0,16,74,70,73,70,0,1,2,3,4,5,6,7,8,9,255,217]);
 function fixture({title='Example Book',author='Writer',synopsis='',image=false,
- oldTags=false,edition=true,isbn='9780306406157',source='full'}={}){
+ oldTags=false,edition=true,special=false,isbn='9780306406157',source='full'}={}){
  const sql=new DatabaseSync(':memory:');
  sql.exec(readFileSync(new URL('../database/001_initial_schema.sql',import.meta.url),'utf8'));
  sql.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis,private_notes,review) VALUES(?,?,?,?,?,?,?,?)')
  .run(bookId,title,author,title.toLowerCase().replace(/\W+/g,' '),author.toLowerCase(),synopsis,'Keep my notes','Keep my review');
- if(edition)sql.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special,isbn) VALUES(?,?,'Standard','ebook',0,?)")
-  .run(edId,bookId,isbn);
+ if(edition)sql.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special,isbn) VALUES(?,?,?,?,?,?)")
+  .run(edId,bookId,special?'FairyLoot':'Standard','ebook',special?1:0,isbn);
  if(image)sql.prepare("INSERT INTO edition_images(id,edition_id,origin,private_object_key,display_cover) VALUES(?,?,'manual','keep/manual.jpg',1)")
   .run('33333333-3333-4333-8333-333333333333',edId);
  if(oldTags){
@@ -279,3 +279,32 @@ test('Public metadata is reused from edge cache without exposing user records',a
  }
 });
 
+
+test('Online repair enriches an editionless book without creating Online display',async()=>{
+ const f=fixture({edition:false});
+ try{
+  const r=await f.call('repair-auto',{method:'POST',data:{book_id:bookId}});
+  assert.equal(r.status,201,await r.clone().text());
+  const result=await r.json();
+  assert.equal(result.cover_saved,false);
+  assert.equal(result.cover_skipped,true);
+  assert.equal(result.synopsis_filled,true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,0);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,0);
+  assert.equal(f.files.size,0);
+ }finally{f.close();}
+});
+test('Online repair preserves the sole special edition and skips generic cover art',async()=>{
+ const f=fixture({special:true});
+ try{
+  const r=await f.call('repair-auto',{method:'POST',data:{book_id:bookId}});
+  assert.equal(r.status,201,await r.clone().text());
+  const result=await r.json();
+  assert.equal(result.cover_saved,false);
+  assert.equal(result.synopsis_filled,true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,1);
+  assert.equal(f.sql.prepare('SELECT is_special FROM editions').get().is_special,1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,0);
+  assert.equal(f.files.size,0);
+ }finally{f.close();}
+});
