@@ -184,7 +184,22 @@ def batch_all(rows, checkpoint, *, size=DEFAULT_BATCH_SIZE,
     """
     if not (1 <= size <= MAX_BATCH_SIZE):
         raise ValueError("Batch size must be 1–25")
-    cache = load_checkpoint(checkpoint)
+    # Honor any ISBN lookups made with the earlier 100-at-a-time script.
+    # That checkpoint was a plain isbn->review-evidence JSON dictionary.
+    legacy_path = checkpoint.with_name(
+        checkpoint.name.replace(".isbn-batch-checkpoint.json", ".isbn-checkpoint.json")
+    )
+    legacy = {}
+    if legacy_path.is_file():
+        with legacy_path.open("r", encoding="utf-8") as handle:
+            source = json.load(handle)
+        if isinstance(source, dict):
+            legacy = {
+                key: value for key, value in source.items()
+                if isbn13(key) == key and isinstance(value, dict)
+                and isinstance(value.get("status"), str)
+            }
+    cache = {**legacy, **load_checkpoint(checkpoint)}
     queue = [isbn for isbn in requested_isbns(rows) if isbn not in cache]
     total = len(queue)
     done = 0
