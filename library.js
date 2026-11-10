@@ -12,6 +12,7 @@ import {initCollectionHealth} from './collection-health-ui.mjs';
 import {initOnlineEnrich} from './online-enrich-ui.mjs';
 import {preferredDetailCoverId} from './cover-priority.mjs';
 import {initOfflineBulk} from './offline-bulk-ui.mjs';
+import {initOfflineTextReview} from './offline-text-review-ui.mjs';
 import {initExistingCoverRelink} from './existing-cover-relink-ui.mjs';
 import {initCalibreCompare} from './calibre-compare-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
@@ -595,6 +596,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       }
     });
     initOfflineBulk(api,{onUpdated:()=>refreshCurrent()});
+    initOfflineTextReview(api,{onUpdated:()=>refreshCurrent()});
     const combined=document.getElementById('collection-health-smart-repair');
     const combinedStatus=document.getElementById('collection-health-smart-status');
     combined?.addEventListener('click',async()=>{
