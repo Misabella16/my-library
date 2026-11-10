@@ -7,20 +7,38 @@ const make=(tag,text,cls)=>{
  if(cls)x.className=cls;
  return x;
 };
+export function explainOfflineBulkFailure(error){
+ const message=String(error?.message||'Request failed');
+ const code=error?.payload?.code||'';
+ if(code==='database_read_quota'||code==='database_write_quota')
+  return 'Cloudflare D1 daily allowance reached. Existing books are preserved. Check the server reset time before importing again.';
+ if(code==='database_storage_limit')
+  return 'Cloudflare D1 storage limit reached. Review database usage before importing again.';
+ if(code==='database_temporarily_unavailable')
+  return 'Cloudflare D1 is temporarily unavailable; inspect repair history before retrying an uncertain batch.';
+ if(error?.status===403||error?.status===401)
+  return 'Your Cloudflare Access login may have expired. Sign in again and use Check connection.';
+ if(!error?.status&&/load failed|failed to fetch|networkerror|network request failed/i.test(message))
+  return 'Safari could not complete the request (Load failed). This may be a connection, login redirect or server timeout. A submitted batch may still have saved.';
+ if(error?.status)
+  return 'My Library returned HTTP '+error.status+': '+message;
+ return message;
+}
 export function initOfflineBulk(api,{onUpdated=async()=>{}}={}){
  const root=document.getElementById('offline-bulk');
  if(!root)return null;
  const $=name=>root.querySelector('#offline-'+name);
  const exportButton=$('export'),file=$('file'),apply=$('apply'),pause=$('pause'),
-  status=$('status'),metrics=$('metrics'),history=$('history'),
+  checkConnection=$('check-connection'),status=$('status'),metrics=$('metrics'),history=$('history'),
   historyList=$('history-list'),results=$('results');
- if([exportButton,file,apply,pause,status,metrics,history,historyList,results].some(x=>!x))
+ if([exportButton,file,apply,pause,checkConnection,status,metrics,history,historyList,results].some(x=>!x))
   return null;
  let items=[],cursor=0,busy=false,stop=false,success=0,review=0,
   unchanged=0,cover=0,summary=0,tags=0;
  const say=s=>{status.textContent=s;};
  const buttons=()=>{
   exportButton.disabled=busy;
+  checkConnection.disabled=busy;
   apply.disabled=busy||cursor>=items.length;
   pause.disabled=!busy||stop;
   apply.textContent=cursor&&cursor<items.length?'Resume full library import':'Apply ALL verified matches';
@@ -32,6 +50,22 @@ export function initOfflineBulk(api,{onUpdated=async()=>{}}={}){
    ' tags · '+review+' review · '+unchanged+' unchanged.';
   buttons();
  };
+ async function preflight(){
+  const connection=await api('/api/health');
+  if(connection?.database!=='connected'||connection?.authenticated!==true)
+   throw Error('The private database did not confirm owner access');
+  return true;
+ }
+ checkConnection.addEventListener('click',async()=>{
+  if(busy)return;
+  busy=true;buttons();
+  try{
+   await preflight();
+   say('Connection verified: private session and My Library database are responding. No books were modified.');
+  }catch(error){
+   say('Connection check failed: '+explainOfflineBulkFailure(error)+' No import requests were sent.');
+  }finally{busy=false;buttons();}
+ });
  async function collect(type){
   const items=[],seen=new Set();
   let cursor='';
@@ -117,8 +151,12 @@ export function initOfflineBulk(api,{onUpdated=async()=>{}}={}){
   if(busy||cursor>=items.length)return;
   busy=true;stop=false;buttons();
   try{
+   say('Checking private session and database before sending matches…');
+   await preflight();
    while(cursor<items.length&&!stop){
-    const batch=items.slice(cursor,cursor+8);
+    // First attempt sends only one record; later requests use modest batches.
+    const count=cursor===0?1:Math.min(4,items.length-cursor);
+    const batch=items.slice(cursor,cursor+count);
     const response=await api('/api/offline-bulk/apply',{
      method:'POST',data:{format:'my-library-openlibrary-matches-v1',items:batch}
     });
@@ -148,8 +186,10 @@ export function initOfflineBulk(api,{onUpdated=async()=>{}}={}){
     success+' books enriched; '+review+' need review. Rescan health for remaining gaps.');
    if(success)await onUpdated();
   }catch(e){
-   say('Stopped safely after '+cursor.toLocaleString()+' books: '+
-    (e.message||'Request failed')+'. No completed batch was lost. Retry to resume.');
+   const prefix=cursor===0?'No confirmed book imports yet. ':
+    cursor.toLocaleString()+' imports have confirmed responses. ';
+   say(prefix+explainOfflineBulkFailure(e)+
+    ' If a write was sent, its outcome is unknown. Inspect Repair history & Undo, and refresh the catalogue before retrying.');
   }finally{busy=false;stop=false;render();}
  });
  async function showHistory(){
