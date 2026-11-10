@@ -13,12 +13,12 @@ const report={book_id:bookId,expected_updated_at:'',title:'Example Book',author:
  source_edition:'/books/OL456M',match_type:'isbn_author',
  matched_isbn:isbn,synopsis:'A complete book synopsis',
  tags:['Fantasy','Adventure'],cover_id:12345};
-function fixture({synopsis='',cover=false,special=false,tags=false,format='ebook'}={}){
+function fixture({synopsis='',cover=false,special=false,tags=false,format='ebook',edition=true}={}){
  const sql=new DatabaseSync(':memory:');
  sql.exec(readFileSync(new URL('../database/001_initial_schema.sql',import.meta.url),'utf8'));
  sql.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis,private_notes,review) VALUES(?,?,?,?,?,?,?,?)')
  .run(bookId,'Example Book','Writer','example book','writer',synopsis,'keep these','my review');
- sql.prepare('INSERT INTO editions(id,book_id,edition_name,format,is_special,isbn) VALUES(?,?,?,?,?,?)')
+ if(edition)sql.prepare('INSERT INTO editions(id,book_id,edition_name,format,is_special,isbn) VALUES(?,?,?,?,?,?)')
   .run(edId,bookId,special?'Special':'Standard',format,special?1:0,isbn);
  if(cover)sql.prepare("INSERT INTO edition_images(id,edition_id,origin,private_object_key,display_cover) VALUES(?,?,'manual','saved/owner-cover.jpg',1)")
   .run('33333333-3333-4333-8333-333333333333',edId);
@@ -94,15 +94,30 @@ test('Original book synopsis, personal tags, and manually saved artwork remain u
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
  }finally{f.close();}
 });
-test('A book with only special editions gets a separate non-special display edition',async()=>{
+test('Special-edition-only books receive safe text metadata, never a fabricated edition or cover',async()=>{
  const f=fixture({special:true});
  try{
   const r=await f.call('apply',{format:'my-library-openlibrary-matches-v1',items:[f.item()]});
   const result=(await r.json()).results[0];
   assert.equal(result.status,'applied');
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,2);
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images im JOIN editions e ON im.edition_id=e.id WHERE e.is_special=1').get().n,0);
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images im JOIN editions e ON im.edition_id=e.id WHERE e.is_special=0').get().n,1);
+  assert.equal(result.cover_linked,false);
+  assert.equal(result.synopsis_filled,true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,0);
+  assert.equal(f.sql.prepare('SELECT is_special FROM editions').get().is_special,1);
+ }finally{f.close();}
+});
+test('Books with no editions never receive an invented Online display edition',async()=>{
+ const f=fixture({edition:false});
+ try{
+  const proposal={...f.item(),match_type:'title_author',matched_isbn:''};
+  const r=await f.call('apply',{format:'my-library-openlibrary-matches-v1',items:[proposal]});
+  const result=(await r.json()).results[0];
+  assert.equal(result.status,'applied');
+  assert.equal(result.cover_linked,false);
+  assert.equal(result.synopsis_filled,true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,0);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,0);
  }finally{f.close();}
 });
 test('Batch rejects unverified authors and stale records without writing',async()=>{

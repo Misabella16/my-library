@@ -139,9 +139,10 @@ async function apply(db,env,id,expected,fetcher,options={}){
  const alternatives=state.editions.filter(e=>e.is_special===0);
  const ebook=alternatives.filter(e=>e.format==='ebook');
  const chosen=ebook.length===1?ebook[0]:alternatives.length===1?alternatives[0]:null;
- const mayCreate=state.editions.length===0;
- // Do not choose between ambiguous editions or alter special-edition artwork.
- const canCover=!!proposed.cover_id&&!state.hasCover&&(!!chosen||mayCreate)&&!!env.BOOK_FILES;
+ // Cover art from a work cannot establish a new edition's identity.
+ // Preserve special editions and skip cover attachment unless one standard
+ // edition can be selected without guessing.
+ const canCover=!!proposed.cover_id&&!state.hasCover&&!!chosen&&!!env.BOOK_FILES;
  let bytes=null;
  if(canCover)try{
   await new Promise(resolve=>setTimeout(resolve,1100));
@@ -150,13 +151,13 @@ async function apply(db,env,id,expected,fetcher,options={}){
  if(!synopsis&&!tags.length&&!bytes)return json({status:'no_changes',
   reason:'No new synopsis, tags, or usable cover found'});
  const now=new Date().toISOString(),coverId=bytes?crypto.randomUUID():null,
-  editionId=bytes?(chosen?.id||crypto.randomUUID()):null,
-  created=!!bytes&&!chosen,coverKey=bytes?
+  editionId=bytes?chosen.id:null,
+  coverKey=bytes?
    'edition-covers/online-openlibrary/'+coverId+'.jpg':null,logId=crypto.randomUUID();
  const old={synopsis:b.synopsis,updated_at:b.updated_at};
  const after={synopsis:synopsis||b.synopsis,updated_at:now,
   added_tags:tags,cover_id:coverId,cover_key:coverKey,
-  edition_id:editionId,created_edition_id:created?editionId:null,
+  edition_id:editionId,created_edition_id:null,
   source_url,source:'Open Library'};
  const updates=[db.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=? '+
    'AND updated_at=? AND synopsis=? AND archived_at IS NULL')
@@ -171,10 +172,6 @@ async function apply(db,env,id,expected,fetcher,options={}){
    .bind(id,tag,id,now));
  }
  if(bytes){
-  if(created)updates.push(db.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) "+
-   "SELECT ?,?,'Online display','other',0 WHERE EXISTS(SELECT 1 FROM books "+
-   "WHERE id=? AND updated_at=?)")
-   .bind(editionId,id,id,now));
   updates.push(db.prepare("INSERT INTO edition_images(id,edition_id,origin,private_object_key,"+
    "role,match_status,display_cover,credit) SELECT ?,?,'publisher',?,"+
    "'cover','possible',1,'Open Library / original rights holder' "+
