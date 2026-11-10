@@ -105,8 +105,9 @@ async function apply(db,data,fetcher){
  const after={book_id:view.book.id,edition_id:target.id,source_edition:source.source_edition,
   source_work:data.work_id,source_isbn:ready.match.isbn,updated_at:now,
   publisher:publisher||current,image_id:imageId,cover_id,cover_url:coverUrl(cover_id)};
- const stmts=[db.prepare('UPDATE editions SET publisher=?,updated_at=? WHERE id=? AND book_id=? AND updated_at=? AND publisher=? AND is_special=0')
-  .bind(after.publisher,now,target.id,view.book.id,target.updated_at,current)];
+ const stmts=[db.prepare('UPDATE editions SET publisher=?,updated_at=? WHERE id=? AND book_id=? AND updated_at=? AND publisher=? AND is_special=0 '+(imageId?
+  'AND NOT EXISTS(SELECT 1 FROM edition_images WHERE edition_id=?)':''))
+  .bind(after.publisher,now,target.id,view.book.id,target.updated_at,current,...(imageId?[target.id]:[]))];
  if(imageId)stmts.push(db.prepare("INSERT INTO edition_images(id,edition_id,origin,image_url,credit,role,match_status,display_cover) "+
   "SELECT ?,?,'publisher',?,'Open Library exact ISBN edition','cover','possible',1 "+
   "WHERE EXISTS(SELECT 1 FROM editions WHERE id=? AND updated_at=? AND is_special=0) "+
