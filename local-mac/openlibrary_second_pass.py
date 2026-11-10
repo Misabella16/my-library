@@ -249,7 +249,8 @@ def write_csv(path, rows):
             out.writerow(["book_id", "title", "author", "ISBNs", "reason",
                           "source_work", "source_title", "title_method",
                           "source_title_method", "author_verified", "synopsis_available",
-                          "cover_available", "tags_available", "source_url"])
+                          "cover_available", "tags_available", "source_url",
+                          "isbn_status", "isbn_source_work", "isbn_edition_title"])
             for row in rows:
                 sources = row["candidates"] or [{}]
                 for cand in sources:
@@ -261,7 +262,10 @@ def write_csv(path, rows):
                                   cand.get("author_verified", ""),
                                   cand.get("has_synopsis", ""),
                                   bool(cand.get("cover_id")), bool(cand.get("tags")),
-                                  cand.get("source_url", "")])
+                                  cand.get("source_url", ""),
+                                  row.get("isbn_evidence", {}).get("status", ""),
+                                  row.get("isbn_evidence", {}).get("source_work", ""),
+                                  row.get("isbn_evidence", {}).get("edition_title", "")])
         os.replace(temporary, path)
     finally:
         if temporary.exists():
@@ -333,20 +337,49 @@ def online_isbn_check(rows, cache_path, limit):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("catalogue", "previous", "works", "authors", "output"):
-        parser.add_argument("--" + name, type=Path, required=True)
+    for name in ("catalogue", "previous", "works", "authors"):
+        parser.add_argument("--" + name, type=Path)
+    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--csv", type=Path, help="Default: same output name with .csv")
+    parser.add_argument("--isbn-only", action="store_true",
+                        help="Resume limited ISBN lookups from an existing second-pass report; skip huge dump scans")
     parser.add_argument("--isbn-lookups", type=int, default=0,
                         help="Optional paced ONLINE ISBN edition lookups; default is zero")
     args = parser.parse_args(argv)
+    if args.isbn_lookups < 0 or args.isbn_lookups > 100:
+        parser.error("--isbn-lookups must be between 0 and 100")
+    csv_path = args.csv or args.output.with_suffix(".csv")
+    if csv_path.resolve() == args.output.resolve():
+        parser.error("CSV must not overwrite the JSON report")
+    if args.isbn_only:
+        if not args.output.is_file():
+            parser.error("Existing second-pass review report is required for --isbn-only")
+        with args.output.open("r", encoding="utf-8") as f:
+            report = json.load(f)
+        if (report.get("format") != "my-library-openlibrary-second-pass-review-v1"
+                or not isinstance(report.get("review"), list)
+                or not isinstance(report.get("unresolved"), list)):
+            parser.error("The --output file is not a second-pass review report")
+        sent = online_isbn_check(report["review"] + report["unresolved"],
+                                 args.output.with_suffix(".isbn-checkpoint.json"),
+                                 args.isbn_lookups)
+        report["counts"]["isbn_online_requests"] = (
+            report["counts"].get("isbn_online_requests", 0) + sent)
+        atomic_json(args.output, report)
+        write_csv(csv_path, report["review"] + report["unresolved"])
+        print(f"Saved {sent} additional ISBN checks; no Works/Authors rescan.", flush=True)
+        print("Review report:", args.output, flush=True)
+        print("Review spreadsheet:", csv_path, flush=True)
+        return
+
     paths = [args.catalogue, args.previous, args.works, args.authors]
+    if any(p is None for p in paths):
+        parser.error("Full review requires --catalogue, --previous, --works and --authors")
     for path in paths:
         if not path.is_file():
             parser.error(f"Missing file: {path}")
-    if args.output.resolve() in {p.resolve() for p in paths}:
-        parser.error("Output must not overwrite an input file")
-    if args.isbn_lookups < 0 or args.isbn_lookups > 100:
-        parser.error("--isbn-lookups must be between 0 and 100")
+    if args.output.resolve() in {p.resolve() for p in paths} or csv_path.resolve() in {p.resolve() for p in paths}:
+        parser.error("Review output must not overwrite a source file")
 
     prior_verified = load_previous(args.previous)
     targets = [b for b in read_catalogue(args.catalogue)
@@ -378,9 +411,6 @@ def main(argv=None):
         "unresolved": unresolved,
     }
     atomic_json(args.output, result)
-    csv_path = args.csv or args.output.with_suffix(".csv")
-    if csv_path.resolve() in {p.resolve() for p in paths} | {args.output.resolve()}:
-        parser.error("CSV must not overwrite an input or report")
     write_csv(csv_path, review + unresolved)
     print(json.dumps(counts, indent=2), flush=True)
     print("Review report:", args.output, flush=True)
