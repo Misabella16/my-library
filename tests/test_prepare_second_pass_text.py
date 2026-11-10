@@ -77,7 +77,7 @@ class TextOnlySecondPassTests(unittest.TestCase):
     def test_one_author_verified_variant_gets_text_only_review_proposal(self):
         self.write_inputs()
         from openlibrary_dump_match import read_catalogue
-        rows, skipped = select_proposals(report(), read_catalogue(self.catalogue_path))
+        rows, skipped = select_proposals(report(), self.catalogue_path)
         self.assertEqual(len(rows), 1)
         p = rows[0]
         self.assertTrue(p["title_variant_author_verified"])
@@ -90,21 +90,18 @@ class TextOnlySecondPassTests(unittest.TestCase):
         self.assertEqual(skipped, [])
 
     def test_ambiguous_or_unverified_candidates_never_selected(self):
-        from openlibrary_dump_match import read_catalogue
         self.write_inputs()
-        books = read_catalogue(self.catalogue_path)
         for candidate in (
             report(verified=False),
             report(reason="multiple_author_verified_works"),
             report(candidates=2),
         ):
-            rows, _ = select_proposals(candidate, books)
+            rows, _ = select_proposals(candidate, self.catalogue_path)
             self.assertFalse(rows)
 
     def test_owner_existing_fields_never_proposed_for_overwrite(self):
-        from openlibrary_dump_match import read_catalogue
         self.write_inputs(source_catalogue=catalogue(synopsis=True, tags=False))
-        rows, _ = select_proposals(report(), read_catalogue(self.catalogue_path))
+        rows, _ = select_proposals(report(), self.catalogue_path)
         self.assertFalse(rows[0]["synopsis_pending"])
         self.assertEqual(rows[0]["synopsis"], "")
         self.assertEqual(rows[0]["tags"], ["Magic", "Fantasy"])
@@ -112,7 +109,7 @@ class TextOnlySecondPassTests(unittest.TestCase):
     def test_resume_full_synopsis_from_checkpoint(self):
         from openlibrary_dump_match import read_catalogue
         self.write_inputs()
-        rows, _ = select_proposals(report(), read_catalogue(self.catalogue_path))
+        rows, _ = select_proposals(report(), self.catalogue_path)
         calls = []
         def get(key, title, preview):
             calls.append(key)
@@ -124,7 +121,7 @@ class TextOnlySecondPassTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertTrue(rows[0]["synopsis"].startswith("The source begins"))
         self.assertFalse(rows[0]["synopsis_pending"])
-        rows2, _ = select_proposals(report(), read_catalogue(self.catalogue_path))
+        rows2, _ = select_proposals(report(), self.catalogue_path)
         count, paused = hydrate(rows2, checkpoint,
                                 getter=lambda *args: self.fail("Repeated lookup"),
                                 sleep=lambda _: None, progress=lambda _: None)
