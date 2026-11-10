@@ -8,14 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "local-mac"))
 from openlibrary_second_pass import (
     title_variants, work_titles, scan_local, review_second_pass, load_previous,
-    atomic_json, write_csv,
+    atomic_json, write_csv, normalize,
 )
 
 
 def book(book_id, title, author, *, synopsis=True, cover=True, tags=True):
     return {
         "id": book_id, "title": title, "author": author,
-        "author_key": " ".join(author.lower().split()),
+        "author_key": normalize(author),
         "needs_synopsis": synopsis, "needs_cover": cover, "needs_tags": tags,
         "isbns": [],
     }
