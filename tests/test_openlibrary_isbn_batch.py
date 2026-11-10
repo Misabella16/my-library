@@ -79,6 +79,31 @@ class FullISBNQueueTests(unittest.TestCase):
         self.assertEqual((done, total), (0, 0))
         self.assertEqual(cached, cache)
 
+    def test_more_than_100_isbns_complete_in_one_run(self):
+        def make_isbn(index):
+            stem = f"97800000{index:04d}"[:12]
+            check = (10 - sum(int(ch) * (1 if n % 2 == 0 else 3)
+                              for n, ch in enumerate(stem)) % 10) % 10
+            return stem + str(check)
+        values = [make_isbn(i) for i in range(121)]
+        rows = [record(str(i), [isbn]) for i, isbn in enumerate(values)]
+        requests = []
+        def request(url):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["q"][0]
+            group = [identifier for identifier in values if identifier in q]
+            requests.append(group)
+            return {"numFound": len(group), "docs": [
+                search_document(f"/works/OL{i + 1}W", [isbn])
+                for i, isbn in enumerate(group)
+            ]}
+        cache, done, total = batch_all(
+            rows, self.checkpoint, size=15, request_fn=request,
+            sleep_fn=lambda _: None,
+        )
+        self.assertEqual((done, total), (121, 121))
+        self.assertEqual(len(cache), 121)
+        self.assertEqual(len(requests), 9)
+
     def test_fuzzy_search_never_assigns_unverified_isbn(self):
         result = analyze_search([ISBN1], {"numFound": 1, "docs": [
             search_document("/works/OL1W", [ISBN2])
