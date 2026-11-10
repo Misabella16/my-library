@@ -541,6 +541,34 @@
         <div id="offline-text-history-list" class="epub-preview-list"></div>
         <p class="muted">The original title and author are checked against the current book, source title variants must agree, and any record edited since export is held for review. Imported text can be undone unless you subsequently edit the book. Generic Open Library covers never become special editions.</p>
       </section>
+    </details>
+    <details class="imports-disclosure">
+      <summary>Edition &amp; Cover Recovery (Open Library, exact ISBN only)</summary>
+      <section class="surface collection-health" id="edition-recovery" aria-labelledby="edition-recovery-heading">
+        <p class="section-kicker">✧ PRIVATE · PREVIEW FIRST</p>
+        <h2 id="edition-recovery-heading">Find actual editions and their covers</h2>
+        <p>Use your saved <strong>first-pass verified matches JSON</strong> to research editions of known works. Open Library's Editions API is queried only for a book you select. We never download the full Editions or cover dumps. Publishers, dates, ISBNs, and cover candidates appear for comparison, but unknown editions are not added as owned books or copies.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="edition-recovery-file">Choose original verified matches JSON
+            <input id="edition-recovery-file" type="file" accept=".json,application/json">
+          </label>
+          <label class="epub-filter-label" for="edition-recovery-search">Find a book in the report
+            <input id="edition-recovery-search" type="search" placeholder="Search title or author" autocomplete="off">
+          </label>
+          <button class="btn subtle" id="edition-recovery-next" type="button" disabled>Next 25 source editions</button>
+          <button class="btn subtle" id="edition-recovery-undo" type="button">Edition recovery history &amp; Undo</button>
+        </div>
+        <p class="small-status" id="edition-recovery-status" aria-live="polite">Load your first-pass verified match report and choose a book to retrieve its available editions.</p>
+        <div class="epub-preview-list" id="edition-recovery-choices"></div>
+        <div class="collection-health-results" id="edition-recovery-results"></div>
+        <div class="health-result" id="edition-recovery-proposal"></div>
+        <label class="collection-health-actions"><input id="edition-recovery-ack" type="checkbox" disabled> I verified this exact ISBN and the proposed edition cover or publisher.</label>
+        <div class="collection-health-actions">
+          <button class="btn" id="edition-recovery-apply" type="button" disabled>Apply approved missing edition details</button>
+        </div>
+        <div class="epub-preview-list" id="edition-recovery-history"></div>
+        <p class="muted">The site adds metadata or artwork only to an existing standard edition whose ISBN matches exactly. FairyLoot, Illumicrate, OwlCrate, signed editions, manually selected covers, notes and copies stay unchanged. Books with no editions or ISBN are shown as research candidates, never silently turned into owned editions or fake “Online display” records. You can add a real edition manually after identifying it.</p>
+      </section>
     </details></details></section>
 </main>
 <footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
