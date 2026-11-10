@@ -54,15 +54,16 @@ async function applyOne(db,data){
  const standard=editions.filter(e=>e.is_special===0);
  const ebooks=standard.filter(e=>e.format==='ebook');
  const selected=ebooks.length===1?ebooks[0]:standard.length===1?standard[0]:null;
- const createEdition=!!coverURL&&!selected&&standard.length===0;
- const canCover=!!coverURL&&(!!selected||createEdition);
+ // A work-level cover is not evidence that a physical or digital edition exists.
+ // Link it only to one unambiguous existing non-special edition.
+ const canCover=!!coverURL&&!!selected;
  if(!synopsis&&!tags.length&&!canCover)return {status:'no_changes'};
- const editionId=canCover?(selected?.id||crypto.randomUUID()):'';
+ const editionId=canCover?selected.id:'';
  const coverId=canCover?crypto.randomUUID():'';
  const now=new Date().toISOString(),logId=crypto.randomUUID();
  const after={synopsis:synopsis||book.synopsis,updated_at:now,
   added_tags:tags,cover_id:coverId,cover_url:canCover?coverURL:'',
-  edition_id:editionId,created_edition_id:createEdition?editionId:null,
+  edition_id:editionId,created_edition_id:null,
   source_work:data.source_work,source_edition:limitText(data.source_edition,50),
   source:'Open Library official dumps'};
  const stmts=[
@@ -80,10 +81,6 @@ async function applyOne(db,data){
    .bind(book.id,tag,book.id,now));
  }
  if(canCover){
-  if(createEdition)stmts.push(db.prepare(
-   "INSERT INTO editions(id,book_id,edition_name,format,is_special) "+
-   "SELECT ?,?,'Online display','other',0 WHERE EXISTS(SELECT 1 FROM books "+
-   "WHERE id=? AND updated_at=?)").bind(editionId,book.id,book.id,now));
   stmts.push(db.prepare("INSERT INTO edition_images(id,edition_id,origin,image_url,"+
    "role,match_status,display_cover,credit) "+
    "SELECT ?,?,'publisher',?,'cover','possible',1,? "+
