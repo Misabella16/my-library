@@ -22,6 +22,8 @@ jobs:
         run: |
           node --check _worker.js
           node --check library.js
+          node --check offline-text-review-api.mjs
+          node --check offline-text-review-ui.mjs
           node --check goodreads-preview.mjs
           node --check goodreads-ui.mjs
           node --check goodreads-import.mjs

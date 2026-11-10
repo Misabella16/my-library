@@ -16,6 +16,7 @@ import {handleCollectionHealthApi} from './collection-health-api.mjs';
 import {handleOnlineEnrichApi} from './online-enrich-api.mjs';
 import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
 import {handleOfflineBulkApi} from './offline-bulk-api.mjs';
+import {handleOfflineTextReviewApi} from './offline-text-review-api.mjs';
 import {handleExistingCoverRelinkApi} from './existing-cover-relink-api.mjs';
 import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
 import {handleCalibreRepairApi} from './calibre-repair-api.mjs';
@@ -288,6 +289,8 @@ async function serveApi(request,env,path){
   if(calibreRepairResponse)return calibreRepairResponse;
   const calibreResponse=await handleCalibreCompareApi(request,db,path);
   if(calibreResponse)return calibreResponse;
+  const offlineTextResponse=await handleOfflineTextReviewApi(request,db,path);
+  if(offlineTextResponse)return offlineTextResponse;
   const offlineBulkResponse=await handleOfflineBulkApi(request,db,env,path);
   if(offlineBulkResponse)return offlineBulkResponse;
   const onlineEnrichResponse=await handleOnlineEnrichApi(request,db,env,path);
