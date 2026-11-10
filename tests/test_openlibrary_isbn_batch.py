@@ -98,6 +98,26 @@ class FullISBNQueueTests(unittest.TestCase):
         ]})
         self.assertEqual(incomplete[ISBN1]["status"], "isbn_search_incomplete")
 
+    def test_legacy_100_at_a_time_checkpoint_is_reused(self):
+        path = Path(self.tmp.name) / "second-pass-review.isbn-batch-checkpoint.json"
+        older = path.with_name("second-pass-review.isbn-checkpoint.json")
+        older.write_text(json.dumps({
+            ISBN1: {"status": "isbn_edition_candidate", "source_work": "/works/OL1W"}
+        }), encoding="utf-8")
+        calls = []
+        def request(url):
+            calls.append(url)
+            return {"numFound": 1,
+                    "docs": [search_document("/works/OL2W", [ISBN2])]}
+        cache, done, total = batch_all(
+            [record("book", [ISBN1, ISBN2])], path, size=25,
+            request_fn=request, sleep_fn=lambda _: None,
+        )
+        self.assertEqual((done, total), (1, 1))
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn(ISBN1, urllib.parse.unquote(calls[0]))
+        self.assertEqual(cache[ISBN1]["status"], "isbn_edition_candidate")
+
     def test_network_interruption_preserves_checkpoint_and_resumes(self):
         rows = [record("a", [ISBN1, ISBN2, ISBN3])]
         calls = [0]
