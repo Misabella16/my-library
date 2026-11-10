@@ -519,7 +519,29 @@
       <div id="offline-results" class="collection-health-results"></div>
       <div id="offline-history-list" class="epub-preview-list"></div>
       <p class="muted">Existing descriptions, tags, notes, ratings, special-edition images, copies and EPUBs are preserved. New standard artwork uses Open Library's public cover-ID image links when displayed, not thousands of bulk image downloads. All proposed covers are unverified until reviewed and may be unavailable if Open Library lacks the image. You can pause and resume the import in the same browser tab.</p>
-    </section></details></details></section>
+    </section></details>
+    <details class="imports-disclosure"><summary>Review second-pass Open Library text repairs (no covers or editions)</summary>
+      <section class="surface collection-health" id="offline-text-review" aria-labelledby="offline-text-heading">
+        <p class="section-kicker">✧ REVIEW BEFORE APPLYING</p>
+        <h2 id="offline-text-heading">Preview missing synopses and tags from second-pass matches</h2>
+        <p>Use the Mac helper <code>local-mac/prepare_second_pass_text.py</code> with the saved <code>second-pass-review.json</code> and a fresh catalogue export. The resulting <code>second-pass-text-proposals.json</code> is a review file, not an automatic import. You choose exactly which text changes to approve. No editions, copy records, private EPUBs or covers are written here.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="offline-text-file">Choose text-only proposals JSON
+            <input id="offline-text-file" type="file" accept=".json,application/json">
+          </label>
+          <button class="btn subtle" id="offline-text-preview" type="button" disabled>Preview 20 (read-only)</button>
+          <button class="btn subtle" id="offline-text-next" type="button" disabled>Next 20</button>
+          <button class="btn subtle" id="offline-text-select" type="button" disabled>Select ready on this page</button>
+          <button class="btn" id="offline-text-approve" type="button" disabled>Apply selected text repairs</button>
+          <button class="btn subtle" id="offline-text-history" type="button">Text repair history &amp; Undo</button>
+        </div>
+        <p class="small-status" id="offline-text-status" role="status" aria-live="polite">Select your review-only proposals JSON to preview the current gaps. No changes until you approve.</p>
+        <p class="small-status" id="offline-text-metrics" aria-live="polite"></p>
+        <div id="offline-text-results" class="collection-health-results"></div>
+        <div id="offline-text-history-list" class="epub-preview-list"></div>
+        <p class="muted">The original title and author are checked against the current book, source title variants must agree, and any record edited since export is held for review. Imported text can be undone unless you subsequently edit the book. Generic Open Library covers never become special editions.</p>
+      </section>
+    </details></details></section>
 </main>
 <footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
 <dialog id="add-book-dialog" aria-labelledby="add-book-title">
