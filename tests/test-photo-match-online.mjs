@@ -6,6 +6,7 @@ import {handlePhotoOnlineCoverApi,mapGoogleBooks,mapOpenLibrary,resolveSourceIma
  from '../photo-online-cover-api.mjs';
 import {handlePhotoOcrAssetsApi} from '../photo-ocr-assets-api.mjs';
 import {initPhotoBookMatching} from '../photo-match-book-ui.mjs';
+import {googleImagesQuery,googleImagesUrl} from '../google-image-search.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -121,7 +122,8 @@ function mockUi(api,getPhotoCrop){
   'photo-online-covers','photo-online-status','photo-book-status',
   'photo-selected-book','photo-edition-choice','photo-find-covers',
   'photo-create-book','photo-save-cover','photo-open-book',
-  'photo-cover-choice','photo-artwork-rotate'];
+  'photo-cover-choice','photo-artwork-rotate',
+  'photo-google-images-link','photo-google-file','photo-google-lens-link'];
  const oldDocument=globalThis.document,oldConfirm=globalThis.confirm;
  const controls=new Map(names.map(name=>[name,new Node()]));
  globalThis.document={getElementById:id=>controls.get(id)||null,createElement:tag=>new Node(tag)};
@@ -205,4 +207,68 @@ test('Photo matching is explicitly accessible from shelf-photo UI and existing b
  assert.match(html,/id="photo-artwork-rotate"/);
  assert.match(ui,/initPhotoBookMatching\(api/);
  assert.match(ui,/coverComparison\?\.croppedCover\(\)/);
+});
+
+test('Google Images searches use exact book, author and special-edition details without scraping',()=>{
+ const query=googleImagesQuery({
+  title:'Bodies of Magic',author:'Freya Marske',
+  editionName:'FairyLoot special edition',vendor:'FairyLoot',isSpecial:true
+ });
+ assert.match(query,/"Bodies of Magic"/);
+ assert.match(query,/"Freya Marske"/);
+ assert.match(query,/"FairyLoot special edition"/);
+ assert.match(query,/exclusive edition cover/);
+ const url=googleImagesUrl({
+  title:'Bodies of Magic',author:'Freya Marske',
+  editionName:'FairyLoot special edition',vendor:'FairyLoot',isSpecial:true
+ });
+ const u=new URL(url);
+ assert.equal(u.origin,'https://www.google.com');
+ assert.equal(u.searchParams.get('udm'),'2');
+ assert.equal(u.searchParams.get('q'),query);
+ assert.equal(googleImagesUrl({title:'  '}),'');
+});
+test('Photo workflow opens Google Images for the selected edition and saves a returned JPEG file locally',async()=>{
+ const calls=[],book={id:bookId,title:'Bodies of Magic',author:'Freya Marske',
+  editions:[{id:editionId,edition_name:'FairyLoot exclusive',vendor:'FairyLoot',is_special:1}]};
+ const ui=mockUi(async(path,opts)=>{
+  calls.push({path,opts});
+  if(path.startsWith('/api/books?'))return {books:[{
+   id:bookId,title:book.title,author:book.author
+  }]};
+  if(path==='/api/books/'+bookId)return {book};
+  if(path==='/api/editions/'+editionId+'/cover')return {image:{id:imageId}};
+  if(path==='/api/editions/'+editionId+'/display-cover')return {saved:true};
+  if(path==='/api/books/'+bookId+'/display-edition')return {selected:true};
+  throw Error('Unexpected endpoint '+path);
+ },async()=>{throw Error('Photo crop should not be used when a saved Google Image is chosen');});
+ try{
+  const c=ui.controls;
+  c.get('photo-find-title').value='Bodies of Magic';
+  c.get('photo-find-author').value='Freya Marske';
+  c.get('photo-edition-name').value='FairyLoot exclusive';
+  c.get('photo-edition-vendor').value='FairyLoot';
+  c.get('photo-edition-special').checked=true;
+  c.get('photo-find-title').dispatch('input');
+  const link=new URL(c.get('photo-google-images-link').href);
+  assert.equal(link.searchParams.get('udm'),'2');
+  assert.match(link.searchParams.get('q'),/FairyLoot/);
+  await c.get('photo-find-book').dispatch('click');
+  const existing=c.get('photo-find-results').children[0].children[1].children.find(
+   x=>x.textContent==='Use this existing book');
+  await existing.dispatch('click');
+  c.get('photo-edition-choice').value=editionId;
+  const file=Object.assign(new Blob([jpeg()],{type:'image/jpeg'}),{
+   name:'fairyloot-selected.jpg'
+  });
+  c.get('photo-google-file').files=[file];
+  await c.get('photo-google-file').dispatch('change');
+  assert.equal(c.get('photo-save-cover').disabled,false);
+  await c.get('photo-save-cover').dispatch('click');
+  const upload=calls.find(x=>x.path==='/api/editions/'+editionId+'/cover');
+  assert.equal(upload.opts.raw,file);
+  assert.equal(upload.opts.contentType,'image/jpeg');
+  assert.ok(!calls.some(x=>x.path==='/api/books'&&x.opts?.method==='POST'));
+  assert.ok(!calls.some(x=>x.path.includes('/copies')));
+ }finally{ui.restore();}
 });
