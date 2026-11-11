@@ -2,7 +2,7 @@
 // Never edits existing books until the owner previews and explicitly confirms.
 const MAX_PREVIEW=40,MAX_COMMIT=10,MAX_STATEMENTS=80;
 const fieldLabels={rating:'Rating',review:'Review',date_started:'Date started',
- date_finished:'Date read',shelves:'Shelves'};
+ date_finished:'Date read',goodreads_id:'Goodreads book link',shelves:'Shelves'};
 const node=(tag,text,className)=>{
  const e=document.createElement(tag);
  if(text!==undefined)e.textContent=String(text);
@@ -13,6 +13,7 @@ const summarizePlan=p=>{
  const info=[];
  for(const [key,value] of Object.entries(p.changes||{})){
   if(key==='shelves')info.push('Add shelves: '+value.join(', '));
+  else if(key==='goodreads_id')info.push('Link Goodreads book #'+value);
   else if(key==='review')info.push('Fill missing review');
   else info.push('Fill '+(fieldLabels[key]||key)+': '+value);
  }
@@ -166,7 +167,7 @@ export function initGoodreadsSync(api,{onImported=async()=>{}}={}){
    selected=plans.filter(x=>x.plan.status==='ready');
    remaining=[...selected];
    render();
-   tell('Preview ready: '+selected.length+' existing books have missing metadata.'+
+   tell('Preview ready: '+selected.length+' existing books have missing Goodreads IDs or metadata.'+
     ' Fields already filled in My Library are preserved. Review changes below before syncing.');
   }catch(e){
    plans=[];selected=[];remaining=[];render();
@@ -182,7 +183,7 @@ export function initGoodreadsSync(api,{onImported=async()=>{}}={}){
   if(running||!remaining.length)return;
   approval.hidden=false;
   const msg=get('goodreads-sync-approval-text');
-  if(msg)msg.textContent='Fill missing Goodreads fields and add missing shelves for '+
+  if(msg)msg.textContent='Link Goodreads Book IDs, fill missing fields and add missing shelves for '+
    remaining.length+' existing books? Ratings, reviews and dates you already entered will remain unchanged. '+
    'Each batch can be undone until later edits occur.';
   yes.focus();

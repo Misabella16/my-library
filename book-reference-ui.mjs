@@ -29,7 +29,12 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
   const button=node('button','Link & preview metadata','btn mini');
   button.type='button';
   const feedback=node('div',undefined,'reference-feedback');
-  if(book.goodreads_id)feedback.textContent='Linked Goodreads ID: '+book.goodreads_id;
+  if(/^\d{1,36}$/.test(String(book.goodreads_id||''))){
+   const saved=node('a','Open linked Goodreads book','book-goodreads-link');
+   saved.href='https://www.goodreads.com/book/show/'+book.goodreads_id;
+   saved.target='_blank';saved.rel='noopener noreferrer';
+   feedback.append(saved);
+  }
   button.addEventListener('click',async()=>{
    const value=link.input.value.trim();
    if(!value){feedback.textContent='Paste a Goodreads book link first.';return;}

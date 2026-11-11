@@ -193,6 +193,7 @@ function editionBlock(e){
 function renderDetail(){
   const target=$('#book-detail'), b=state.detail;
   if(!b){target.innerHTML='<div class="empty"><h3>Choose a book</h3><p>Its synopsis, tags, editions, shelf locations and your private notes will appear here.</p></div>';return;}
+  const linkedGoodreadsId=/^\d{1,36}$/.test(String(b.goodreads_id||''))?String(b.goodreads_id):'';
   const editionContent=(b.editions||[]).map(editionBlock).join('');
   const genreTags=bookTags(b.tags), shelves=(b.shelves||[]).map(s=>'<span class="badge">'+safe(s.name)+
     '<button class="tag-remove" type="button" data-remove-shelf="'+safe(s.id)+'" aria-label="Remove shelf '+safe(s.name)+'">×</button></span>').join('');
@@ -204,6 +205,7 @@ function renderDetail(){
       '<label>Title<input name="title" value="'+safe(b.title)+'" required maxlength="300"></label>'+
       '<label>Author<input name="author" value="'+safe(b.author)+'" maxlength="400"></label>'+
       '<label>Reading status<select name="reading_status">'+options(Object.entries(statuses),b.reading_status)+'</select></label>'+
+      (linkedGoodreadsId?'<a class="book-goodreads-link" href="https://www.goodreads.com/book/show/'+linkedGoodreadsId+'" target="_blank" rel="noopener noreferrer">↗ Open this book on Goodreads</a>':'')+
       '<div class="actions"><button class="btn mini" type="submit">Save book information</button>'+ 
       '<span class="small-status" id="book-info-state" role="status">Edit directly, then save.</span></div>'+
     '</form></div>'+

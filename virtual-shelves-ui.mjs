@@ -1,5 +1,6 @@
 // A lightweight shelf-of-shelves browser. Each row loads only when expanded.
 import {synopsisPlainText} from './synopsis-format.mjs';
+import {initGoodreadsProfile} from './goodreads-profile-ui.mjs';
 // The existing physical-location browser stays intact in a separate view.
 const byId=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{
@@ -57,6 +58,7 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
  if(!panel||!genreRows||!listRows||!browseBooks)return null;
  let initial=false,busy=false,nextCursor=null,selection={genre:'all',tag:'',shelf:''};
  const viewButtons=[...panel.querySelectorAll('[data-virtual-view]')];
+ const goodreads=initGoodreadsProfile(api,{onChanged:()=>loadOverview().catch(error=>rowsStatus(error.message))});
  const rowsStatus=message=>{status.textContent=message;};
  const previewText=book=>book.title+' · '+(book.author||'Unknown author')+'\n'+
   (synopsisPlainText(book.synopsis)||'No synopsis saved yet. Open the book to add one.');
@@ -79,7 +81,7 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
  function heading(title,count){
   return title+(typeof count==='number'?' · '+count.toLocaleString()+' books':'');
  }
- async function renderRow(container,title,filter,total){
+ async function renderRow(container,title,filter,total,goodreadsShelfName=''){
   const frame=node('details','virtual-master');
   const label=node('summary','virtual-master-heading');
   label.append(node('strong','',title),node('span','virtual-count',total.toLocaleString()+' books'));
@@ -88,6 +90,12 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
   const all=node('button','btn mini subtle','View all');
   all.type='button';all.addEventListener('click',()=>showBrowse(filter,title,total));
   controls.append(all);
+  const remote=goodreadsShelfName?goodreads.shelfUrl(goodreadsShelfName):'';
+  if(remote){
+   const link=node('a','btn mini subtle','Open on Goodreads');
+   link.href=remote;link.target='_blank';link.rel='noopener noreferrer';
+   controls.append(link);
+  }
   const carousel=node('div','virtual-cover-row');
   const note=node('p','small-status','Open this shelf to load its first books.');
   let hint='';
@@ -184,7 +192,8 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
   if(!(data.genres||[]).length&&!data.uncategorized)
    genreRows.append(node('p','muted','No books assigned yet. Add a Genre tag from any book’s details.'));
   for(const shelf of data.lists||[])
-   await renderRow(listRows,shelf.name,{genre:'all',shelf:shelf.id},Number(shelf.count)||0);
+   await renderRow(listRows,shelf.name,{genre:'all',shelf:shelf.id},Number(shelf.count)||0,
+    shelf.origin==='goodreads'?shelf.name:'');
   if(!(data.lists||[]).length)
    listRows.append(node('p','muted','Your saved reading lists and Goodreads CSV shelves will appear here.'));
   rowsStatus(heading('Virtual library',data.total)+'. Expand a genre to browse, then open its tag sub-shelves.');
@@ -225,6 +234,7 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
  byId('virtual-view-all')?.addEventListener('click',()=>showBrowse({genre:'all'},'All books'));
  return {activate:async()=>{
   if(initial)return;
+  await goodreads.activate();
   try{await loadOverview();}catch(error){rowsStatus('Virtual shelves unavailable: '+error.message);}
  }};
 }
