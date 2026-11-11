@@ -1,7 +1,7 @@
 // Owner-authenticated, edition-level ISBN recovery.
 // Local Goodreads/Calibre data is owner-reviewed; saved EPUB identifiers rechecked
 // server side. Online search results are research only, never automatic writes.
-import {canonicalIsbn,normalized} from './isbn-recovery-evidence.mjs';
+import {canonicalIsbn,normalized,isbn10Equivalent} from './isbn-recovery-evidence.mjs';
 import {createPacedFetch} from './source-pacing.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8',
@@ -77,11 +77,12 @@ async function checkOne(db,proposal){
   await evidenceCheck(db,proposal,book);
  if(reason)return {status:'review',book_id:proposal.book_id,edition_id:proposal.edition_id,reason};
  const isbn=canonicalIsbn(proposal.isbn);
- const collision=await single(db,
-  "SELECT id FROM editions WHERE book_id=? AND id<>? "+
-  "AND replace(replace(upper(trim(isbn)),'-',''),' ','') IN (?,?) LIMIT 1",
-  book.id,edition.id,isbn,String(proposal.isbn||'').replace(/[\s-]/g,'').toUpperCase());
- if(collision)return {status:'review',reason:'This ISBN is already assigned to another edition of this book'};
+ const siblings=await all(db,
+  "SELECT id,isbn FROM editions WHERE book_id=? AND id<>? AND isbn IS NOT NULL LIMIT 101",
+  book.id,edition.id);
+ if(siblings.length>100)return {status:'review',reason:'Too many editions to safely check for duplicate ISBNs'};
+ if(siblings.some(other=>canonicalIsbn(other.isbn)===isbn))
+  return {status:'review',reason:'This ISBN is already assigned to another edition of this book'};
  return {status:'ready',book_id:book.id,edition_id:edition.id,title:book.title,
   author:book.author,edition_name:edition.edition_name,format:edition.format,
   isbn,source:proposal.source,source_id:proposal.source_id||proposal.source_file_id||'',
@@ -105,9 +106,10 @@ async function applyOne(db,proposal){
    "AND lower(trim(edition_name))!='online display' "+
    "AND (isbn IS NULL OR length(trim(isbn))=0) "+
    "AND NOT EXISTS (SELECT 1 FROM editions sibling WHERE sibling.book_id=? AND sibling.id<>? "+
-   "AND replace(replace(upper(trim(sibling.isbn)),'-',''),' ','')=?)")
+   "AND replace(replace(upper(trim(sibling.isbn)),'-',''),' ','') IN (?,?))")
    .bind(preview.isbn,now,proposal.edition_id,proposal.book_id,
-    proposal.expected_updated_at,proposal.book_id,proposal.edition_id,preview.isbn),
+    proposal.expected_updated_at,proposal.book_id,proposal.edition_id,
+    preview.isbn,isbn10Equivalent(preview.isbn)),
   db.prepare("INSERT INTO change_log(id,action,entity_type,entity_id,before_json,after_json,created_at) "+
    "SELECT ?,'isbn_recovery','editions',?,?,?,? "+
    "WHERE EXISTS(SELECT 1 FROM editions WHERE id=? AND isbn=? AND updated_at=?)")
