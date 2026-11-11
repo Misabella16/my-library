@@ -54,11 +54,11 @@ function fixture({existingCover=false,noEbook=false,ebookSpecial=false}={}){
  const edition=()=>sql.prepare('SELECT * FROM editions WHERE id=?').get(EBOOK);
  const params=extra=>new URLSearchParams({book_id:BOOK,edition_id:EBOOK,
   title:'The Sentinel Mage',author:'Emily Gee',
-  expected_updated_at:edition()?.updated_at||'',confirm:'true',...extra});
+  expected_updated_at:edition()?.updated_at||'not-an-edition',confirm:'true',...extra});
  const call=(path,method='GET',raw=null,query='')=>{
   const url='https://owner.example/api/edition-local/'+path+(query?'?'+query:'');
   const req=new Request(url,{method,...(raw?{body:raw,headers:{
-   'content-type':'image/jpeg'}}:{})});
+   'content-type':path==='undo'?'application/json':'image/jpeg'}}:{})});
   return handleLocalEditionApi(req,db,env,'/api/edition-local/'+path);
  };
  return {sql,storage,call,params,edition,close:()=>sql.close()};
@@ -127,20 +127,7 @@ test('Explicitly approved JPEG attaches to selected ebook and Undo preserves spe
   assert.equal(row.display_cover,1);
   const history=await f.call('history');
   assert.equal((await history.json()).changes.length,1);
-  const undone=await handleLocalEditionApi(
-   new Request('https://owner.example/api/edition-local/undo',{method:'POST',
-    body:JSON.stringify({change_id:result.change_id})}),
-   {prepare:f.sql.prepare.bind(f.sql),
-    batch:async statements=>{
-     f.sql.exec('BEGIN');
-     try{
-      const answers=statements.map(s=>({meta:{changes:s.run().changes}}));
-      f.sql.exec('COMMIT');return answers;
-     }catch(err){f.sql.exec('ROLLBACK');throw err;}
-    }}, {BOOK_FILES:{delete:async key=>{f.storage.delete(key);}}},
-   '/api/edition-local/undo'
-  );
-  // See separate Undo fixture: the production D1 interface requires bind() support.
+  const undone=await f.call('undo','POST',JSON.stringify({change_id:result.change_id}));
   assert.equal(undone.status,200,await undone.clone().text());
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,1);
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,2);
