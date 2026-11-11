@@ -40,7 +40,7 @@
 }
 #library .book-card-move button:disabled{opacity:.3;cursor:default}
 #library .book-card-preview{
- display:none;position:absolute;top:100%;left:50%;
+ display:none;position:absolute;top:0;left:50%;
  transform:translateX(-50%);width:min(285px,calc(100vw - 32px));
  z-index:20;padding:13px 14px;border:1px solid #dcc6d0;border-radius:10px;
  color:#4b3f48;background:#fffdf9;box-shadow:0 12px 36px #52334338;
@@ -72,9 +72,9 @@
  #library .book-card .book-data strong{font-size:11px}
 }
 @media(hover:none){
- #library .book-card:hover .book-card-preview{display:none}
- #library .book-card.preview-open .book-card-preview,
- #library .book-card:focus-within .book-card-preview{display:block}
+ #library .book-card:hover .book-card-preview,
+ #library .book-card:focus-within .book-card-preview{display:none}
+ #library .book-card.preview-open .book-card-preview{display:block}
 }
 @media(prefers-reduced-motion:reduce){
  #library .book-card{transition:none}
