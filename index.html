@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="/cute.css">
 <link rel="stylesheet" href="/vintage.css">
 <link rel="stylesheet" href="/pastoral.css">
+<link rel="stylesheet" href="/collection-compact.css">
 <script type="module" src="/library.js"></script>
 </head>
 <body>
@@ -68,6 +69,10 @@
     <div class="toolbar">
       <label class="search-label"><span class="visually-hidden">Search library</span><input id="search" type="search" placeholder="Find a treasured title or author…" autocomplete="off" maxlength="150"></label>
       <button class="btn subtle" type="button" id="refresh">Refresh</button>
+    </div>
+    <div class="collection-arrange-tools">
+      <span class="small-status" id="collection-arrangement-status" role="status" aria-live="polite">Preparing collection layout…</span>
+      <button class="btn mini subtle" type="button" id="collection-undo" disabled>Undo arrangement</button>
     </div>
     <div class="layout">
       <div class="book-grid" id="book-grid" aria-live="polite">
