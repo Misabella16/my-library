@@ -64,6 +64,29 @@ async function readBoundedImage(response,max=8*1024*1024){
  return bytes;
 }
 export async function handleBookReferenceApi(request,db,env,path,{fetchImage=fetch}={}){
+ const preferred=/^\/api\/books\/([0-9a-f-]{36})\/display-edition$/.exec(path);
+ if(preferred){
+  if(request.method!=='POST')return fail('Method not allowed',405);
+  const bookId=preferred[1];
+  if(!uuid(bookId))return fail('Invalid book ID');
+  let data;try{data=await readable(request);}catch{return fail('Invalid preferred edition request');}
+  if(!uuid(data?.edition_id))return fail('Choose a valid edition');
+  const book=await first(db,'SELECT id,preferred_edition_id FROM books WHERE id=? AND archived_at IS NULL',bookId);
+  if(!book)return fail('Book not found',404);
+  const image=await first(db,'SELECT im.id FROM edition_images im JOIN editions e ON e.id=im.edition_id '+
+   'WHERE e.id=? AND e.book_id=? AND im.display_cover=1',data.edition_id,bookId);
+  if(!image)return fail('Select a cover in the chosen edition first',409);
+  if(book.preferred_edition_id===data.edition_id)return json({selected:true,unchanged:true});
+  await db.batch([
+   db.prepare('UPDATE books SET preferred_edition_id=? WHERE id=? AND archived_at IS NULL')
+    .bind(data.edition_id,bookId),
+   db.prepare('INSERT INTO change_log(id,action,entity_type,entity_id,before_json,after_json) VALUES (?,?,?,?,?,?)')
+    .bind(crypto.randomUUID(),'prefer_edition_cover','books',bookId,
+     JSON.stringify({preferred_edition_id:book.preferred_edition_id}),
+     JSON.stringify({preferred_edition_id:data.edition_id}))
+  ]);
+  return json({selected:true,edition_id:data.edition_id});
+ }
  const goodreads=/^\/api\/books\/([0-9a-f-]{36})\/goodreads-link$/.exec(path);
  if(goodreads){
   if(request.method!=='POST')return fail('Method not allowed',405);
@@ -122,9 +145,11 @@ export async function handleBookReferenceApi(request,db,env,path,{fetchImage=fet
    db.prepare("INSERT INTO edition_images(id,edition_id,origin,private_object_key,role,match_status,display_cover,credit) "+
     "VALUES (?,?,'manual',?,'cover','user_verified',1,'Owner-selected cover URL')")
     .bind(imageId,editionId,key),
+   db.prepare('UPDATE books SET preferred_edition_id=? WHERE id=? AND archived_at IS NULL')
+    .bind(editionId,edition.book_id),
    db.prepare('INSERT INTO change_log(id,action,entity_type,entity_id,before_json,after_json) VALUES (?,?,?,?,?,?)')
     .bind(crypto.randomUUID(),'select_cover_url','editions',editionId,
-     JSON.stringify({image_id:prior?.id||null}),JSON.stringify({image_id:imageId}))
+     JSON.stringify({image_id:prior?.id||null}),JSON.stringify({image_id:imageId,preferred_edition_id:editionId}))
   ]);
  }catch(error){
   try{await env.BOOK_FILES.delete(key);}catch{}
