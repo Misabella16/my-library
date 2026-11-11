@@ -22,9 +22,9 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   prev=$('prev'),select=$('select'),apply=$('apply'),
   historyBtn=$('history'),results=$('results'),historyList=$('history-list'),
   status=$('status'),metrics=$('metrics'),search=$('search'),
-  online=$('online');
+  online=$('online'),onlineSearch=$('online-search'),onlineFind=$('online-find');
  if([gr,calFile,calFolder,scan,pause,preview,next,prev,select,apply,
-  historyBtn,results,historyList,status,metrics,search,online].some(x=>!x))
+  historyBtn,results,historyList,status,metrics,search,online,onlineSearch,onlineFind].some(x=>!x))
   return null;
  let busy=false,scanning=false,shouldStop=false,phase=0,cursors=['','',''],
   books=[],editions=[],epubs=[],grRows=[],calRows=[],candidates=[],
@@ -40,7 +40,8 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   const active=scanning||busy;
   gr.disabled=active;calFile.disabled=active;calFolder.disabled=active;
   scan.disabled=active;pause.disabled=!scanning||shouldStop;
-  search.disabled=active;
+  search.disabled=active||!done;
+  onlineSearch.disabled=active||!done;onlineFind.disabled=active||!done;
   preview.disabled=active||!done||!display.length;
   next.disabled=active||!done||offset+20>=display.length;
   prev.disabled=active||!done||offset===0;
@@ -297,6 +298,26 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
     say('History loaded. Review changes, then use Scan again to reconcile any uncertain imports.');
   }catch(e){say('History unavailable: '+(e.message||'Connection failed'));}
   finally{busy=false;controls();}
+ });
+ onlineFind.addEventListener('click',()=>{
+  if(busy||scanning||!done)return;
+  const q=normalized(onlineSearch.value);
+  online.replaceChildren();
+  if(q.length<3){say('Enter at least three letters to find an existing book.');return;}
+  const matches=books.filter(b=>normalized(b.title+' '+b.author).includes(q)).slice(0,12);
+  if(!matches.length){say('No matching book in the scanned catalogue.');return;}
+  online.append(node('p',matches.length+' matching books. Choose one to search online without changing your catalogue.'));
+  for(const book of matches){
+   const btn=node('button',book.title+' · '+book.author,'btn subtle');
+   btn.type='button';btn.addEventListener('click',()=>research({
+    book_id:book.id,book_title:book.title,book_author:book.author
+   }));
+   online.append(btn);
+  }
+  say('Choose a book from the list for a read-only source search.');
+ });
+ onlineSearch.addEventListener('keydown',event=>{
+  if(event.key==='Enter'){event.preventDefault();onlineFind.click();}
  });
  async function research(item){
   if(busy||scanning)return;
