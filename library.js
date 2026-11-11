@@ -15,6 +15,7 @@ import {initOfflineBulk} from './offline-bulk-ui.mjs';
 import {initOfflineTextReview} from './offline-text-review-ui.mjs';
 import {initEditionRecovery} from './edition-recovery-ui.mjs';
 import {initLocalEditionRecovery} from './edition-local-ui.mjs';
+import {initIsbnRecovery} from './isbn-recovery-ui.mjs';
 import {initExistingCoverRelink} from './existing-cover-relink-ui.mjs';
 import {initCalibreCompare} from './calibre-compare-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
@@ -601,6 +602,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     initOfflineTextReview(api,{onUpdated:()=>refreshCurrent()});
     initEditionRecovery(api,{onUpdated:()=>refreshCurrent()});
     initLocalEditionRecovery(api,{onUpdated:()=>refreshCurrent()});
+    initIsbnRecovery(api,{onUpdated:()=>refreshCurrent()});
     const combined=document.getElementById('collection-health-smart-repair');
     const combinedStatus=document.getElementById('collection-health-smart-status');
     combined?.addEventListener('click',async()=>{
