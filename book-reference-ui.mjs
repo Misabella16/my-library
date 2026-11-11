@@ -1,4 +1,5 @@
 // Book-level manual source linkage, cover selection, and quick physical locations.
+import {googleImagesUrl} from './google-image-search.mjs';
 // Source lookup uses the existing Open Library verification, not Goodreads scraping.
 const node=(name,text,cls)=>{
  const el=document.createElement(name);
@@ -102,6 +103,19 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
     option.value=e.id;edition.append(option);
    }
    editionLabel.append(edition);
+   const googleSearch=node('a','Search Google Images for this edition','btn mini subtle');
+   googleSearch.target='_blank';googleSearch.rel='noopener noreferrer';
+   const refreshGoogle=()=>{
+    const item=editions.find(x=>x.id===edition.value)||editions[0];
+    googleSearch.href=googleImagesUrl({
+     title:book.title,author:book.author,editionName:item?.edition_name,
+     vendor:item?.vendor,isSpecial:!!item?.is_special
+    })||'https://www.google.com/imghp';
+   };
+   edition.addEventListener('change',refreshGoogle);
+   refreshGoogle();
+   const googleHint=node('p',
+    'Google Images opens in a new tab. Save the exact cover to your device, then upload it here. The site never scrapes or copies Google Images results automatically.','muted');
    const imageLink=field('Paste a direct cover image link','',
     'https://covers.openlibrary.org/b/id/12345-L.jpg');
    const save=node('button','Use cover from URL','btn mini');save.type='button';
@@ -141,7 +155,7 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
     }catch(error){coverFeedback.textContent='Cover upload or selection failed: '+error.message;}
     finally{upload.disabled=false;}
    });
-   coverContent.append(editionLabel,imageLink.wrap,save,photo,note,coverFeedback);
+   coverContent.append(editionLabel,googleSearch,googleHint,imageLink.wrap,save,photo,note,coverFeedback);
   }
   coverSection.append(coverTitle,coverContent);
   const nearCover=document.getElementById('book-cover-editor');
