@@ -232,6 +232,13 @@ test('Completed scan fills the visible ISBN proposal list and renders first page
  assert.match(ui,/display=filterIsbnProposals\(candidates,search\.value\);\s*offset=0;previewed\.clear\(\);confirmations\.clear\(\);\s*done=true/);
  assert.match(ui,/display\.length\?offset\+1:0/);
 });
+test('ISBN proposal cards use a readable responsive column layout',()=>{
+ const css=readFileSync(new URL('../library.css',import.meta.url),'utf8');
+ assert.match(css,/#isbn-recovery-results\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/s);
+ assert.match(css,/\.collection-health #isbn-recovery-results > \.health-result\s*\{[^}]*flex-direction:\s*column/s);
+ assert.match(css,/#isbn-recovery-results > \.health-result p\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+ assert.match(css,/@media\(max-width:780px\)\s*\{\s*#isbn-recovery-results\s*\{grid-template-columns:minmax\(0,1fr\)\}/s);
+});
 test('UI and protected worker route are connected; no new schema',()=>{
  const worker=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
  const app=readFileSync(new URL('../library.js',import.meta.url),'utf8');
