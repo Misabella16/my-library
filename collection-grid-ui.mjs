@@ -1,18 +1,19 @@
 // Accessible collection ordering with a private, cross-device saved layout.
 // HTML drag works on desktop; per-card Move buttons work on touch and keyboards.
-export function initCollectionGrid(api,{grid,render,getQuery,status,undo}){
+export function initCollectionGrid(api,{grid,render,getQuery,getMode=()=> 'custom',status,undo}){
  let layout={revision:'original',order:[],can_undo:false};
  let dirty=false,busy=false,timer=null,dragId='',enabled=true;
  const cards=()=>[...grid.querySelectorAll('.book-card[data-book-id]')];
  const idOf=card=>card?.dataset.bookId||'';
  const announce=message=>{status.textContent=message;};
  const updateUndo=()=>{undo.disabled=busy||dirty||!layout.can_undo;};
- const moveEnabled=()=>!getQuery();
+ const moveEnabled=()=>!getQuery()&&getMode()==='custom';
  const clearDrag=()=>{
   dragId='';
   for(const card of cards())card.classList.remove('dragging','drag-target');
  };
  function arranged(books){
+  if(getMode()!=='custom')return books;
   const indices=new Map(layout.order.map((id,index)=>[id,index]));
   return [...books].sort((a,b)=>{
    const x=indices.get(a.id),y=indices.get(b.id);
@@ -142,5 +143,5 @@ export function initCollectionGrid(api,{grid,render,getQuery,status,undo}){
   updateUndo();
  }
  updateUndo();
- return {arranged,load,canMove:()=>enabled&&!getQuery()};
+ return {arranged,load,canMove:()=>enabled&&moveEnabled()};
 }
