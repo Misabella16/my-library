@@ -563,7 +563,7 @@
 <button type="button" class="btn subtle" id="epub-backfill-history">Recent repair history</button>
 <div id="epub-backfill-history-list" class="epub-preview-list" aria-live="polite"></div></details><details class="imports-disclosure"><summary>Recovered cover history</summary><button class="btn subtle" type="button" id="relink-existing-history">Cover repair history &amp; Undo</button>
 <div id="relink-existing-history-list" class="epub-preview-list" aria-live="polite"></div></details><details class="imports-disclosure"><summary>Goodreads import &amp; update history</summary><section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
-<section id="goodreads-sync-history" class="goodreads-history" aria-label="Goodreads metadata sync Undo history"></section></details></section><details class="imports-disclosure" id="repair-advanced"><summary>Advanced tools — optional scans and individual repair steps</summary><p>The main repair runs the saved-EPUB, cover-recovery and online steps for you. These tools are optional; run one operation at a time.</p><details class="imports-disclosure"><summary>Inspect library health (no changes)</summary><section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
+<section id="goodreads-sync-history" class="goodreads-history" aria-label="Goodreads metadata sync Undo history"></section></details></section><details class="imports-disclosure" id="repair-advanced"><summary>Advanced tools — optional scans and individual repair steps</summary><p>The main repair runs the saved-EPUB, cover-recovery and online steps for you. These tools are optional; run one operation at a time.</p><details class="imports-disclosure"><summary>Health, EPUB, existing covers, and title cleanup</summary><details class="imports-disclosure"><summary>Inspect library health (no changes)</summary><section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
       <p class="section-kicker">✧ CATALOGUE HEALTH</p>
       <h2>Find books that need attention</h2>
       <p class="muted">Scan your entire catalogue in one click to find missing covers, summaries, tags, editions, and possible duplicates. The scan uses small, low-cost requests automatically and never edits book records. For repairs, use Repair my library at the top of this tab.</p>
@@ -645,7 +645,7 @@
         <p class="small-status" id="epub-title-auto-status" role="status" aria-live="polite">The automatic repair checks verified ISBN and saved EPUB matches, preserves edits, and leaves uncertain books for review. Undo is saved permanently.</p>
         <div id="epub-title-auto-history-list" class="epub-preview-list" aria-live="polite"></div>
         <div class="epub-preview-list" id="epub-title-results" aria-live="polite"></div>
-      </section></details><details class="imports-disclosure"><summary>Local-first Open Library Works repair (no Editions download)</summary><section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
+      </section></details></details><details class="imports-disclosure"><summary>Offline Open Library Works and text matching</summary><details class="imports-disclosure"><summary>Local-first Open Library Works repair (no Editions download)</summary><section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
       <p class="section-kicker">✧ OPTIONAL · ADVANCED</p>
       <h2 id="offline-bulk-heading">Repair missing metadata locally using Open Library Works</h2>
       <p>When Cloudflare D1 is busy or online checks are slow, use the Works + Authors dumps locally to match your whole collection by verified title and author. You do <strong>not</strong> need the large Editions dump. Local matching uses no D1 reads; only safe missing-field proposals are uploaded back to this private site. Existing covers, notes and special editions stay protected.</p>
@@ -689,6 +689,7 @@
         <p class="muted">The original title and author are checked against the current book, source title variants must agree, and any record edited since export is held for review. Imported text can be undone unless you subsequently edit the book. Generic Open Library covers never become special editions.</p>
       </section>
     </details>
+    </details><details class="imports-disclosure"><summary>Alternative edition and Calibre cover research</summary>
     <details class="imports-disclosure">
       <summary>Edition &amp; Cover Recovery (Open Library, exact ISBN only)</summary>
       <section class="surface collection-health" id="edition-recovery" aria-labelledby="edition-recovery-heading">
@@ -751,6 +752,7 @@
         <div id="edition-local-history-list" class="epub-preview-list"></div>
         <p class="muted">Only an existing standard ebook with no attached image may receive a selected local cover, after your explicit approval. No book, edition, copy, or fake Online display entry is created. No collector's cover, owner photo, review, note or EPUB is replaced. Saved local covers remain marked possible until separately verified. Undo is available unless you edit the image afterward.</p>
       </section>
+    </details>
     </details>
 </details></section>
 </main>
