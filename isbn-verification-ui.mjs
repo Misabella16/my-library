@@ -106,6 +106,8 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
   if(checking||applying||!isScanComplete())return;
   checking=true;shouldStop=false;errors='';controls();
   const all=candidates();
+  if(cursor>=all.length&&all.some(p=>
+   !conflicts().has(p.edition_id)&&!proofs.has(proofKey(p))))cursor=0;
   try{
    while(!shouldStop&&cursor<all.length){
     const batch=[];
@@ -172,7 +174,9 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
      throw Error(response.error||'Incomplete save response');
     for(const item of response.results){
      if(item.status==='applied'){
-      applied++;chosen.delete(proofKey(batch.find(x=>x.edition_id===item.edition_id)));
+      applied++;
+      const completed=batch.find(x=>x.edition_id===item.edition_id);
+      if(completed)chosen.delete(proofKey(completed));
      }else skipped++;
     }
     await onApplied(response.results);
