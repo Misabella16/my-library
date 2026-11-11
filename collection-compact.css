@@ -51,8 +51,7 @@
 #library .book-card-preview{display:block;opacity:0;visibility:hidden;pointer-events:none;transition:none}
 #library .book-card:hover .book-card-preview{opacity:1;visibility:visible;pointer-events:auto;
  transition:opacity .12s ease 2s,visibility 0s linear 2s}
-#library .book-card.preview-open .book-card-preview,
-#library .book-card:focus-within .book-card-preview{opacity:1;visibility:visible;pointer-events:auto;transition:none}
+#library .book-card.preview-open .book-card-preview{opacity:1;visibility:visible;pointer-events:auto;transition:none}
 #library .book-card-preview strong{font:16px/1.3 Georgia,serif}
 #library .book-card-preview p{font-size:12px;line-height:1.55;white-space:normal;
  overflow-wrap:anywhere;margin:6px 0 0}
