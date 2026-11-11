@@ -27,6 +27,27 @@ async function fetchPhotoSignature(blob){
   return coverSignature(context.getImageData(0,0,90,80));
  }finally{bitmap.close?.();}
 }
+async function rotatePhotographedCover(blob,degrees){
+ const rotation=Number(degrees);
+ if(![90,180,270].includes(rotation))return blob;
+ if(typeof createImageBitmap!=='function')throw Error('Image rotation is unsupported on this device.');
+ const bitmap=await createImageBitmap(blob);
+ try{
+  const sideways=rotation===90||rotation===270;
+  const canvas=document.createElement('canvas');
+  canvas.width=sideways?bitmap.height:bitmap.width;
+  canvas.height=sideways?bitmap.width:bitmap.height;
+  const ctx=canvas.getContext('2d');
+  if(!ctx)throw Error('Could not rotate image');
+  if(rotation===90){ctx.translate(canvas.width,0);ctx.rotate(Math.PI/2);}
+  else if(rotation===270){ctx.translate(0,canvas.height);ctx.rotate(-Math.PI/2);}
+  else{ctx.translate(canvas.width,canvas.height);ctx.rotate(Math.PI);}
+  ctx.drawImage(bitmap,0,0);
+  return await new Promise((resolve,reject)=>
+   canvas.toBlob(result=>result?resolve(result):reject(Error('Could not save rotated cover')),
+    'image/jpeg',0.91));
+ }finally{bitmap.close?.();}
+}
 async function coverBlob(key){
  const url='/api/photo-cover-search/image?'+new URLSearchParams({key});
  const response=await fetch(url,{credentials:'same-origin',redirect:'error',cache:'no-store'});
@@ -53,7 +74,7 @@ export function initPhotoBookMatching(api,{
   selected=id('photo-selected-book'),editionChoice=id('photo-edition-choice'),
   onlineButton=id('photo-find-covers'),create=id('photo-create-book'),
   save=id('photo-save-cover'),open=id('photo-open-book'),
-  artwork=id('photo-cover-choice');
+  artwork=id('photo-cover-choice'),rotation=id('photo-artwork-rotate');
  if(!title||!lookup||!results||!sourceResults||!selected||!editionChoice||
   !save||!artwork||!onlineButton||!create||!status)return null;
  let book=null,candidates=[],choice='photo',busy=false,queryKey='',created=false;
@@ -160,7 +181,7 @@ export function initPhotoBookMatching(api,{
   let target;
   try{target=await fetchPhotoSignature(photoBlob);}catch{return covers;}
   if(!target)return covers;
-  const scored=await Promise.all(covers.slice(0,10).map(async row=>{
+  const scored=await Promise.all(covers.slice(0,6).map(async row=>{
    try{
     const blob=await coverBlob(row.key);
     const signature=await fetchPhotoSignature(blob);
@@ -168,7 +189,7 @@ export function initPhotoBookMatching(api,{
     return {...row,similarity:visualCoverSimilarity(target,signature)};
    }catch{return row;}
   }));
-  return scored.concat(covers.slice(10)).sort((a,b)=>
+  return scored.concat(covers.slice(6)).sort((a,b)=>
    (b.similarity??-1)-(a.similarity??-1));
  }
  function renderCovers(){
@@ -250,7 +271,9 @@ export function initPhotoBookMatching(api,{
    ' and make it the displayed cover for the selected edition? Previous images remain saved.'))return;
   setWorking(true);
   try{
-   let bytes=choice==='photo'?await getPhotoCrop():await coverBlob(choice);
+   let bytes=choice==='photo'?
+    await rotatePhotographedCover(await getPhotoCrop(),rotation?.value||0):
+    await coverBlob(choice);
    if(!bytes||!['image/jpeg','image/png','image/webp'].includes(bytes.type))
     throw Error('No usable cover crop. Select a photo and crop one cover first, or choose an online suggestion.');
    if(bytes.size>8*1024*1024)throw Error('Cover image exceeds 8 MB');
