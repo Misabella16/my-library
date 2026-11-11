@@ -108,7 +108,8 @@ export function initPhotoBookMatching(api,{
    const matched=editions.find(e=>text(editionName,240)&&
     String(e.edition_name||'').trim().toLowerCase()===text(editionName,240).toLowerCase() &&
     (!text(vendor,120)||String(e.vendor||'').trim().toLowerCase()===text(vendor,120).toLowerCase()));
-   editionChoice.value=matched?.id||editions[0].id;
+   const newEditionRequested=!!text(editionName,240)||!!text(vendor,120)||!!isSpecial?.checked;
+   editionChoice.value=matched?.id||(newEditionRequested?'new':editions[0].id);
   }
   save.disabled=false;
  }
@@ -260,6 +261,19 @@ export function initPhotoBookMatching(api,{
    throw error;
   }
  }
+ function recommendNewEdition(){
+  if(!book)return;
+  const name=text(editionName,240).toLowerCase();
+  const seller=text(vendor,120).toLowerCase();
+  if(!name&&!seller&&!isSpecial?.checked)return;
+  const matching=(book.editions||[]).find(e=>
+   (!name||String(e.edition_name||'').trim().toLowerCase()===name)&&
+   (!seller||String(e.vendor||'').trim().toLowerCase()===seller)&&
+   (!!e.is_special===!!isSpecial?.checked));
+  if(matching)editionChoice.value=matching.id;
+  else editionChoice.value='new';
+ }
+ for(const target of [editionName,vendor,isSpecial])target?.addEventListener('change',recommendNewEdition);
  save.addEventListener('click',async()=>{
   if(!book?.id){say('Select an existing book or create a new one first.');return;}
   if(busy)return;
