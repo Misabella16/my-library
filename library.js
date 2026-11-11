@@ -567,7 +567,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     status:$('#collection-arrangement-status'),undo:$('#collection-undo')
   });
   await collectionGrid.load();
-  initCollectionManagement(api,{onVisibleChanged:async()=>{
+  initCollectionManagement(api,{notify:showMessage,onVisibleChanged:async()=>{
     state.selectedId=null;state.detail=null;renderDetail();await listBooks();
   }});
   bookReference=initBookReferenceUI(api,{onUpdated:async bookId=>{
