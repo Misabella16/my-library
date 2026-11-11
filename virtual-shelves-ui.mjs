@@ -1,4 +1,5 @@
 // A lightweight shelf-of-shelves browser. Each row loads only when expanded.
+import {synopsisPlainText} from './synopsis-format.mjs';
 // The existing physical-location browser stays intact in a separate view.
 const byId=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{
@@ -22,7 +23,7 @@ function coverCard(book,onSelect,onPreview=()=>{}){
  button.addEventListener('click',()=>{onPreview(null);onSelect(book.id);});
  const summary=node('aside','virtual-book-synopsis');
  summary.append(node('strong','',book.title),node('small','',book.author||'Unknown author'),
-  node('p','',book.synopsis||'No synopsis saved yet. Open the book to add one.'));
+  node('p','',synopsisPlainText(book.synopsis)||'No synopsis saved yet. Open the book to add one.'));
  const toggle=node('button','virtual-book-info','ⓘ Synopsis');
  toggle.type='button';toggle.setAttribute('aria-expanded','false');
  toggle.addEventListener('click',()=>{
@@ -52,7 +53,7 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
  const viewButtons=[...panel.querySelectorAll('[data-virtual-view]')];
  const rowsStatus=message=>{status.textContent=message;};
  const previewText=book=>book.title+' · '+(book.author||'Unknown author')+'\n'+
-  (book.synopsis||'No synopsis saved yet. Open the book to add one.');
+  (synopsisPlainText(book.synopsis)||'No synopsis saved yet. Open the book to add one.');
  const showBrowsePreview=book=>{
   if(!browsePreview)return;
   browsePreview.hidden=!book;
