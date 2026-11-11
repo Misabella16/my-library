@@ -8,6 +8,8 @@ import {
 } from '../isbn-recovery-evidence.mjs';
 import {handleIsbnRecoveryApi} from '../isbn-recovery-api.mjs';
 import {filterIsbnProposals} from '../isbn-recovery-ui.mjs';
+import {classifyIsbnVerification,verifyIsbnOnline,sameBookIdentity} from '../isbn-independent-verification.mjs';
+import {isBulkEligible,proofKey} from '../isbn-verification-ui.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const BOOK='11111111-1111-4111-8111-111111111111';
 const ED='22222222-2222-4222-8222-222222222222';
@@ -248,4 +250,117 @@ test('UI and protected worker route are connected; no new schema',()=>{
  assert.match(markup,/id="isbn-recovery-scan"/);
  assert.match(markup,/id="isbn-recovery-apply"/);
  assert.match(markup,/id="isbn-recovery-online-find"/);
+});
+
+test('Independent ISBN corroboration requires both sources and explicit ebook edition format',()=>{
+ const book={title:'Example Novel',author:'Example Writer',format:'ebook'};
+ const ol={['ISBN:'+ISBN]:{details:{key:'/books/OL123M',title:'Example Novel',
+  authors:[{name:'Example Writer'}],isbn_13:[ISBN],physical_format:'eBook',
+  publishers:['Example Press']}}};
+ const google={items:[{id:'g1',volumeInfo:{title:'Example Novel',
+  authors:['Example Writer'],industryIdentifiers:[{type:'ISBN_13',identifier:ISBN}]}}]};
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',ol,google).status,'verified');
+ assert.equal(classifyIsbnVerification(book,ISBN,'goodreads_csv',ol,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'calibre_local',ol,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification({...book,format:'paperback'},ISBN,'saved_epub',ol,google).status,'needs_review');
+ const noFormat=structuredClone(ol);delete noFormat['ISBN:'+ISBN].details.physical_format;
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',noFormat,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',ol,{}).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',{},{}).status,'not_found');
+ assert.equal(sameBookIdentity('Example Novel',['Different Author'],book),false);
+});
+test('Conflicting exact ISBN author/title is a mismatch; missing author is not falsely labeled mismatch',()=>{
+ const book={title:'Example Novel',author:'Example Writer',format:'ebook'};
+ const ol={['ISBN:'+ISBN]:{details:{key:'/books/OL123M',title:'Wrong Title',
+  authors:[{name:'Example Writer'}],isbn_13:[ISBN],physical_format:'eBook'}}};
+ const google={items:[{id:'g1',volumeInfo:{title:'Example Novel',
+  authors:['Example Writer'],industryIdentifiers:[{identifier:ISBN}]}}]};
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',ol,google).status,'mismatch');
+ const missingAuthor=structuredClone(ol);
+ missingAuthor['ISBN:'+ISBN].details.title='Example Novel';
+ missingAuthor['ISBN:'+ISBN].details.authors=[];
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,google).status,'needs_review');
+ const badGoogle=structuredClone(google);badGoogle.items[0].volumeInfo.authors=['Unknown Writer'];
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,badGoogle).status,'mismatch');
+});
+test('Independent verification endpoint does not read or alter D1, reports verified and needs-review groups',async()=>{
+ const f=fixture();try{
+  const p=f.proposal();
+  const mock=async url=>{
+   if(url.includes('openlibrary.org'))return Response.json({['ISBN:'+ISBN]:{details:{
+    key:'/books/OL123M',title:'Example Novel',isbn_13:[ISBN],
+    authors:[{name:'Example Writer'}],physical_format:'eBook'
+   }}});
+   return Response.json({items:[{id:'one',volumeInfo:{
+    title:'Example Novel',authors:['Example Writer'],industryIdentifiers:[{identifier:ISBN}]
+   }}]});
+  };
+  const checked=await f.call('verify',{items:[p]},'POST',{fetch:mock});
+  assert.equal(checked.status,200);
+  const result=await checked.json();
+  assert.equal(result.paused,false);
+  assert.equal(result.results[0].status,'verified');
+  assert.equal(result.results[0].edition_id,ED);
+  assert.equal(f.edition().isbn,null);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
+  assert.equal(isBulkEligible(p,result.results[0],new Set()),true);
+  assert.equal(isBulkEligible(p,result.results[0],new Set([ED])),false);
+  assert.equal(proofKey(p),ED+'|'+ISBN+'|saved_epub');
+ }finally{f.close();}
+});
+test('Bulk-approved exact ebook ISBN is reverified on server before save and remains undoable',async()=>{
+ const f=fixture();try{
+  const mock=async url=>{
+   if(url.includes('openlibrary.org'))return Response.json({['ISBN:'+ISBN]:{details:{
+    key:'/books/OL123M',title:'Example Novel',isbn_13:[ISBN],
+    authors:[{name:'Example Writer'}],physical_format:'ebook'
+   }}});
+   return Response.json({items:[{id:'g',volumeInfo:{title:'Example Novel',
+    authors:['Example Writer'],industryIdentifiers:[{identifier:ISBN}]}}]});
+  };
+  const p={...f.proposal(),approved:true,require_independent_verification:true};
+  const result=await f.call('apply',{items:[p]},'POST',{fetch:mock});
+  const data=await result.json();
+  assert.equal(data.results[0].status,'applied');
+  assert.equal(f.edition().isbn,ISBN);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,1);
+  const undo=await f.call('undo',{change_id:data.results[0].change_id});
+  assert.equal(undo.status,200);
+  assert.equal(f.edition().isbn,null);
+ }finally{f.close();}
+});
+test('A forged verified flag cannot bypass independent server verification or provider throttling',async()=>{
+ const f=fixture();try{
+  const wrong=async url=>{
+   if(url.includes('openlibrary.org'))return Response.json({['ISBN:'+ISBN]:{details:{
+    key:'/books/OL123M',title:'Different Book',isbn_13:[ISBN],
+    authors:[{name:'Example Writer'}],physical_format:'ebook'
+   }}});
+   return Response.json({items:[]});
+  };
+  const proposal={...f.proposal(),approved:true,
+   require_independent_verification:true,status:'verified'};
+  const notVerified=await f.call('apply',{items:[proposal]},'POST',{fetch:wrong});
+  assert.equal((await notVerified.json()).results[0].status,'review');
+  assert.equal(f.edition().isbn,null);
+  const throttled=async()=>new Response('Rate limited',{status:429});
+  const checked=await f.call('verify',{items:[f.proposal()]},'POST',{fetch:throttled});
+  assert.equal(checked.status,200);
+  const report=await checked.json();
+  assert.equal(report.paused,true);
+  assert.equal(report.results.length,0);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
+  const refused=await f.call('apply',{items:[proposal]},'POST',{fetch:throttled});
+  assert.equal(refused.status,503);
+  assert.equal(f.edition().isbn,null);
+ }finally{f.close();}
+});
+test('Verification workflow is mounted with pause/resume, checkpoint and verified-only batch approval',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const script=readFileSync(new URL('../isbn-recovery-ui.mjs',import.meta.url),'utf8');
+ assert.match(html,/id="isbn-verification-start"/);
+ assert.match(html,/id="isbn-verification-pause"/);
+ assert.match(html,/id="isbn-verification-apply"/);
+ assert.match(script,/initIsbnVerifier/);
+ assert.match(script,/require_independent_verification:true/);
 });
