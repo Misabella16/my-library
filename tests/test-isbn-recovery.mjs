@@ -7,6 +7,7 @@ import {
  canonicalIsbn,reconcileIsbnEvidence,titleAuthorMatch,isbn10Equivalent
 } from '../isbn-recovery-evidence.mjs';
 import {handleIsbnRecoveryApi} from '../isbn-recovery-api.mjs';
+import {filterIsbnProposals} from '../isbn-recovery-ui.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const BOOK='11111111-1111-4111-8111-111111111111';
 const ED='22222222-2222-4222-8222-222222222222';
@@ -217,6 +218,19 @@ test('Online Open Library and Google Books are read-only source proposals',async
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
   assert.equal(f.edition().isbn,null);
  }finally{f.close();}
+});
+test('Completed scan fills the visible ISBN proposal list and renders first page',()=>{
+ const records=Array.from({length:1597},(_,i)=>({
+  book_title:'Book '+i,book_author:'Writer '+i,edition_name:'Standard',
+  isbn:'9780306406157',edition_id:String(i)
+ }));
+ assert.equal(filterIsbnProposals(records,'').length,1597);
+ assert.equal(filterIsbnProposals(records,'').slice(0,20).length,20);
+ assert.equal(filterIsbnProposals(records,'Book 130').length>0,true);
+ assert.equal(filterIsbnProposals(records,'No such book').length,0);
+ const ui=readFileSync(new URL('../isbn-recovery-ui.mjs',import.meta.url),'utf8');
+ assert.match(ui,/display=filterIsbnProposals\(candidates,search\.value\);\s*offset=0;previewed\.clear\(\);confirmations\.clear\(\);\s*done=true/);
+ assert.match(ui,/display\.length\?offset\+1:0/);
 });
 test('UI and protected worker route are connected; no new schema',()=>{
  const worker=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
