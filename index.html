@@ -604,6 +604,55 @@
         <div id="edition-local-history-list" class="epub-preview-list"></div>
         <p class="muted">Only an existing standard ebook with no attached image may receive a selected local cover, after your explicit approval. No book, edition, copy, or fake Online display entry is created. No collector's cover, owner photo, review, note or EPUB is replaced. Saved local covers remain marked possible until separately verified. Undo is available unless you edit the image afterward.</p>
       </section>
+    </details>
+    <details class="imports-disclosure">
+      <summary>ISBN Recovery · Goodreads, Calibre, saved EPUBs &amp; online sources</summary>
+      <section class="surface collection-health" id="isbn-recovery" aria-labelledby="isbn-recovery-heading">
+        <p class="section-kicker">✧ ISBN IDENTITIES · PREVIEW BEFORE SAVING</p>
+        <h2 id="isbn-recovery-heading">Recover missing ISBNs for your existing editions</h2>
+        <p>Use your already-saved EPUB metadata, optionally add a Goodreads library CSV and Calibre export or folder. These files are parsed locally on your computer. The site scans its own book, edition and EPUB records in automatically advancing pages, with a Pause button and live progress. It does not download Open Library databases or invent owned editions.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="isbn-recovery-goodreads">Goodreads export CSV (optional)
+            <input id="isbn-recovery-goodreads" type="file" accept=".csv,text/csv">
+          </label>
+          <label class="goodreads-file-label" for="isbn-recovery-calibre">Calibre CSV/JSON (optional)
+            <input id="isbn-recovery-calibre" type="file" accept=".csv,.json,text/csv,application/json">
+          </label>
+          <label class="goodreads-file-label" for="isbn-recovery-folder">Or choose Calibre root folder
+            <input id="isbn-recovery-folder" type="file" webkitdirectory directory multiple>
+          </label>
+        </div>
+        <div class="collection-health-actions">
+          <button class="btn" id="isbn-recovery-scan" type="button">Scan all missing edition ISBNs</button>
+          <button class="btn subtle" id="isbn-recovery-pause" type="button" disabled>Pause after current page</button>
+          <button class="btn subtle" id="isbn-recovery-history" type="button">ISBN recovery history &amp; Undo</button>
+        </div>
+        <p id="isbn-recovery-status" class="small-status" role="status" aria-live="polite">Local files are optional. Scanning your saved EPUB and edition metadata requires no new downloads.</p>
+        <p id="isbn-recovery-metrics" class="small-status" aria-live="polite"></p>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="isbn-recovery-search">Filter recovered ISBN proposals
+            <input id="isbn-recovery-search" type="search" placeholder="Title, author or ISBN" autocomplete="off" disabled>
+          </label>
+          <button class="btn subtle" id="isbn-recovery-prev" type="button" disabled>Previous 20</button>
+          <button class="btn subtle" id="isbn-recovery-next" type="button" disabled>Next 20</button>
+          <button class="btn subtle" id="isbn-recovery-preview" type="button" disabled>Preview this page (no changes)</button>
+          <button class="btn subtle" id="isbn-recovery-select" type="button" disabled>Select reviewed, ready editions</button>
+          <button class="btn" id="isbn-recovery-apply" type="button" disabled>Apply selected approved ISBNs</button>
+        </div>
+        <p id="isbn-recovery-page" class="small-status" aria-live="polite"></p>
+        <div class="epub-preview-list" id="isbn-recovery-results"></div>
+        <h3>Research ISBNs for books without local identifiers</h3>
+        <p class="muted">Optional online searches are one book at a time and read-only. Open Library and Google Books may provide candidate ISBNs for other editions, so manually verify format, publisher and edition before adding them.</p>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="isbn-recovery-online-search">Find book in scanned catalogue
+            <input id="isbn-recovery-online-search" type="search" placeholder="Book title or author" autocomplete="off">
+          </label>
+          <button class="btn subtle" id="isbn-recovery-online-find" type="button">Find books</button>
+        </div>
+        <div class="epub-preview-list" id="isbn-recovery-online"></div>
+        <div class="epub-preview-list" id="isbn-recovery-history-list"></div>
+        <p class="muted">An ISBN is edition-specific. Goodreads and Calibre title/author matches are candidate evidence, not proof that a particular edition carries that ISBN. No ISBN is added without explicit owner approval, a current edition check and checksum validation. Existing ISBNs, special editions, covers, copies, shelves, books and EPUBs remain untouched. Only approved additions can be undone.</p>
+      </section>
     </details></details></section>
 </main>
 <footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
