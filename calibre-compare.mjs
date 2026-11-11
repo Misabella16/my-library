@@ -74,6 +74,7 @@ function canonical(row){
   formats:parsedFormats,
   cover:!!get('cover')&&!['false','no','0','none'].includes(clean(get('cover')).toLowerCase()),
   series:clean(get('series')),series_index:get('seriesindex')||'',
+  publisher:clean(get('publisher')),publication_date:clean(get('publicationdate','pubdate','date')),
   calibre_id:clean(get('id','bookid','uuid'))
  };
 }
