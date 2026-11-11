@@ -92,6 +92,13 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
      }
     }
    }
+   if(!conflicting&&['probable','needs_review'].includes(proof?.status)){
+    const review=el('button','Review this edition individually','btn subtle');
+    review.type='button';review.disabled=checking||applying;
+    review.addEventListener('click',()=>reviewOne(item,proof));
+    card.append(review);
+    card.append(el('p','Manual approval requires checking the exact publication format and edition. This item cannot be bulk-approved.','muted'));
+   }
    if(isBulkEligible(item,proof,conflicts())){
     const label=el('label',undefined,'collection-health-actions');
     const box=el('input');box.type='checkbox';box.checked=chosen.has(proofKey(item));
@@ -169,6 +176,43 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
     '. Completed checks are retained. Click Verify/Resume to retry unfinished records.');
    cursor=0;
   }finally{checking=false;controls();}
+ }
+ async function reviewOne(item,proof){
+  if(checking||applying||uncertain||!isScanComplete()||
+   !['probable','needs_review'].includes(proof?.status)||
+   conflicts().has(item.edition_id))return;
+  const message='Review the actual owned edition before applying this ISBN.\n\n'+
+   item.book_title+' · '+item.edition_name+'\nISBN '+item.isbn+
+   '\nSource: '+item.source+
+   '\nPublisher hint: '+(item.source_publisher||'not recorded')+
+   '\nBinding hint: '+(item.source_binding||'not recorded')+
+   '\n\nHave you checked that this exact ISBN belongs to the edition you own?';
+  if(!window.confirm(message))return;
+  applying=true;controls();
+  try{
+   const response=await api('/api/isbn-recovery/preview',{
+    method:'POST',data:{items:[item]}
+   });
+   const inspection=response.results?.[0];
+   if(inspection?.status!=='ready')throw Error(inspection?.reason||'Edition is not eligible');
+   if(!window.confirm('Final approval: add ISBN '+item.isbn+' ONLY to '+item.edition_name+
+    ' for '+item.book_title+'? This is manually reviewed, not independently verified for bulk.'))return;
+   const write=await api('/api/isbn-recovery/apply',{
+    method:'POST',data:{items:[{...item,approved:true}]}
+   });
+   const saved=write.results?.[0];
+   if(saved?.status==='applied'){
+    await onApplied([saved]);
+    chosen.delete(proofKey(item));draw();
+    say('Manually reviewed ISBN saved with Undo. No edition, copy, cover or note changed.');
+   }else{
+    say('Manual ISBN not saved: '+(saved?.reason||'Server rejected edition match'));
+   }
+  }catch(error){
+   uncertain=true;
+   say('Manual save uncertain: '+(error.message||'Request failed')+
+    '. Check ISBN Recovery history before retrying; a save may have completed.');
+  }finally{applying=false;controls();}
  }
  async function applySelected(){
   if(applying||checking||uncertain||!chosen.size)return;
