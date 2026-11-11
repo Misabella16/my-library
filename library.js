@@ -8,6 +8,7 @@ import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
 import {initVisualShelves} from './visual-shelves-ui.mjs';
+import {initCollectionGrid} from './collection-grid-ui.mjs';
 import {initCollectionHealth} from './collection-health-ui.mjs';
 import {initOnlineEnrich} from './online-enrich-ui.mjs';
 import {preferredDetailCoverId} from './cover-priority.mjs';
@@ -28,6 +29,7 @@ const state = {
   busy:false, activeEdition:null, urls:[], refreshToken:0
 };
 const $ = s => document.querySelector(s);
+let collectionGrid=null;
 const safe = x => String(x??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'' :'&#39;'}[ch]));
 const safeId = x => /^[0-9a-f-]{36}$/i.test(x||'') ? x : '';
 const statuses = {unread:'Want to read',reading:'Reading',read:'Read',paused:'Paused',dnf:'Did not finish'};
@@ -85,20 +87,33 @@ function currentCover(book) {
 }
 function renderGrid(){
   const grid=$('#book-grid');
-  const books=state.books;
+  const books=collectionGrid?collectionGrid.arranged(state.books):state.books;
+  const movable=collectionGrid?.canMove()||false;
   $('#count').textContent=state.total+' '+(state.total===1?'book':'books')+(state.query?' matching “'+state.query+'”':'');
   if(!books.length){
     grid.innerHTML='<div class="empty"><h3>'+(state.query?'No matching titles':'Your library is ready')+'</h3><p>'+(state.query?'Try another search.':'Add your first book, then give it editions, copies, tags and private notes.')+'</p></div>';
   } else {
-    grid.innerHTML=books.map(b=>'<button class="book-card '+(state.selectedId===b.id?'selected':'')+'" type="button" data-select-book="'+safe(b.id)+'">'+
-      bookCover(b.title,b.cover_id)+'<div class="book-data"><strong>'+
-      (machineTitleReason(b.title)?'Title needs review':safe(b.title))+'</strong><small>'+
-      (machineTitleReason(b.title)?'Imported label: '+safe(b.title)+' · ':'')+
-      label(b.author,'Unknown author')+'</small><br><span class="badge">'+
-      (statuses[b.reading_status]||'Unread')+'</span></div></button>').join('');
+    grid.innerHTML=books.map(b=>{
+      const title=machineTitleReason(b.title)?'Title needs review':safe(b.title);
+      const author=label(b.author,'Unknown author');
+      const synopsis=safe(b.synopsis||'No synopsis added yet. Open this book to add one.');
+      return '<article class="book-card '+(state.selectedId===b.id?'selected':'')+
+       '" data-book-id="'+safe(b.id)+'" draggable="'+(movable?'true':'false')+'">'+
+       '<button class="book-card-open" type="button" data-select-book="'+safe(b.id)+'" aria-label="Open '+safe(b.title)+'">'+
+       bookCover(b.title,b.cover_id)+'<div class="book-data"><strong>'+
+       title+'</strong><small>'+author+'</small><span class="badge">'+
+       (statuses[b.reading_status]||'Unread')+'</span></div></button>'+
+       '<div class="book-card-move" aria-label="Book arrangement controls">'+
+       '<button type="button" data-move-book="-1" '+(movable?'':'disabled')+' aria-label="Move '+safe(b.title)+' left" title="Move left">◀</button>'+
+       '<button type="button" data-toggle-preview aria-expanded="false" aria-label="Show synopsis for '+safe(b.title)+'" title="Read synopsis">ⓘ</button>'+
+       '<button type="button" data-move-book="1" '+(movable?'':'disabled')+' aria-label="Move '+safe(b.title)+' right" title="Move right">▶</button></div>'+
+       '<aside class="book-card-preview" aria-label="Synopsis for '+safe(b.title)+'">'+
+       '<strong>'+title+'</strong><p class="muted">'+author+'</p><p>'+synopsis+'</p></aside></article>';
+    }).join('');
   }
   $('#load-more').hidden=state.books.length>=state.total;
 }
+
 async function listBooks({append=false}={}){
   const token=++state.refreshToken;
   const offset=append?state.books.length:0;
@@ -530,6 +545,11 @@ document.addEventListener('DOMContentLoaded',async()=>{
   }
   // Authentication is independent of D1 health. Keep import history and Refresh
   // reachable even if the database is temporarily out of daily allowance.
+  collectionGrid=initCollectionGrid(api,{
+    grid:$('#book-grid'),render:renderGrid,getQuery:()=>state.query,
+    status:$('#collection-arrangement-status'),undo:$('#collection-undo')
+  });
+  await collectionGrid.load();
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
     const digitalImporter=initDigitalImport(api,{onImported:async()=>{

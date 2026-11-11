@@ -1,0 +1,81 @@
+/* Compact cover wall for My Books only; other edition and shelf views stay intact. */
+#library .layout{grid-template-columns:minmax(0,1.55fr) minmax(325px,0.9fr);gap:18px}
+#library .book-grid{
+ display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,116px),1fr));
+ align-items:start;gap:12px;min-width:0
+}
+#library .book-card{
+ position:relative;min-width:0;overflow:visible;isolation:auto;
+ padding:0;background:#fffefa;cursor:grab;touch-action:pan-y;
+}
+#library .book-card:active{cursor:grabbing}
+#library .book-card:hover,#library .book-card:focus-within,#library .book-card.preview-open{
+ z-index:10;
+}
+#library .book-card.dragging{opacity:.45;outline:2px dashed #a77b92}
+#library .book-card.drag-target{outline:2px solid #b18494;outline-offset:2px}
+#library .book-card-open{
+ border:0;display:block;width:100%;text-align:left;color:inherit;background:transparent;
+ padding:0;border-radius:inherit;cursor:pointer;overflow:hidden
+}
+#library .book-card .book-cover{aspect-ratio:2/3;min-height:0;padding:7px}
+#library .book-card .book-cover:before{inset:6px}
+#library .book-card .book-cover b{font-size:clamp(11px,1vw,15px)}
+#library .book-card .book-data{padding:7px 8px 3px}
+#library .book-card .book-data strong{
+ font-size:12px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;
+ -webkit-box-orient:vertical;overflow:hidden;min-height:30px
+}
+#library .book-card .book-data small{
+ font-size:10px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+#library .book-card .book-data .badge{font-size:9px;padding:1px 6px;display:inline-block;margin-top:5px}
+#library .book-card-move{
+ display:flex;align-items:center;justify-content:space-between;gap:3px;
+ padding:3px 6px 7px
+}
+#library .book-card-move button{
+ flex:1;background:#f6edf0;border:1px solid #e6d4dc;color:#755363;
+ border-radius:5px;min-height:27px;font-size:12px;cursor:pointer
+}
+#library .book-card-move button:disabled{opacity:.3;cursor:default}
+#library .book-card-preview{
+ display:none;position:absolute;top:0;left:50%;
+ transform:translateX(-50%);width:min(285px,calc(100vw - 32px));
+ z-index:20;padding:13px 14px;border:1px solid #dcc6d0;border-radius:10px;
+ color:#4b3f48;background:#fffdf9;box-shadow:0 12px 36px #52334338;
+ text-align:left;max-height:310px;overflow:auto;cursor:auto
+}
+#library .book-card:hover .book-card-preview,
+#library .book-card:focus-within .book-card-preview,
+#library .book-card.preview-open .book-card-preview{display:block}
+#library .book-card-preview strong{font:16px/1.3 Georgia,serif}
+#library .book-card-preview p{font-size:12px;line-height:1.55;white-space:pre-wrap;
+ overflow-wrap:anywhere;margin:6px 0 0}
+#library .book-card-preview .muted{font-size:11px}
+#library .collection-arrange-tools{display:flex;align-items:center;gap:10px;
+ flex-wrap:wrap;margin:-5px 0 14px;color:#786b72}
+#library .collection-arrange-tools .small-status{flex:1;min-width:220px}
+#library .collection-arrange-tools button{flex-shrink:0}
+@media(max-width:1050px){
+ #library .layout{grid-template-columns:minmax(0,1fr) minmax(290px,.85fr)}
+ #library .book-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,106px),1fr))}
+}
+@media(max-width:800px){
+ #library .layout{display:flex;flex-direction:column-reverse}
+ #library .book-grid{width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,111px),1fr))}
+}
+@media(max-width:400px){
+ #library .book-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+ #library .book-card .book-cover{aspect-ratio:2/3}
+ #library .book-card .book-data{padding:6px}
+ #library .book-card .book-data strong{font-size:11px}
+}
+@media(hover:none){
+ #library .book-card:hover .book-card-preview,
+ #library .book-card:focus-within .book-card-preview{display:none}
+ #library .book-card.preview-open .book-card-preview{display:block}
+}
+@media(prefers-reduced-motion:reduce){
+ #library .book-card{transition:none}
+}
