@@ -31,6 +31,8 @@ jobs:
           node --check isbn-recovery-evidence.mjs
           node --check isbn-recovery-api.mjs
           node --check isbn-recovery-ui.mjs
+          node --check isbn-verification-ui.mjs
+          node --check isbn-independent-verification.mjs
           node --check isbn-edition-enrich-api.mjs
           node --check isbn-edition-enrich-ui.mjs
           node --check goodreads-preview.mjs

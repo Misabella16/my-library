@@ -5,6 +5,7 @@ import {parseGoodreadsExport} from './goodreads-preview.mjs';
 import {parseCalibreExport} from './calibre-compare.mjs';
 import {readCalibreFolder} from './calibre-folder.mjs';
 import {reconcileIsbnEvidence,normalized} from './isbn-recovery-evidence.mjs';
+import {initIsbnVerifier} from './isbn-verification-ui.mjs';
 const node=(tag,text,cls)=>{
  const el=document.createElement(tag);
  if(text!==undefined)el.textContent=String(text);
@@ -36,6 +37,7 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   books=[],editions=[],epubs=[],grRows=[],calRows=[],candidates=[],
   display=[],offset=0,previewed=new Map(),confirmations=new Set(),done=false,
   applied=0,conflicts=new Set(),requestUncertain=false,openedOnline=new Map();
+ let verifier=null;
  const types=['books','editions','epubs'],counts=()=>({
   books:books.length,editions:editions.length,epubs:epubs.length,
   proposals:candidates.length,conflicts:conflicts.size,confirmed:applied
@@ -92,6 +94,7 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   offset=0;previewed.clear();confirmations.clear();
   done=true;phase=types.length;
   render();
+  verifier?.refresh();
   say('Full scan completed. '+candidates.length+' unique ISBN proposals found. '+
    conflicts.size+' editions have conflicting identifiers. No changes were made. '+
    'Preview each page and approve only the edition whose ISBN you verified.');
@@ -117,7 +120,7 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
     'Conflicting ISBNs for the same edition. Research the actual edition before applying.',
     'muted'));
    const state=previewed.get(key(item));
-   if(state?.status==='ready'&&!conflict){
+   if(state?.status==='ready'&&!conflict&&verifier?.isVerified(item)){
     const label=node('label',undefined,'collection-health-actions'),cb=node('input');
     cb.type='checkbox';cb.checked=confirmations.has(item.edition_id);
     cb.addEventListener('change',()=>{
@@ -167,6 +170,7 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
    phase=0;cursors=['','',''];books=[];editions=[];epubs=[];candidates=[];
    display=[];offset=0;previewed.clear();confirmations.clear();conflicts.clear();
    done=false;requestUncertain=false;
+   verifier?.reset();
   }
   scanning=true;shouldStop=false;controls();
   try{
@@ -212,8 +216,8 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   if(busy||!done)return;
   busy=true;confirmations.clear();controls();
   try{
-   const picked=page().filter(x=>!conflicts.has(x.edition_id));
-   if(!picked.length){say('Only conflicting identifiers on this page. Verify the editions first.');return;}
+   const picked=page().filter(x=>!conflicts.has(x.edition_id)&&verifier?.isVerified(x));
+   if(!picked.length){say('Run independent verification first. Only verified ebook ISBNs can be approved in bulk.');return;}
    // The API supports at most 20 distinct editions. Deduplicate editions
    // that have multiple source records.
    const seen=new Set(),unique=picked.filter(x=>{
@@ -237,14 +241,15 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   offset=Math.max(0,offset-20);previewed.clear();confirmations.clear();render();});
  select.addEventListener('click',()=>{
   for(const item of page()){
-   if(!conflicts.has(item.edition_id)&&previewed.get(key(item))?.status==='ready')
+   if(!conflicts.has(item.edition_id)&&verifier?.isVerified(item)&&
+    previewed.get(key(item))?.status==='ready')
     confirmations.add(item.edition_id);
   }
   render();
  });
  apply.addEventListener('click',async()=>{
   if(busy||!selected().length||requestUncertain)return;
-  const order=selected().filter(x=>!conflicts.has(x.edition_id)&&
+  const order=selected().filter(x=>!conflicts.has(x.edition_id)&&verifier?.isVerified(x)&&
    previewed.get(key(x))?.status==='ready');
   if(!order.length)return;
   busy=true;controls();
@@ -253,8 +258,9 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
    const health=await api('/api/health');
    if(!health.authenticated||health.database!=='connected')
     throw Error('Private session or database unavailable');
-   for(let i=0;i<order.length;i+=4){
-    const group=order.slice(i,i+4).map(x=>({...x,approved:true}));
+   for(let i=0;i<order.length;i+=2){
+    const group=order.slice(i,i+2).map(x=>({...x,approved:true,
+     require_independent_verification:true}));
     const resp=await api('/api/isbn-recovery/apply',{
      method:'POST',data:{items:group}});
     if(!Array.isArray(resp.results)||resp.results.length!==group.length)
@@ -363,6 +369,19 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   }catch(e){say('Online lookup stopped: '+(e.message||'Source unavailable'));}
   finally{busy=false;controls();}
  }
+ verifier=initIsbnVerifier(api,{
+  getCandidates:()=>candidates,getConflicts:()=>conflicts,isScanComplete:()=>done,
+  onApplied:async changes=>{
+   for(const item of changes){
+    if(item.status!=='applied')continue;
+    const record=editions.find(x=>x.id===item.edition_id);
+    if(record)record.isbn=item.isbn;
+    applied++;
+   }
+   buildCandidates();
+   await onUpdated();
+  }
+ });
  controls();showMetrics();
  return {getState:()=>({done,phase,counts:counts(),scanning,applied})};
 }
