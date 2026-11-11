@@ -11,6 +11,8 @@ import {initVisualShelves} from './visual-shelves-ui.mjs';
 import {initVirtualShelves} from './virtual-shelves-ui.mjs';
 import {initBookReferenceUI} from './book-reference-ui.mjs';
 import {initCollectionGrid} from './collection-grid-ui.mjs';
+import {initCollectionManagement} from './collection-management-ui.mjs';
+import {synopsisToSafeHtml} from './synopsis-format.mjs';
 import {initCollectionHealth} from './collection-health-ui.mjs';
 import {initOnlineEnrich} from './online-enrich-ui.mjs';
 import {preferredDetailCoverId} from './cover-priority.mjs';
@@ -27,7 +29,7 @@ import {editionCoverSearches} from './edition-cover-discovery.mjs';
 // All real writes go to the owner-authenticated, same-origin /api routes.
 'use strict';
 const state = {
-  books:[], total:0, selectedId:null, detail:null, query:'', offset:0,
+  books:[], total:0, selectedId:null, detail:null, query:'', sort:'az',offset:0,
   busy:false, activeEdition:null, urls:[], refreshToken:0
 };
 const $ = s => document.querySelector(s);
@@ -99,7 +101,7 @@ function renderGrid(){
     grid.innerHTML=books.map(b=>{
       const title=machineTitleReason(b.title)?'Title needs review':safe(b.title);
       const author=label(b.author,'Unknown author');
-      const synopsis=safe(b.synopsis||'No synopsis added yet. Open this book to add one.');
+      const synopsis=synopsisToSafeHtml(b.synopsis||'No synopsis added yet. Open this book to add one.');
       return '<article class="book-card '+(state.selectedId===b.id?'selected':'')+
        '" data-book-id="'+safe(b.id)+'" draggable="'+(movable?'true':'false')+'">'+
        '<button class="book-card-open" type="button" data-select-book="'+safe(b.id)+'" aria-label="Open '+safe(b.title)+'">'+
@@ -110,6 +112,9 @@ function renderGrid(){
        '<button type="button" data-move-book="-1" '+(movable?'':'disabled')+' aria-label="Move '+safe(b.title)+' left" title="Move left">◀</button>'+
        '<button type="button" data-toggle-preview aria-expanded="false" aria-label="Show synopsis for '+safe(b.title)+'" title="Read synopsis">ⓘ</button>'+
        '<button type="button" data-move-book="1" '+(movable?'':'disabled')+' aria-label="Move '+safe(b.title)+' right" title="Move right">▶</button></div>'+
+       '<details class="book-card-actions"><summary aria-label="Manage '+safe(b.title)+'" title="Manage book">⋯</summary>'+
+       '<div><button type="button" data-visibility-action="hide" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Hide book</button>'+
+       '<button type="button" data-visibility-action="trash" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Move to Trash</button></div></details>'+
        '<aside class="book-card-preview" aria-label="Synopsis for '+safe(b.title)+'">'+
        '<strong>'+title+'</strong><p class="muted">'+author+'</p><p>'+synopsis+'</p></aside></article>';
     }).join('');
@@ -120,7 +125,7 @@ function renderGrid(){
 async function listBooks({append=false}={}){
   const token=++state.refreshToken;
   const offset=append?state.books.length:0;
-  const q=new URLSearchParams({q:state.query,offset:String(offset),limit:'60'});
+  const q=new URLSearchParams({q:state.query,offset:String(offset),limit:'60',sort:state.sort});
   // Reuse first-page count for Load more; no extra D1 COUNT scan.
   if(append)q.set('include_total','0');
   const result=await api('/api/books?'+q);
@@ -196,7 +201,10 @@ function renderDetail(){
       '<div class="badges"><span class="badge">'+(statuses[b.reading_status]||'Unread')+'</span>'+
       (b.rating!==null&&b.rating!==undefined?'<span class="badge">'+safe(b.rating)+' ★</span>':'')+
       '</div></div></div>'+
-    '<section class="detail-section"><h3>Synopsis</h3><p class="detail-text">'+safe(b.synopsis||'No synopsis added yet.')+'</p></section>'+
+    '<section class="detail-section"><h3>Synopsis</h3><div class="detail-text">'+synopsisToSafeHtml(b.synopsis)+'</div></section>'+
+    '<section class="detail-section book-visibility-actions"><h3>Collection visibility</h3>'+
+      '<div class="actions start"><button class="btn mini subtle" type="button" data-visibility-action="hide" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Hide from collection</button>'+
+      '<button class="btn mini subtle" type="button" data-visibility-action="trash" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Move to Trash (recoverable)</button></div></section>'+
     '<section class="detail-section"><h3>Metadata, covers & locations</h3><div id="book-reference-tools"></div></section>'+
     '<section class="detail-section"><h3>Genres & Tags</h3><div class="tag-row">'+(genreTags||'<span class="muted">No tags yet.</span>')+'</div>'+
       '<form class="inline-form" data-form="add-tag"><input name="label" placeholder="Add tag" required maxlength="90" aria-label="New tag"><select name="kind" aria-label="Tag type"><option value="personal">My tag</option><option value="genre">Genre</option></select><button class="btn mini" type="submit">Add</button></form></section>'+
@@ -427,6 +435,10 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }
   });
   $('#load-more').addEventListener('click',async()=>{try{await listBooks({append:true})}catch(e){showMessage(e.message,true)}});
+  $('#collection-sort').addEventListener('change',async event=>{
+    state.sort=event.target.value;
+    try{await listBooks();}catch(error){showMessage(error.message||'Unable to sort books',true);}
+  });
   $('#search').addEventListener('input',()=>{
     state.query=$('#search').value.trim();
     clearTimeout(window.bookQueryTimer);
@@ -551,10 +563,13 @@ document.addEventListener('DOMContentLoaded',async()=>{
   // Authentication is independent of D1 health. Keep import history and Refresh
   // reachable even if the database is temporarily out of daily allowance.
   collectionGrid=initCollectionGrid(api,{
-    grid:$('#book-grid'),render:renderGrid,getQuery:()=>state.query,
+    grid:$('#book-grid'),render:renderGrid,getQuery:()=>state.query,getMode:()=>state.sort,
     status:$('#collection-arrangement-status'),undo:$('#collection-undo')
   });
   await collectionGrid.load();
+  initCollectionManagement(api,{onVisibleChanged:async()=>{
+    state.selectedId=null;state.detail=null;renderDetail();await listBooks();
+  }});
   bookReference=initBookReferenceUI(api,{onUpdated:async bookId=>{
     await listBooks();await selectBook(bookId);
   },message:showMessage});
