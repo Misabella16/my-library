@@ -31,7 +31,7 @@ export function verifiedEditionDetails(record,edition){
   typeof x?.name==='string'&&x.name.trim()).map(x=>x.name.trim()):[];
  if(authors.length&&!authors.some(a=>normalized(a)===normalized(record.author)))
   return {status:'review',reason:'Source author conflicts with your catalogue author'};
- const publisher=Array.isArray(detail.publishers)?detail.publishers.map(x=>
+ const publisher=(Array.isArray(detail.publishers)?detail.publishers:[]).map(x=>
   typeof x==='string'?x:typeof x?.name==='string'?x.name:'').find(Boolean)||'';
  const cover=Array.isArray(detail.covers)?coverId(detail.covers[0]):null;
  return {status:'verified',isbn,source_edition:detail.key,source_title:title,
