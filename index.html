@@ -215,6 +215,11 @@
         <label class="photo-special-check"><input type="checkbox" id="photo-edition-special"> Special or exclusive edition</label>
         <h4>Choose the cover artwork</h4>
         <p class="muted">Your actual cropped photograph is usually best for exclusive covers. Or search Google Books and Open Library by title and compare their candidate artwork locally. This is not a Google Lens reverse-image search.</p>
+        <label for="photo-artwork-rotate">Rotate your photographed cover when saving</label>
+        <select id="photo-artwork-rotate">
+          <option value="0">No rotation</option><option value="90">90° clockwise</option>
+          <option value="270">90° counterclockwise</option><option value="180">180°</option>
+        </select>
         <button class="btn subtle" type="button" id="photo-find-covers">Find covers in Google Books and Open Library</button>
         <p id="photo-online-status" class="small-status" role="status" aria-live="polite">Choose a title to search public cover sources.</p>
         <div id="photo-online-covers" class="photo-online-covers" aria-live="polite"></div>
