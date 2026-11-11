@@ -26,6 +26,8 @@ jobs:
           node --check offline-text-review-ui.mjs
           node --check edition-recovery-api.mjs
           node --check edition-recovery-ui.mjs
+          node --check edition-local-api.mjs
+          node --check edition-local-ui.mjs
           node --check goodreads-preview.mjs
           node --check goodreads-ui.mjs
           node --check goodreads-import.mjs
