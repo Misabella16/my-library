@@ -69,19 +69,22 @@
     </div>
     <div class="toolbar">
       <label class="search-label"><span class="visually-hidden">Search library</span><input id="search" type="search" placeholder="Find a treasured title or author…" autocomplete="off" maxlength="150"></label>
+      <label class="collection-tool-label" for="collection-sort">Sort <select id="collection-sort" aria-label="Sort collection"><option value="az">Title A–Z</option><option value="za">Title Z–A</option><option value="custom">My arrangement</option></select></label>
+      <label class="collection-tool-label" for="collection-visibility-view">View <select id="collection-visibility-view" aria-label="Choose collection visibility"><option value="visible">My collection</option><option value="hidden">Hidden</option><option value="trash">Trash</option></select></label>
       <button class="btn subtle" type="button" id="refresh">Refresh</button>
     </div>
-    <div class="collection-arrange-tools">
+    <div class="collection-arrange-tools" id="collection-arrange-tools">
       <span class="small-status" id="collection-arrangement-status" role="status" aria-live="polite">Preparing collection layout…</span>
       <button class="btn mini subtle" type="button" id="collection-undo" disabled>Undo arrangement</button>
     </div>
-    <div class="layout">
+    <div class="layout" id="collection-active-layout">
       <div class="book-grid" id="book-grid" aria-live="polite">
         <div class="empty">Gathering your favorite stories… ♡</div>
       </div>
       <article class="detail" id="book-detail" aria-label="Selected book"><div class="empty"><h3>Choose a book</h3><p>Its synopsis, tags, editions and your notes will appear here.</p></div></article>
     </div>
-    <div class="loadmore"><button class="btn subtle" id="load-more" type="button" hidden>Load more books</button></div>
+    <div class="loadmore" id="visible-load-more"><button class="btn subtle" id="load-more" type="button" hidden>Load more books</button></div>
+    <section id="collection-private-list" class="surface collection-private-list" hidden aria-label="Hidden and trashed books"><h3 id="collection-private-heading">Hidden books</h3><p id="collection-private-summary" role="status" aria-live="polite"></p><div id="collection-private-rows"></div><div class="loadmore"><button id="collection-private-more" class="btn subtle" type="button" hidden>Load more</button></div></section>
   </section>
   <section class="tab-panel" id="shelves" hidden>
     <div class="site-section-artwork" data-site-section-image="shelvesBanner" hidden></div>
