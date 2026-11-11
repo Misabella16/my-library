@@ -46,7 +46,7 @@ function fixture({bookTitle='Example Novel',withIsbn='',goodreadsId='100',epubId
  const edition=()=>sql.prepare('SELECT * FROM editions WHERE id=?').get(ED);
  const proposal=(source='saved_epub')=>({
   book_id:BOOK,edition_id:ED,expected_updated_at:edition().updated_at,
-  book_title:bookTitle,book_author:'Example Writer',
+  book_title:bookTitle,book_author:'Example Writer',format:'ebook',
   source_title:bookTitle,source_author:'Example Writer',
   source,source_file_id:EPUB,source_id:EPUB,
   source_goodreads_id:'100',isbn:ISBN
