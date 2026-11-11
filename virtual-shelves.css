@@ -71,3 +71,10 @@
  .virtual-book:hover .virtual-book-synopsis,.virtual-book:focus-within .virtual-book-synopsis{display:none}
  .virtual-book.preview-open .virtual-book-synopsis{display:block}
 }
+
+/* Outside-of-scroller synopsis preview stays readable for long descriptions. */
+.virtual-hover-description{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;
+ font-size:12px;color:#594953;padding:11px 12px;border:1px solid #e4d6dc;
+ border-radius:8px;background:#fffdf9;max-height:250px;overflow-y:auto;margin:10px 0}
+.virtual-cover-row .virtual-book-synopsis{display:none!important}
+.virtual-hover-description[hidden]{display:none!important}
