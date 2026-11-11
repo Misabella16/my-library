@@ -28,6 +28,9 @@ jobs:
           node --check edition-recovery-ui.mjs
           node --check edition-local-api.mjs
           node --check edition-local-ui.mjs
+          node --check isbn-recovery-evidence.mjs
+          node --check isbn-recovery-api.mjs
+          node --check isbn-recovery-ui.mjs
           node --check goodreads-preview.mjs
           node --check goodreads-ui.mjs
           node --check goodreads-import.mjs
