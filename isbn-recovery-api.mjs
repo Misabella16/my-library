@@ -3,6 +3,7 @@
 // server side. Online search results are research only, never automatic writes.
 import {canonicalIsbn,normalized,isbn10Equivalent} from './isbn-recovery-evidence.mjs';
 import {createPacedFetch} from './source-pacing.mjs';
+import {verifyIsbnOnline} from './isbn-independent-verification.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8',
  'cache-control':'private, no-store','x-content-type-options':'nosniff'};
@@ -89,10 +90,19 @@ async function checkOne(db,proposal){
   expected_updated_at:edition.updated_at,
   note:'Only the existing edition ISBN can be filled; no covers, copies, or book fields change'};
 }
-async function applyOne(db,proposal){
+async function applyOne(db,proposal,verificationFetchers){
  if(proposal?.approved!==true)return {status:'review',reason:'Explicit owner approval required'};
  const preview=await checkOne(db,proposal);
  if(preview.status!=='ready')return preview;
+ if(proposal.require_independent_verification===true){
+  // Independently re-check sources on the server at write time; never trust
+  // a client-supplied "verified" result or a previously loaded JSON report.
+  const checked=await verifyIsbnOnline({
+   title:preview.title,author:preview.author,format:preview.format
+  },preview.isbn,proposal.source,verificationFetchers);
+  if(checked.status!=='verified')
+   return {status:'review',reason:'Independent ISBN verification no longer passes: '+checked.reason};
+ }
  const edition=await single(db,'SELECT isbn,updated_at FROM editions WHERE id=?',
   proposal.edition_id);
  if(!edition)return {status:'review',reason:'Edition disappeared'};
@@ -237,6 +247,40 @@ export async function handleIsbnRecoveryApi(request,db,path,
   return catalogue(db,request);
  if(path==='/api/isbn-recovery/online'&&request.method==='GET')
   return online(db,request,fetchers);
+ if(path==='/api/isbn-recovery/verify'&&request.method==='POST'){
+  // No D1 reads for 1,500+ online checks. Saved EPUB and edition ownership
+  // are independently re-checked by checkOne() when anything is applied.
+  let raw;try{raw=await request.text();}catch{return fail('Could not read verification request');}
+  if(raw.length>6000)return fail('Verification request too large',413);
+  let body;try{body=JSON.parse(raw);}catch{return fail('Invalid JSON');}
+  if(!Array.isArray(body.items)||body.items.length<1||body.items.length>3)
+   return fail('Check one to three ISBNs at a time');
+  const results=[];
+  for(const item of body.items){
+   if(!uuid(item?.book_id)||!uuid(item?.edition_id)||
+      !canonicalIsbn(item.isbn)||
+      !['saved_epub','goodreads_csv','calibre_local'].includes(item.source)||
+      typeof item.book_title!=='string'||item.book_title.length>300||
+      !item.book_title.trim()||typeof item.book_author!=='string'||
+      item.book_author.length>400||!item.book_author.trim()||
+      !['ebook','hardcover','paperback','audiobook','other'].includes(item.format))
+    return fail('Invalid ISBN verification candidate');
+   try{
+    const checked=await verifyIsbnOnline({
+     title:item.book_title,author:item.book_author,format:item.format
+    },item.isbn,item.source,fetchers);
+    results.push({book_id:item.book_id,edition_id:item.edition_id,
+     isbn:canonicalIsbn(item.isbn),source:item.source,
+     status:checked.status,reason:checked.reason,references:checked.references||[]});
+   }catch(error){
+    // Preserve earlier successes in this small batch and do not misclassify
+    // 429/network issues as not_found. The UI resumes at this same ISBN.
+    return json({results,paused:true,
+     error:'Provider unavailable; stop and resume verification: '+String(error.message||'Network error')});
+   }
+  }
+  return json({results,paused:false});
+ }
  if(path==='/api/isbn-recovery/history'&&request.method==='GET'){
   const rows=await all(db,"SELECT id,entity_id,created_at,undone_at FROM change_log "+
    "WHERE action='isbn_recovery' ORDER BY created_at DESC LIMIT 100");
@@ -259,7 +303,13 @@ export async function handleIsbnRecoveryApi(request,db,path,
   return fail('Select up to '+cap+' distinct existing editions');
  const results=[];
  for(const proposal of body.items){
-  results.push(applying?await applyOne(db,proposal):await checkOne(db,proposal));
+  try{results.push(applying?await applyOne(db,proposal,fetchers):await checkOne(db,proposal));}
+  catch(error){
+   if(applying&&proposal?.require_independent_verification===true)
+    return json({results,paused:true,error:'Independent verification failed; check history before retrying: '+
+     String(error.message||'Provider unavailable')},503);
+   throw error;
+  }
  }
  return json({results});
 }
