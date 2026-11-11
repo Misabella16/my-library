@@ -17,7 +17,7 @@ export function initImportsWorkspace(){
   if(target){event.preventDefault();target.scrollIntoView({block:'start',behavior:'smooth'});}
  });
  return {setRepairBusy(busy){
-  for(const id of ['add-library-books','repair-review','repair-advanced']){
+  for(const id of ['edition-metadata-workflow','add-library-books','repair-review','repair-advanced']){
    const section=document.getElementById(id);
    if(section)section.inert=busy;
   }

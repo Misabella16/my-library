@@ -285,3 +285,24 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
   #isbn-verification-results{grid-template-columns:minmax(0,1fr)}
   #isbn-verification{padding:12px}
 }
+
+/* A single edition-and-cover workflow, with actionable ISBN review cards. */
+#edition-metadata-workflow{margin:20px 0;min-width:0}
+#edition-metadata-workflow > .imports-disclosure{margin:13px 0;background:var(--paper)}
+#edition-metadata-workflow > .imports-disclosure > summary{font:600 18px/1.4 Georgia,serif;color:var(--forest)}
+#edition-metadata-workflow #isbn-recovery{margin:0}
+#edition-metadata-workflow #isbn-recovery-extra{margin:18px 0;background:var(--cream)}
+.isbn-workflow-steps{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
+.isbn-workflow-steps a{background:var(--sage);border:1px solid var(--line);color:var(--forest);font-size:12px;font-weight:700;border-radius:8px;padding:8px 12px}
+.isbn-workflow-steps a:hover,.isbn-workflow-steps a:focus-visible{background:#dfe9d9}
+#isbn-verification .isbn-source-links,
+#isbn-verification .isbn-card-actions{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+#isbn-verification .isbn-source-links a{border:1px solid var(--line);border-radius:7px;padding:6px 10px;background:var(--cream);color:var(--forest);font-size:12px;text-decoration:underline}
+#isbn-verification .isbn-card-actions .btn{white-space:normal;text-align:left;line-height:1.4}
+#isbn-verification-results .health-result p{overflow-wrap:anywhere}
+@media(max-width:690px){
+ #edition-metadata-workflow{padding:12px}
+ #edition-metadata-workflow .surface{padding:12px}
+ #isbn-verification .isbn-card-actions{align-items:stretch}
+ #isbn-verification .isbn-card-actions .btn{width:100%}
+}

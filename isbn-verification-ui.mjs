@@ -1,7 +1,11 @@
 // Opt-in independent verification and strict bulk approval for ISBN Recovery.
+import {normalized} from './isbn-recovery-evidence.mjs';
 // Reads the parent scanner's in-memory proposals. No D1 reads during source checks.
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
 export const proofKey=p=>p.edition_id+'|'+p.isbn+'|'+p.source;
+export function canManuallyReview(item,proof){
+ return !!item&&proof?.status!=='mismatch';
+}
 export function isBulkEligible(proposal,proof,conflicts){
  return !!proposal&&!conflicts.has(proposal.edition_id)&&proof?.status==='verified'&&
   proof.isbn===proposal.isbn&&proof.edition_id===proposal.edition_id&&
@@ -12,8 +16,9 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  const $=s=>root.querySelector('#isbn-verification-'+s);
  const start=$('start'),pause=$('pause'),select=$('select'),apply=$('apply'),
   status=$('status'),stats=$('stats'),results=$('results'),filter=$('filter'),
-  pagePrev=$('prev'),pageNext=$('next'),save=$('export'),load=$('import');
- if([start,pause,select,apply,status,stats,results,filter,pagePrev,pageNext,save,load].some(x=>!x))
+  pagePrev=$('prev'),pageNext=$('next'),save=$('export'),load=$('import'),
+  search=$('search');
+ if([start,pause,select,apply,status,stats,results,filter,pagePrev,pageNext,save,load,search].some(x=>!x))
   return null;
  let proofs=new Map(),chosen=new Set(),cursor=0,offset=0,
   checking=false,applying=false,shouldStop=false,uncertain=false,errors='';
@@ -22,8 +27,9 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  const checked=()=>candidates().filter(p=>proofs.has(proofKey(p))).length;
  const say=x=>{status.textContent=x;};
  function filtered(){
-  const mode=filter.value;
+  const mode=filter.value,needle=normalized(search.value);
   return candidates().filter(p=>{
+   if(needle&&!normalized([p.book_title,p.book_author,p.edition_name,p.isbn].join(' ')).includes(needle))return false;
    const proof=proofs.get(proofKey(p));
    if(mode==='all')return true;
    if(mode==='conflict')return conflicts().has(p.edition_id);
@@ -38,6 +44,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
   select.disabled=active||!getVerified().length;
   apply.disabled=active||uncertain||!chosen.size;
   filter.disabled=active||!isScanComplete();
+  search.disabled=active||!isScanComplete();
   pagePrev.disabled=active||offset===0;
   pageNext.disabled=active||offset+12>=filtered().length;
   save.disabled=active||!proofs.size;
@@ -92,13 +99,38 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
      }
     }
    }
-   if(!conflicting&&['probable','needs_review'].includes(proof?.status)){
-    const review=el('button','Review this edition individually','btn subtle');
-    review.type='button';review.disabled=checking||applying;
-    review.addEventListener('click',()=>reviewOne(item,proof));
-    card.append(review);
-    card.append(el('p','Manual approval requires checking the exact publication format and edition. This item cannot be bulk-approved.','muted'));
+   // These external links remain useful when a provider returns HTTP 429.
+   // Numeric, checksum-validated ISBNs are the only values used in URLs.
+   const code=String(item.isbn||'').replace(/[^0-9X]/gi,'');
+   if(/^(97[89][0-9]{10}|[0-9]{9}[0-9X])$/i.test(code)){
+    const sources=el('div',undefined,'isbn-source-links');
+    for(const [title,url] of [
+     ['Open Library edition','https://openlibrary.org/isbn/'+code],
+     ['Google Books ISBN','https://books.google.com/books?q=isbn%3A'+code],
+     ['Goodreads ISBN search','https://www.goodreads.com/search?q='+encodeURIComponent(code)]
+    ]){
+     const a=el('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';
+     sources.append(a);
+    }
+    card.append(sources);
    }
+   const actions=el('div',undefined,'isbn-card-actions');
+   const check=el('button','Check this ISBN online','btn subtle');
+   check.type='button';check.disabled=checking||applying||!isScanComplete();
+   check.addEventListener('click',()=>checkOneOnline(item));
+   actions.append(check);
+   if(canManuallyReview(item,proof)){
+    const review=el('button',conflicting?
+     'Resolve this conflicting ISBN manually':'Review and approve this ISBN manually','btn subtle');
+    review.type='button';review.disabled=checking||applying||uncertain||!isScanComplete();
+    review.addEventListener('click',()=>reviewOne(item,proof));
+    actions.append(review);
+   }else{
+    actions.append(el('p','Source mismatch: inspect the links and correct the record before assigning an ISBN.','muted'));
+   }
+   card.append(actions);
+   if(!proof||proof.status==='not_found')
+    card.append(el('p','No online verification is required to inspect your own ebook or publication page. Manual approval checks the saved edition and records an Undo entry.','muted'));
    if(isBulkEligible(item,proof,conflicts())){
     const label=el('label',undefined,'collection-health-actions');
     const box=el('input');box.type='checkbox';box.checked=chosen.has(proofKey(item));
@@ -129,6 +161,23 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
   const num=filtered().length;
   $('page').textContent=(num?offset+1:0)+'–'+Math.min(offset+12,num)+' of '+num+' shown';
   apply.textContent='Apply '+chosen.size+' selected verified ISBNs';
+ }
+ async function checkOneOnline(item){
+  if(checking||applying||!isScanComplete())return;
+  checking=true;controls();draw();
+  say('Checking exact ISBN '+item.isbn+' in the catalogues…');
+  try{
+   const response=await api('/api/isbn-recovery/verify',{
+    method:'POST',data:{items:[item]}
+   });
+   if(response.results?.[0])proofs.set(proofKey(item),response.results[0]);
+   if(response.paused||response.results?.length!==1)
+    say('Online source is rate-limiting or unavailable. Your local evidence is still available. Use the ISBN source links and Review manually, or resume later. '+(response.error||''));
+   else say('ISBN checked: '+response.results[0].status+'. Inspect the evidence on this card.');
+  }catch(error){
+   say('ISBN check unavailable: '+(error.message||'Request failed')+
+    '. You can still compare ISBN source links and use manual review.');
+  }finally{checking=false;draw();}
  }
  async function run(){
   if(checking||applying||!isScanComplete())return;
@@ -166,7 +215,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
     }
    }
    draw();
-   if(errors)say(errors+'. Verification is paused safely; click Verify/Resume to continue.');
+   if(errors)say(errors+'. Online checking paused safely. You can still use each ISBN card to inspect external sources and review your own edition manually, or resume when the provider allows requests.');
    else if(shouldStop)say('Verification paused. Completed source results remain available.');
    else say('Independent verification completed for all eligible proposals. Review source evidence before selecting verified editions.');
   }catch(error){
@@ -179,16 +228,18 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  }
  async function reviewOne(item,proof){
   if(checking||applying||uncertain||!isScanComplete()||
-   !['probable','needs_review'].includes(proof?.status)||
-   conflicts().has(item.edition_id))return;
-  const message='Review the actual owned edition before applying this ISBN.\n\n'+
+   !canManuallyReview(item,proof))return;
+  const message='This is MANUAL edition review, not automatic verification.\n'+
+   'Compare the source links, EPUB or real publication first.\n\n'+
    item.book_title+' · '+item.edition_name+'\nISBN '+item.isbn+
    '\nSource: '+item.source+
    '\nPublisher hint: '+(item.source_publisher||'not recorded')+
    '\nBinding hint: '+(item.source_binding||'not recorded')+
-   '\n\nHave you checked that this exact ISBN belongs to the edition you own?';
+   '\n\nHave you verified the specific ISBN and edition/format using your actual copy or a reliable publication record?'+
+   (conflicts().has(item.edition_id)?'\n\nThis edition has MULTIPLE conflicting proposed ISBNs. Confirm that this is the correct ONE.':'');
   if(!window.confirm(message))return;
   applying=true;controls();
+  let writeSubmitted=false;
   try{
    const response=await api('/api/isbn-recovery/preview',{
     method:'POST',data:{items:[item]}
@@ -197,6 +248,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
    if(inspection?.status!=='ready')throw Error(inspection?.reason||'Edition is not eligible');
    if(!window.confirm('Final approval: add ISBN '+item.isbn+' ONLY to '+item.edition_name+
     ' for '+item.book_title+'? This is manually reviewed, not independently verified for bulk.'))return;
+   writeSubmitted=true;
    const write=await api('/api/isbn-recovery/apply',{
     method:'POST',data:{items:[{...item,approved:true}]}
    });
@@ -209,10 +261,13 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
     say('Manual ISBN not saved: '+(saved?.reason||'Server rejected edition match'));
    }
   }catch(error){
-   uncertain=true;
-   say('Manual save uncertain: '+(error.message||'Request failed')+
-    '. Check ISBN Recovery history before retrying; a save may have completed.');
-  }finally{applying=false;controls();}
+   if(writeSubmitted){
+    uncertain=true;
+    say('Manual save uncertain: '+(error.message||'Request failed')+
+     '. Check ISBN Recovery history before retrying; a save may have completed.');
+   }else say('Manual preview blocked: '+(error.message||'This edition is ineligible')+
+    '. No ISBN was submitted or changed.');
+  }finally{applying=false;controls();draw();}
  }
  async function applySelected(){
   if(applying||checking||uncertain||!chosen.size)return;
@@ -266,6 +321,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  });
  apply.addEventListener('click',applySelected);
  filter.addEventListener('change',()=>{offset=0;draw();});
+ search.addEventListener('input',()=>{offset=0;draw();});
  pagePrev.addEventListener('click',()=>{offset=Math.max(0,offset-12);draw();});
  pageNext.addEventListener('click',()=>{offset+=12;draw();});
  save.addEventListener('click',()=>{
@@ -299,7 +355,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
   }catch(error){say('Could not restore checkpoint: '+(error.message||'Invalid file'));}
  });
  function reset(){
-  proofs.clear();chosen.clear();cursor=0;offset=0;uncertain=false;stopVerify=true;
+  proofs.clear();chosen.clear();cursor=0;offset=0;uncertain=false;shouldStop=true;
   draw();say('Scan reset. Run ISBN Recovery and then start independent verification.');
  }
  function refresh(){draw();}
