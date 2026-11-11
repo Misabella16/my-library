@@ -64,12 +64,14 @@ const toRotations=value=>value==='right'?[90]:value==='left'?[270]:
  * @param {Blob} file owner-selected image, never transmitted
  * @param {object} options {rotation, onProgress, signal}
  */
-export async function recognizeShelfPhotoLocally(file,{rotation='auto',onProgress=()=>{},signal}={}){
+export async function recognizeShelfPhotoLocally(file,{
+ rotation='auto',onProgress=()=>{},signal,loadEngine=getEngine
+}={}){
  if(typeof document==='undefined'||typeof WebAssembly==='undefined'||
   typeof Worker==='undefined')throw Error('On-device OCR is not supported in this browser.');
  if(signal?.aborted)throw Error('Scan canceled.');
  onProgress('Downloading the on-device OCR engine and language model…');
- const {createWorker}=await getEngine();
+ const {createWorker}=await loadEngine();
  let worker=null;
  try{
   worker=await createWorker('eng',1,{
