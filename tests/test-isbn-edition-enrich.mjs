@@ -14,7 +14,7 @@ const ISBN='9780306406157';
 const COVER=123456;
 function fixture({existingCover=false,publisher='',isbn=ISBN,
   detailsIsbn=ISBN,title='Example Novel',sourceTitle='Example Novel',
-  sourceAuthor='Example Writer',isSpecial=false,sourceCover=COVER}={}){
+  sourceAuthor='Example Writer',isSpecial=false,sourceCover=COVER,redirected=false}={}){
  const sqlite=new DatabaseSync(':memory:');
  sqlite.exec(readFileSync(new URL('../database/001_initial_schema.sql',import.meta.url),'utf8'));
  sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,private_notes) VALUES(?,?,?,?,?,?)')
@@ -39,9 +39,11 @@ function fixture({existingCover=false,publisher='',isbn=ISBN,
   }catch(e){sqlite.exec('ROLLBACK');throw e;}
  }};
  let fetchCount=0;
- const fetcher=async(url)=>{
+ const fetcher=async(url,options)=>{
   fetchCount++;
   assert.ok(url.startsWith('https://openlibrary.org/api/books?'));
+  assert.equal(options.redirect,'manual');
+  if(redirected)return new Response(null,{status:302,headers:{location:'https://outside.example/'}});
   return Response.json({['ISBN:'+ISBN]:{details:{
    key:'/books/OL123M',title:sourceTitle,
    isbn_13:[detailsIsbn],
@@ -61,6 +63,19 @@ function fixture({existingCover=false,publisher='',isbn=ISBN,
  };
  return {sqlite,call,version,fetchCount:()=>fetchCount,close:()=>sqlite.close()};
 }
+test('ISBN edition recovery rejects provider redirects without following or changing data',async()=>{
+ const f=fixture({redirected:true});
+ try{
+  const query=new URLSearchParams({edition_id:ED,expected_updated_at:f.version()}).toString();
+  const preview=await f.call('GET','preview',null,query);
+  assert.equal(preview.status,502);
+  const body=await preview.json();
+  assert.match(body.error,/redirect/i);
+  assert.equal(f.fetchCount(),1);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,1);
+ }finally{f.close();}
+});
 test('Verified edition needs matching ISBN, title and uncontradicted author',()=>{
  const record={isbn:ISBN,title:'Example Novel',author:'Example Writer'};
  const remote={details:{key:'/books/OL123M',title:'Example Novel',
