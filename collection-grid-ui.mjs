@@ -6,7 +6,7 @@ export function initCollectionGrid(api,{grid,render,getQuery,status,undo}){
  const cards=()=>[...grid.querySelectorAll('.book-card[data-book-id]')];
  const idOf=card=>card?.dataset.bookId||'';
  const announce=message=>{status.textContent=message;};
- const updateUndo=()=>{undo.disabled=busy||!layout.can_undo;};
+ const updateUndo=()=>{undo.disabled=busy||dirty||!layout.can_undo;};
  const moveEnabled=()=>!getQuery();
  const clearDrag=()=>{
   dragId='';
@@ -27,6 +27,7 @@ export function initCollectionGrid(api,{grid,render,getQuery,status,undo}){
   const ids=new Set(visible);
   layout.order=[...visible,...layout.order.filter(id=>!ids.has(id))];
   dirty=true;
+  updateUndo();
   announce('Reordering books…');
   if(timer)clearTimeout(timer);
   timer=setTimeout(()=>{timer=null;save().catch(()=>{});},450);
@@ -36,11 +37,13 @@ export function initCollectionGrid(api,{grid,render,getQuery,status,undo}){
   busy=true;updateUndo();
   const snapshot=[...layout.order];
   dirty=false;
+  let success=false;
   try{
    const saved=await api('/api/collection-layout',{
     method:'POST',data:{expected_revision:layout.revision,order:snapshot}});
    layout.revision=saved.revision;
    layout.can_undo=saved.can_undo;
+   success=true;
    announce('Arrangement saved privately. It will appear on your other devices.');
   }catch(error){
    dirty=true;
@@ -52,13 +55,14 @@ export function initCollectionGrid(api,{grid,render,getQuery,status,undo}){
    }
   }finally{
    busy=false;updateUndo();
-   if(dirty&&enabled&&!timer){
+   if(success&&dirty&&enabled&&!timer){
     // A new drag while saving must not lose the newer order.
     timer=setTimeout(()=>{timer=null;save().catch(()=>{});},800);
    }
   }
  }
  function moveCard(card,direction){
+  if(!enabled){announce('Collection arrangements are unavailable until private storage reconnects.');return;}
   if(!moveEnabled()){announce('Clear the search before arranging the full collection.');return;}
   const all=cards(),index=all.indexOf(card),neighbor=all[index+direction];
   if(!neighbor)return;
