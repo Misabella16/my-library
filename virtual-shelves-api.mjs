@@ -7,6 +7,13 @@ const fail=(error,status=400)=>json({error},status);
 const uuid=id=>typeof id==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id);
 const rows=async(db,sql,args=[])=>((await db.prepare(sql).bind(...args).all()).results||[]);
 const one=(db,sql,args=[])=>db.prepare(sql).bind(...args).first();
+const COMMON_GENRE=["fantasy","romance","mystery","thriller","horror","science fiction",
+ "sci-fi","historical fiction","literary fiction","contemporary fiction","fiction",
+ "nonfiction","non-fiction","biography","memoir","poetry","classics","young adult",
+ "paranormal","adventure","gothic","dystopian","romantasy","comics","graphic novels",
+ "manga","light novel","webnovel","danmei","wuxia","xianxia","urban fantasy"];
+const genre=alias=>"("+alias+".kind='genre' OR lower(trim("+alias+".label)) IN ("+
+ COMMON_GENRE.map(name=>"'"+name+"'").join(",")+"))";
 const limitValue=(value,fallback=18,max=60)=>{
  const n=Number(value);return Number.isSafeInteger(n)?Math.min(max,Math.max(1,n)):fallback;
 };
@@ -35,10 +42,10 @@ function whereFor(selection){
  const conditions=['b.archived_at IS NULL'],args=[];
  if(selection.genre==='uncategorized'){
   conditions.push("NOT EXISTS (SELECT 1 FROM book_tags bg JOIN tags g ON g.id=bg.tag_id "+
-   "WHERE bg.book_id=b.id AND g.kind='genre')");
+   "WHERE bg.book_id=b.id AND "+genre('g')+")");
  }else if(selection.genre!=='all'){
   conditions.push("EXISTS (SELECT 1 FROM book_tags bg JOIN tags g ON g.id=bg.tag_id "+
-   "WHERE bg.book_id=b.id AND g.id=? AND g.kind='genre')");
+   "WHERE bg.book_id=b.id AND g.id=? AND "+genre('g')+")");
   args.push(selection.genre);
  }
  if(selection.tag){
@@ -60,7 +67,7 @@ export async function handleVirtualShelvesApi(request,db,path){
    one(db,"SELECT COUNT(*) AS count FROM books WHERE archived_at IS NULL"),
    rows(db,"SELECT t.id,t.label,COUNT(*) AS count FROM tags t "+
     "JOIN book_tags bt ON bt.tag_id=t.id JOIN books b ON b.id=bt.book_id "+
-    "WHERE t.kind='genre' AND b.archived_at IS NULL "+
+    "WHERE "+genre('t')+" AND b.archived_at IS NULL "+
     "GROUP BY t.id,t.label ORDER BY count DESC,t.label COLLATE NOCASE LIMIT 100"),
    rows(db,"SELECT s.id,s.name,s.origin,COUNT(*) AS count FROM shelves s "+
     "JOIN book_shelves bs ON bs.shelf_id=s.id JOIN books b ON b.id=bs.book_id "+
@@ -68,7 +75,7 @@ export async function handleVirtualShelvesApi(request,db,path){
     "ORDER BY count DESC,s.name COLLATE NOCASE LIMIT 80"),
    one(db,"SELECT COUNT(*) AS count FROM books b WHERE b.archived_at IS NULL "+
     "AND NOT EXISTS (SELECT 1 FROM book_tags bt JOIN tags t ON t.id=bt.tag_id "+
-    "WHERE bt.book_id=b.id AND t.kind='genre')")
+    "WHERE bt.book_id=b.id AND "+genre('t')+")")
   ]);
   return json({total:Number(total?.count||0),genres,lists,
    uncategorized:Number(unsorted?.count||0)});
@@ -79,7 +86,7 @@ export async function handleVirtualShelvesApi(request,db,path){
   const clauses=whereFor({genre:selection.genre,tag:'',shelf:selection.shelf});
   const tags=await rows(db,"SELECT t.id,t.label,t.kind,COUNT(*) AS count FROM tags t "+
    "JOIN book_tags bt ON bt.tag_id=t.id JOIN books b ON b.id=bt.book_id "+
-   "WHERE t.kind<>'genre' AND "+clauses.sql+
+   "WHERE NOT "+genre('t')+" AND "+clauses.sql+
    " GROUP BY t.id,t.label,t.kind ORDER BY count DESC,t.label COLLATE NOCASE LIMIT 75",clauses.args);
   return json({tags});
  }
