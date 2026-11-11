@@ -15,7 +15,7 @@ export async function ensureBookVisibilitySchema(db){
  if(!ready){
   ready=db.prepare('CREATE TABLE IF NOT EXISTS book_visibility ('+
    'book_id TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,'+
-   'hidden_at TEXT,trashed_at TEXT)').run();
+   'hidden_at TEXT,trashed_at TEXT)').bind().run();
   ensured.set(db,ready);
   try{await ready;}catch(e){ensured.delete(db);throw e;}
  }
