@@ -569,6 +569,41 @@
         <div class="epub-preview-list" id="edition-recovery-history"></div>
         <p class="muted">The site adds metadata or artwork only to an existing standard edition whose ISBN matches exactly. FairyLoot, Illumicrate, OwlCrate, signed editions, manually selected covers, notes and copies stay unchanged. Books with no editions or ISBN are shown as research candidates, never silently turned into owned editions or fake “Online display” records. You can add a real edition manually after identifying it.</p>
       </section>
+    </details>
+    <details class="imports-disclosure">
+      <summary>Local Calibre &amp; EPUB edition evidence (without ISBN)</summary>
+      <section class="surface collection-health" id="edition-local" aria-labelledby="edition-local-heading">
+        <p class="section-kicker">✧ LOCAL-FIRST · PRIVATE · COVER PREVIEW</p>
+        <h2 id="edition-local-heading">Compare local book evidence and recover a missing ebook cover</h2>
+        <p>Use an existing Calibre folder or a Calibre CSV/JSON export. Its titles, authors, series and identifiers are read <strong>on your device</strong>; the original files are not uploaded. Search your live My Library one book at a time to inspect linked EPUB metadata and edition records. A book-level title and author match is not proof of a particular printed or collector edition.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="edition-local-folder">Choose your Calibre folder (includes cover.jpg)
+            <input id="edition-local-folder" type="file" webkitdirectory directory multiple>
+          </label>
+          <label class="goodreads-file-label" for="edition-local-export">Or select Calibre CSV / JSON (metadata only)
+            <input id="edition-local-export" type="file" accept=".json,.csv,application/json,text/csv">
+          </label>
+          <button class="btn subtle" id="edition-local-load" type="button">Read local Calibre metadata</button>
+        </div>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="edition-local-search">Find a book already in My Library
+            <input id="edition-local-search" type="search" placeholder="Title or author, at least 3 letters" autocomplete="off">
+          </label>
+          <button class="btn subtle" id="edition-local-find" type="button">Find book</button>
+          <button class="btn subtle" id="edition-local-history" type="button">Local cover history &amp; Undo</button>
+        </div>
+        <p class="small-status" role="status" aria-live="polite" id="edition-local-status">Read your Calibre folder (or export), then search My Library to compare edition evidence. Nothing is changed without your approval.</p>
+        <div class="epub-preview-list" id="edition-local-results"></div>
+        <div class="epub-preview-list" id="edition-local-evidence"></div>
+        <div class="epub-preview-list" id="edition-local-source"></div>
+        <div class="health-result" id="edition-local-preview"></div>
+        <label class="collection-health-actions">
+          <input id="edition-local-approve" type="checkbox" disabled>
+          I compared this actual Calibre cover to my selected standard ebook and approve linking it as a possible cover.
+        </label>
+        <div id="edition-local-history-list" class="epub-preview-list"></div>
+        <p class="muted">Only an existing standard ebook with no attached image may receive a selected local cover, after your explicit approval. No book, edition, copy, or fake Online display entry is created. No collector's cover, owner photo, review, note or EPUB is replaced. Saved local covers remain marked possible until separately verified. Undo is available unless you edit the image afterward.</p>
+      </section>
     </details></details></section>
 </main>
 <footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
