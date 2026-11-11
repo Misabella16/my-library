@@ -116,7 +116,7 @@ function renderGrid(){
        '<div><button type="button" data-visibility-action="hide" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Hide book</button>'+
        '<button type="button" data-visibility-action="trash" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Move to Trash</button></div></details>'+
        '<aside class="book-card-preview" aria-label="Synopsis for '+safe(b.title)+'">'+
-       '<strong>'+title+'</strong><p class="muted">'+author+'</p><p>'+synopsis+'</p></aside></article>';
+       '<strong>'+title+'</strong><p class="muted">'+author+'</p><div class="synopsis-body">'+synopsis+'</div></aside></article>';
     }).join('');
   }
   $('#load-more').hidden=state.books.length>=state.total;
