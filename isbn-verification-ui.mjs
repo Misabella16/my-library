@@ -3,6 +3,9 @@ import {normalized} from './isbn-recovery-evidence.mjs';
 // Reads the parent scanner's in-memory proposals. No D1 reads during source checks.
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
 export const proofKey=p=>p.edition_id+'|'+p.isbn+'|'+p.source;
+export function canManuallyReview(item,proof){
+ return !!item&&proof?.status!=='mismatch';
+}
 export function isBulkEligible(proposal,proof,conflicts){
  return !!proposal&&!conflicts.has(proposal.edition_id)&&proof?.status==='verified'&&
   proof.isbn===proposal.isbn&&proof.edition_id===proposal.edition_id&&
@@ -103,7 +106,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
     const sources=el('div',undefined,'isbn-source-links');
     for(const [title,url] of [
      ['Open Library edition','https://openlibrary.org/isbn/'+code],
-     ['Google Books ISBN','https://books.google.com/books?vid=ISBN'+code],
+     ['Google Books ISBN','https://books.google.com/books?q=isbn%3A'+code],
      ['Goodreads ISBN search','https://www.goodreads.com/search?q='+encodeURIComponent(code)]
     ]){
      const a=el('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';
@@ -116,7 +119,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
    check.type='button';check.disabled=checking||applying||!isScanComplete();
    check.addEventListener('click',()=>checkOneOnline(item));
    actions.append(check);
-   if(proof?.status!=='mismatch'){
+   if(canManuallyReview(item,proof)){
     const review=el('button',conflicting?
      'Resolve this conflicting ISBN manually':'Review and approve this ISBN manually','btn subtle');
     review.type='button';review.disabled=checking||applying||uncertain||!isScanComplete();
@@ -225,7 +228,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  }
  async function reviewOne(item,proof){
   if(checking||applying||uncertain||!isScanComplete()||
-   proof?.status==='mismatch')return;
+   !canManuallyReview(item,proof))return;
   const message='This is MANUAL edition review, not automatic verification.\n'+
    'Compare the source links, EPUB or real publication first.\n\n'+
    item.book_title+' · '+item.edition_name+'\nISBN '+item.isbn+
