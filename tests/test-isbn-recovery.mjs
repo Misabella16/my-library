@@ -260,11 +260,11 @@ test('Independent ISBN corroboration requires both sources and explicit ebook ed
  const google={items:[{id:'g1',volumeInfo:{title:'Example Novel',
   authors:['Example Writer'],industryIdentifiers:[{type:'ISBN_13',identifier:ISBN}]}}]};
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',ol,google).status,'verified');
- assert.equal(classifyIsbnVerification(book,ISBN,'goodreads_csv',ol,google).status,'needs_review');
- assert.equal(classifyIsbnVerification(book,ISBN,'calibre_local',ol,google).status,'needs_review');
- assert.equal(classifyIsbnVerification({...book,format:'paperback'},ISBN,'saved_epub',ol,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'goodreads_csv',ol,google).status,'probable');
+ assert.equal(classifyIsbnVerification(book,ISBN,'calibre_local',ol,google).status,'probable');
+ assert.equal(classifyIsbnVerification({...book,format:'paperback'},ISBN,'saved_epub',ol,google).status,'probable');
  const noFormat=structuredClone(ol);delete noFormat['ISBN:'+ISBN].details.physical_format;
- assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',noFormat,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',noFormat,google).status,'probable');
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',ol,{}).status,'needs_review');
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',{},{}).status,'not_found');
  assert.equal(sameBookIdentity('Example Novel',['Different Author'],book),false);
