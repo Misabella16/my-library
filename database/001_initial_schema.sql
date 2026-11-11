@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS books (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Independent visibility flag. Hidden books remain intact and restorable.
+CREATE TABLE IF NOT EXISTS book_visibility(
+  book_id TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+  hidden_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_books_identity ON books(normalized_title,normalized_author);
 -- Stop concurrent imports creating the same active work twice.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_books_active_identity
