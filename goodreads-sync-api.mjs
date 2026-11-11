@@ -27,7 +27,7 @@ const same=(a,b)=>a===b||((a==null||a==='')&&(b==null||b===''));
 export function validateSyncRows(input,limit=MAX_PREVIEW){
  if(!Array.isArray(input)||input.length<1||input.length>limit)
   throw Error('Sync 1 to '+limit+' Goodreads entries per request.');
- const seen=new Set();
+ const seen=new Set(),seenGoodreads=new Set();
  return input.map((r,i)=>{
   if(!r||typeof r!=='object'||Array.isArray(r))throw Error('Invalid Goodreads sync row '+(i+1));
   const id=String(r.book_id||''),title=String(r.title||'').trim(),
@@ -38,6 +38,9 @@ export function validateSyncRows(input,limit=MAX_PREVIEW){
   seen.add(id);
   if(goodreadsId&&!/^\d{1,36}$/.test(goodreadsId))
    throw Error('Invalid Goodreads Book ID.');
+  if(goodreadsId&&seenGoodreads.has(goodreadsId))
+   throw Error('One Goodreads Book ID was matched to more than one library book. Review identities first.');
+  if(goodreadsId)seenGoodreads.add(goodreadsId);
   const rating=r.myRating==null||r.myRating===''||r.myRating===0?null:r.myRating;
   if(rating!==null&&(typeof rating!=='number'||!Number.isFinite(rating)||rating<=0||rating>5))
    throw Error('A Goodreads rating must be between 0 and 5.');
@@ -110,15 +113,14 @@ export async function planGoodreadsSync(db,items){
     reason:'Goodreads identity does not safely match this book.'};
   const changes={},conflicts={};
   for(const key of fields){
-   const value=item[key];
-   if(value===null||value==='')continue;
+   const value=key==='goodreads_id'?item.goodreadsId:item[key];
+   if(value===null||value===undefined||value==='')continue;
    const existing=book[key];
    if(existing===null||existing==='')changes[key]=value;
    else if(!same(existing,value))conflicts[key]='Existing value is preserved';
   }
-  // Goodreads CSV Book Id is the stable destination for the book page.
-  // Link only an unlinked canonical book, after safe exact-work matching.
-  if(item.goodreadsId&&!book.goodreads_id)changes.goodreads_id=item.goodreadsId;
+  // The missing Goodreads ID is proposed by the guarded field loop above.
+  // It is previewed, audited, and reversible like the other CSV fields.
   const assigned=shelfMap.get(book.id)||new Set();
   const missingShelves=item.shelves.filter(s=>!assigned.has(s.toLocaleLowerCase()));
   if(missingShelves.length)changes.shelves=missingShelves;
