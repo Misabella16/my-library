@@ -51,7 +51,7 @@ export function reconcileIsbnEvidence(books,editions,epubRecords,goodreads=[],ca
  };
  const pair=b=>normalized(b.title)+'|'+normalized(b.author);
  const goodreadsByKey=keyed(goodreads,pair),goodreadsById=keyed(goodreads,b=>String(b.goodreadsId||'').trim());
- const calibreByKey=keyed(calibre,pair);
+ const calibreByKey=keyed(calibre,x=>normalized(x.title)+'|'+normalized(x.authors));
  const all=[],seen=new Set(),counts={books_checked:books.length,missing_isbn_editions:0,with_proposals:0,without_identifiers:0};
  const add=(book,ed,isbn,source,details)=>{
   const item=candidate(book,ed,isbn,source,details);
