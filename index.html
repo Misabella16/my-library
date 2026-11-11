@@ -631,7 +631,7 @@
         <p id="isbn-recovery-metrics" class="small-status" aria-live="polite"></p>
         <section id="isbn-verification" aria-labelledby="isbn-verification-heading">
           <h3 id="isbn-verification-heading">Independently verify ISBNs before approving</h3>
-          <p>Check edition-level ISBN, title, author and available format evidence against Open Library and Google Books. A title-only match, an unverified EPUB identifier or one provider alone is not enough for bulk approval. This is an on-demand scan that progresses automatically and can be paused. No ISBN is saved during verification.</p>
+          <p>Cross-check edition-level ISBNs with Open Library and Google Books. Goodreads CSV edition identifiers, publisher, binding and year, Calibre and linked EPUB metadata are shown as supporting evidence. Results are separated into verified, probable, needs review, mismatch and not found. A title-only match or a single source never authorizes bulk approval. This on-demand scan can be paused. No ISBN is saved during verification.</p>
           <div class="collection-health-actions">
             <button id="isbn-verification-start" class="btn" type="button" disabled>Verify / resume all ISBN candidates</button>
             <button id="isbn-verification-pause" class="btn subtle" type="button" disabled>Pause verification or save</button>
@@ -647,6 +647,7 @@
               <select id="isbn-verification-filter" disabled>
                 <option value="all">All proposals</option>
                 <option value="verified">Verified ebook ISBNs</option>
+                <option value="probable">Probable edition matches (review only)</option>
                 <option value="needs_review">Needs edition review</option>
                 <option value="mismatch">Mismatched records</option>
                 <option value="not_found">No reliable match</option>
@@ -678,7 +679,7 @@
         <p id="isbn-recovery-page" class="small-status" aria-live="polite"></p>
         <div class="epub-preview-list" id="isbn-recovery-results"></div>
         <h3>Research ISBNs for books without local identifiers</h3>
-        <p class="muted">Optional online searches are one book at a time and read-only. Open Library and Google Books may provide candidate ISBNs for other editions, so manually verify format, publisher and edition before adding them.</p>
+        <p class="muted">Optional online research works one book at a time. You can browse the actual Open Library editions of a matching Work, including edition-level ISBNs, publishers and cover candidates. These remain research leads, never automatically owned copies or approved ISBNs.</p>
         <div class="collection-health-actions">
           <label class="epub-filter-label" for="isbn-recovery-online-search">Find book in scanned catalogue
             <input id="isbn-recovery-online-search" type="search" placeholder="Book title or author" autocomplete="off">
