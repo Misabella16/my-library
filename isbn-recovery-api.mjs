@@ -3,7 +3,7 @@
 // server side. Online search results are research only, never automatic writes.
 import {canonicalIsbn,normalized,isbn10Equivalent} from './isbn-recovery-evidence.mjs';
 import {createPacedFetch} from './source-pacing.mjs';
-import {verifyIsbnOnline} from './isbn-independent-verification.mjs';
+import {verifyIsbnOnline,verifyIsbnBatch} from './isbn-independent-verification.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8',
  'cache-control':'private, no-store','x-content-type-options':'nosniff'};
@@ -256,7 +256,6 @@ export async function handleIsbnRecoveryApi(request,db,path,
   let body;try{body=JSON.parse(raw);}catch{return fail('Invalid JSON');}
   if(!Array.isArray(body.items)||body.items.length<1||body.items.length>3)
    return fail('Check one to three ISBNs at a time');
-  const results=[];
   for(const item of body.items){
    if(!uuid(item?.book_id)||!uuid(item?.edition_id)||
       !canonicalIsbn(item.isbn)||
@@ -266,21 +265,15 @@ export async function handleIsbnRecoveryApi(request,db,path,
       item.book_author.length>400||!item.book_author.trim()||
       !['ebook','hardcover','paperback','audiobook','other'].includes(item.format))
     return fail('Invalid ISBN verification candidate');
-   try{
-    const checked=await verifyIsbnOnline({
-     title:item.book_title,author:item.book_author,format:item.format
-    },item.isbn,item.source,fetchers);
-    results.push({book_id:item.book_id,edition_id:item.edition_id,
-     isbn:canonicalIsbn(item.isbn),source:item.source,
-     status:checked.status,reason:checked.reason,references:checked.references||[]});
-   }catch(error){
-    // Preserve earlier successes in this small batch and do not misclassify
-    // 429/network issues as not_found. The UI resumes at this same ISBN.
-    return json({results,paused:true,
-     error:'Provider unavailable; stop and resume verification: '+String(error.message||'Network error')});
-   }
   }
-  return json({results,paused:false});
+  const report=await verifyIsbnBatch(body.items,fetchers);
+  const results=report.results.map((checked,i)=>({
+   book_id:body.items[i].book_id,edition_id:body.items[i].edition_id,
+   isbn:canonicalIsbn(body.items[i].isbn),source:body.items[i].source,
+   status:checked.status,reason:checked.reason,references:checked.references||[]
+  }));
+  return json({results,paused:report.paused,
+   ...(report.paused?{error:'Provider unavailable; stop and resume verification: '+report.error}:{})});
  }
  if(path==='/api/isbn-recovery/history'&&request.method==='GET'){
   const rows=await all(db,"SELECT id,entity_id,created_at,undone_at FROM change_log "+
