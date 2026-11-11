@@ -9,12 +9,15 @@ const same=(a,b)=>!!normalized(a)&&normalized(a)===normalized(b);
 const isbnIn=(items,isbn)=>Array.isArray(items)&&items.some(v=>canonicalIsbn(v)===isbn);
 const names=x=>Array.isArray(x)?x.filter(v=>typeof v==='string'&&v.trim()):[];
 const seriesSuffix=/\s*(?:\([^)]*(?:#\s*\d+|(?:book|volume|vol\.?|part)\s*#?\s*\d+)[^)]*\)|\[[^\]]*(?:#\s*\d+|(?:book|volume|vol\.?|part)\s*#?\s*\d+)[^\]]*\])\s*$/i;
-export function sameBookIdentity(sourceTitle,sourceAuthors,book){
+function titleMatchesOwner(sourceTitle,book){
  const ownerTitle=normalized(book?.title),source=normalized(sourceTitle);
  const titleCore=normalized(String(book?.title||'').replace(seriesSuffix,''));
- const titleMatches=!!source&&(source===ownerTitle||
+ return !!source&&(source===ownerTitle||
   (titleCore.length>=12&&titleCore.split(' ').length>=2&&source===titleCore));
- return titleMatches&&names(sourceAuthors).some(name=>same(name,book?.author));
+}
+export function sameBookIdentity(sourceTitle,sourceAuthors,book){
+ return titleMatchesOwner(sourceTitle,book)&&
+  names(sourceAuthors).some(name=>same(name,book?.author));
 }
 function formatEvidence(remote,format){
  if(format!=='ebook')return false;
@@ -39,7 +42,14 @@ export function classifyIsbnVerification(book,isbn,localSource,openLibraryData,g
   v?.volumeInfo?.industryIdentifiers?.map(x=>x?.identifier),id));
  const googleMatches=googleExact.filter(v=>
   sameBookIdentity(v.volumeInfo.title,v.volumeInfo.authors,book));
- const olConflict=olExact&&!olMatch,googleConflict=googleExact.length>0&&!googleMatches.length;
+ const olConflict=olExact&&(
+  (!!detail?.title&&!titleMatchesOwner(detail.title,book))||
+  (olAuthors.length>0&&!olAuthors.some(a=>same(a,book.author))));
+ const googleConflict=googleExact.some(v=>{
+  const info=v.volumeInfo||{},authors=names(info.authors);
+  return (!!info.title&&!titleMatchesOwner(info.title,book))||
+   (authors.length>0&&!authors.some(a=>same(a,book.author)));
+ });
  const refs=[
   ...(olExact?[{provider:'Open Library',
    url:'https://openlibrary.org'+detail.key,
