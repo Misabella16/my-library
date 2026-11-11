@@ -80,8 +80,8 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
   content.append(explanation,link.wrap,button,feedback);
   source.append(label,content);
   target.append(source);
-  const coverSection=node('details','reference-section');
-  const coverTitle=node('summary','','Change a displayed cover');
+  const coverSection=node('section','reference-section');
+  const coverTitle=node('h3','','Change the displayed cover');
   const coverContent=node('div','reference-content');
   coverContent.append(node('p',
    'Choose the exact edition. Paste a direct image URL from a supported host or upload a JPG, PNG or WebP. '+
@@ -139,7 +139,20 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
    coverContent.append(editionLabel,imageLink.wrap,save,photo,note,coverFeedback);
   }
   coverSection.append(coverTitle,coverContent);
-  target.append(coverSection);
+  const nearCover=document.getElementById('book-cover-editor');
+  const editButton=document.getElementById('book-edit-cover-btn');
+  if(nearCover&&editButton){
+   nearCover.replaceChildren(coverSection);
+   nearCover.hidden=true;
+   editButton.setAttribute('aria-expanded','false');
+   editButton.addEventListener('click',()=>{
+    const opening=nearCover.hidden;
+    nearCover.hidden=!opening;
+    editButton.setAttribute('aria-expanded',String(opening));
+    editButton.textContent=opening?'✕ Close cover editor':'✎ Edit cover';
+    if(opening)nearCover.scrollIntoView({block:'nearest',behavior:'smooth'});
+   });
+  }else target.append(coverSection);
   const locations=node('details','reference-section');
   locations.append(node('summary','','Where are my physical copies?'));
   const locationBody=node('div','reference-content');
