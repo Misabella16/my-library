@@ -20,6 +20,14 @@ export function canonicalIsbn(input){
  }
  return '';
 }
+export function isbn10Equivalent(isbn13){
+ const isbn=canonicalIsbn(isbn13);
+ if(!isbn.startsWith('978'))return '';
+ const stem=isbn.slice(3,12);
+ const sum=[...stem].reduce((n,c,i)=>n+Number(c)*(10-i),0);
+ const check=(11-(sum%11))%11;
+ return stem+(check===10?'X':String(check));
+}
 export const titleAuthorMatch=(a,b)=>!!(normalized(a?.title)&&normalized(a?.author)&&
  normalized(a.title)===normalized(b?.title)&&normalized(a.author)===normalized(b?.author));
 const validId=x=>typeof x==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
