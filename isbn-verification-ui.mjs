@@ -235,5 +235,6 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  }
  function refresh(){draw();}
  draw();
- return {reset,refresh,getState:()=>({checked:checked(),verified:getVerified().length,cursor})};
+ return {reset,refresh,isVerified:p=>isBulkEligible(p,proofs.get(proofKey(p)),conflicts()),
+  getState:()=>({checked:checked(),verified:getVerified().length,cursor})};
 }
