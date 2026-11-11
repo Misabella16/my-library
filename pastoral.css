@@ -716,3 +716,21 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-vi
  #photos .photo-link-workflow>input,#photos .photo-link-workflow>select,
  #photos .photo-edition-fields input,#photos .photo-edition-fields select{font-size:16px}
 }
+
+/* Exact-edition Google Images search and user-selected artwork upload. */
+#photos #photo-google-images-link{
+ display:flex;justify-content:center;align-items:center;min-height:48px;
+ margin-top:13px;text-align:center;text-decoration:none
+}
+#photos #photo-google-images-link[aria-disabled="true"]{opacity:.6}
+#photos .photo-google-help{font-size:12px;line-height:1.5;margin:8px 0 15px}
+#photos label[for="photo-google-file"]{
+ display:grid;gap:9px;margin-top:10px;font-weight:700
+}
+#photos #photo-google-file{
+ display:block;width:100%;box-sizing:border-box;max-width:100%;
+ border:1px solid #dcc6d1;border-radius:9px;padding:12px;
+ font-size:13px;background:#fffdf9
+}
+#photos #photo-google-lens-link{display:inline-block;margin:12px 0 3px}
+#book-detail .reference-content a.btn{text-decoration:none;display:inline-block;max-width:100%}
