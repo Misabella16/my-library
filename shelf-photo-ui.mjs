@@ -2,6 +2,7 @@ import {extractIsbn13} from './epub-isbn.mjs';
 import {scanShelfTextLocal,shelfTitleLines} from './shelf-photo-text.mjs';
 import {recognizeShelfPhotoLocally} from './shelf-photo-ocr.mjs';
 import {initShelfCoverComparison} from './shelf-cover-ui.mjs';
+import {initPhotoBookMatching} from './photo-match-book-ui.mjs';
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
 import {createPhotoReview,setReviewPhotos,assignPhotoMatch,addPhotoBookMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
@@ -46,7 +47,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  const barcodeMatches=node('div',undefined,'photo-barcode-matches');
  isbnStatus?.after?.(barcodeMatches);
  let selectionGeneration=0;
- let coverComparison=null;
+ let coverComparison=null,bookPhotoMatch=null;
  const reviewArea=node('section',undefined,'photo-review-area');
  const reviewHeading=node('h3','Photo-by-photo review');
  const reviewText=node('p','A shelf photo can contain multiple books. Add as many reviewed matches as you can identify. These temporary links never create physical copies or edit the library.','muted');
@@ -583,11 +584,20 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
   const token=selectionGeneration;
   titleSuggestions.replaceChildren();
   try{
-   // Up to 12 indexed bounded searches; never download the full library,
+   // Up to 40 bounded title searches; never download the full library,
    // automatically create a book, or infer edition/copy ownership.
    for(const title of titles){
     const box=node('article',undefined,'photo-match-result');
     box.append(node('strong','Possible title: '+title));
+    const useTitle=node('button','Match this title to a cover or create a book','btn subtle mini');
+    useTitle.type='button';
+    useTitle.addEventListener('click',()=>{
+     bookPhotoMatch?.prefill(title);
+     document.getElementById?.('photo-link-workflow')?.scrollIntoView?.({
+      block:'start',behavior:'smooth'
+     });
+     tell('Review "'+title+'" in the photo-to-book matching section below before saving.');
+    });
     titleSuggestions.append(box);
     try{
      const response=await api('/api/books?'+new URLSearchParams({q:title,limit:'20'}));
@@ -623,7 +633,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
      }
     }catch(error){
      box.append(node('p','Search unavailable: '+(error.message||'Try again'),'muted'));
-    }
+    }finally{box.append(useTitle);}
    }
    if(token===selectionGeneration)
     tell('Text suggestions checked against My Library. Review each title before linking; no photos were sent.');
@@ -706,6 +716,14 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    renderReview();
   },
   onSelectBook
+ });
+ bookPhotoMatch=initPhotoBookMatching(api,{
+  getPhotoCrop:()=>coverComparison?.croppedCover()||null,
+  onSelectBook
+ });
+ const olderHint=document.getElementById?.('photo-cover-hint');
+ olderHint?.addEventListener('change',()=>{
+  if(olderHint.value?.trim())bookPhotoMatch?.prefill(olderHint.value);
  });
  return {clear};
 }

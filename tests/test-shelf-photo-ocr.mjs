@@ -125,5 +125,5 @@ test('photo assistant offers selection, rotation, progress and only reviews sugg
  assert.match(ui,/titleInput\.value=lines\.join/);
  assert.match(ui,/Find these titles in My Library/);
  assert.match(service,/on-device OCR/);
- assert.match(service,/tesseract\.js@6\.0\.1/);
+ assert.match(service,/ENGINE_URL=.*photo-ocr/);
 });

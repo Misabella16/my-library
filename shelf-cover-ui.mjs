@@ -164,6 +164,27 @@ export function initShelfCoverComparison(api,{
   }catch(error){say('Cover comparison unavailable: '+(error.message||'Please retry'));}
   finally{working=false;search.disabled=false;}
  });
+ async function croppedCover(){
+  if(!source)throw Error('Choose a shelf photograph first.');
+  // If the photo is only one full cover, no drag selection is required.
+  const region=selection?{
+    x:selection.x*source.width/canvas.width,
+    y:selection.y*source.height/canvas.height,
+    width:selection.width*source.width/canvas.width,
+    height:selection.height*source.height/canvas.height
+  }:{x:0,y:0,width:source.width,height:source.height};
+  const longest=Math.max(region.width,region.height);
+  if(!longest||region.width<15||region.height<15)throw Error('Select a complete cover.');
+  const scale=Math.min(1,1500/longest);
+  const crop=document.createElement('canvas');
+  crop.width=Math.round(region.width*scale);
+  crop.height=Math.round(region.height*scale);
+  crop.getContext('2d')?.drawImage(source,region.x,region.y,region.width,region.height,
+    0,0,crop.width,crop.height);
+  return new Promise((resolve,reject)=>{
+   crop.toBlob(blob=>blob?resolve(blob):reject(Error('Could not crop this photo')),'image/jpeg',0.91);
+  });
+ }
  refreshPhotos();
- return {refreshPhotos,clear};
+ return {refreshPhotos,clear,croppedCover,selectedFile:()=>getPhotos()[Number(select.value)]||null};
 }
