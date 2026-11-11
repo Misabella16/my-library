@@ -50,30 +50,34 @@ export function classifyIsbnVerification(book,isbn,localSource,openLibraryData,g
   return (!!info.title&&!titleMatchesOwner(info.title,book))||
    (authors.length>0&&!authors.some(a=>same(a,book.author)));
  });
+ const olCover=Array.isArray(detail?.covers)?Number(detail.covers[0]):null;
+ const validCover=Number.isSafeInteger(olCover)&&olCover>0&&olCover<=1e9;
  const refs=[
   ...(olExact?[{provider:'Open Library',
    url:'https://openlibrary.org'+detail.key,
    title:String(detail.title||''),authors:olAuthors.join(', '),
    publisher:(Array.isArray(detail.publishers)?detail.publishers:[])
     .map(v=>typeof v==='string'?v:v?.name).filter(Boolean).join(', '),
-   format:String(detail.physical_format||'') }]:[]),
+   published:String(detail.publish_date||''),format:String(detail.physical_format||''),
+   cover_id:validCover?olCover:null}]:[]),
   ...(googleMatches.length?[{provider:'Google Books',
    url:'https://books.google.com/books?id='+encodeURIComponent(googleMatches[0].id||''),
    title:String(googleMatches[0].volumeInfo.title||''),
    authors:names(googleMatches[0].volumeInfo.authors).join(', '),
-   publisher:String(googleMatches[0].volumeInfo.publisher||'')}]:[])
+   publisher:String(googleMatches[0].volumeInfo.publisher||''),
+   published:String(googleMatches[0].volumeInfo.publishedDate||'')}]:[])
  ];
  if(olConflict||googleConflict)return {status:'mismatch',
   reason:'An exact-ISBN source record contradicts this book’s title or author',references:refs};
  if(!olMatch&&!googleMatches.length)return {status:'not_found',
-  reason:'No confirmed edition record for this ISBN, title and author',references:refs};
+  reason:'No confirming edition-level ISBN record was found in either provider',references:refs};
  if(!olMatch||!googleMatches.length)return {status:'needs_review',
   reason:'Only one independent source corroborates this ISBN and book identity',references:refs};
- if(localSource!=='saved_epub')return {status:'needs_review',
-  reason:'ISBN identity corroborated, but Goodreads/Calibre evidence is not linked to this specific owned edition',
+ if(localSource!=='saved_epub')return {status:'probable',
+  reason:'Both sources confirm the ISBN, title and author. Goodreads/Calibre record is not linked to this exact owned edition; check binding, publisher and year.',
   references:refs};
- if(!formatEvidence(detail,book.format))return {status:'needs_review',
-  reason:'ISBN matches in both sources, but neither a specific ebook format nor a compatible publisher edition was independently established',
+ if(!formatEvidence(detail,book.format))return {status:'probable',
+  reason:'Both sources confirm ISBN and book identity, but ebook edition format was not independently established. Cover and ISBN remain review-only.',
   references:refs};
  return {status:'verified',
   reason:'Linked EPUB ISBN, exact edition identity and explicit ebook format corroborated by independent source records',
