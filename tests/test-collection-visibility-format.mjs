@@ -57,6 +57,10 @@ test('Move to Trash retains the book and exact saved identity, and Restore is re
  assert.equal((await change(B,'trash')).status,200);
  assert.equal((await list('trash')).body.books[0].id,B);
  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM books').get().n,2);
+ assert.equal(sqlite.prepare('SELECT archived_at FROM books WHERE id=?').get(B).archived_at,null);
+ assert.throws(()=>sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES (?,?,?,?,?)')
+  .run('cccccccc-cccc-4ccc-8ccc-cccccccccccc','Second Book','Author','second book','author'),
+  /UNIQUE|constraint/i,'Moving to Trash must not free the identity for duplicate imports');
  assert.equal((await change(B,'restore')).status,200);
  assert.equal((await list('trash')).body.books.length,0);
  assert.equal(sqlite.prepare('SELECT archived_at FROM books WHERE id=?').get(B).archived_at,null);
