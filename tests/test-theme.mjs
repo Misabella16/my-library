@@ -4,12 +4,14 @@ import {readFileSync} from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../pastoral.css', import.meta.url), 'utf8');
+const compact = readFileSync(new URL('../collection-compact.css', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../_worker.js', import.meta.url), 'utf8');
 const js = readFileSync(new URL('../library.js', import.meta.url), 'utf8');
 
-test('new theme is loaded exactly once, and only the foundational CSS precedes it', () => {
+test('Rococo theme stays loaded once with only a scoped collection override afterward', () => {
   const styles = [...html.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"/g)].map(m => m[1]);
-  assert.deepEqual(styles, ['/library.css', '/cute.css', '/vintage.css', '/pastoral.css']);
+  assert.deepEqual(styles, ['/library.css', '/cute.css', '/vintage.css', '/pastoral.css', '/collection-compact.css']);
+  assert.match(compact, /#library/);
   assert.match(html, /<meta name="theme-color" content="#f7f1ed">/);
 });
 
