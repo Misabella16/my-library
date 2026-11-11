@@ -558,6 +558,9 @@ test('One edition-recovery workflow exposes two steps without duplicate proposal
  assert.ok(isbn<oldList&&oldList<cover);
  assert.match(html,/id="isbn-verification-search"/);
  assert.match(html,/<details class="imports-disclosure" id="isbn-recovery-extra">/);
+ assert.match(html,/Health, EPUB, existing covers, and title cleanup/);
+ assert.match(html,/Offline Open Library Works and text matching/);
+ assert.match(html,/Alternative edition and Calibre cover research/);
  assert.equal((html.match(/id="isbn-recovery-results"/g)||[]).length,1);
  assert.equal((html.match(/id="isbn-verification-results"/g)||[]).length,1);
  assert.equal((html.match(/id="isbn-edition-enrich-results"/g)||[]).length,1);
