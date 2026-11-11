@@ -153,6 +153,12 @@ function renderSummary(container,parsed,matches,catalogue,{outcomes=new Map(),ed
         node('span','goodreads-reason',row.explanation));
       const identifiers=[];
       if(row.goodreadsId)identifiers.push('Goodreads ID '+row.goodreadsId);
+      if(/^\d{1,36}$/.test(String(row.goodreadsId||''))){
+        const href='https://www.goodreads.com/book/show/'+row.goodreadsId;
+        const direct=node('a','goodreads-book-link','Open on Goodreads');
+        direct.href=href;direct.target='_blank';direct.rel='noopener noreferrer';
+        main.append(direct);
+      }
       if(row.isbn13)identifiers.push('ISBN-13 '+row.isbn13);
       else if(row.isbn)identifiers.push('ISBN '+row.isbn);
       if(row.workGroupSize>1)
