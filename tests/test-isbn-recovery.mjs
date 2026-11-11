@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {webcrypto} from 'node:crypto';
 import {
- canonicalIsbn,reconcileIsbnEvidence,titleAuthorMatch
+ canonicalIsbn,reconcileIsbnEvidence,titleAuthorMatch,isbn10Equivalent
 } from '../isbn-recovery-evidence.mjs';
 import {handleIsbnRecoveryApi} from '../isbn-recovery-api.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
@@ -76,6 +76,22 @@ test('Checksum-valid ISBN-10 converts to ISBN-13 and invalid/UUID identifiers ar
  assert.equal(canonicalIsbn('urn:isbn:978-0-306-40615-7'),ISBN);
  assert.equal(canonicalIsbn('ISBN-13: 9780306406157'),ISBN);
  for(const value of ['1234567890','9780306406158','ebook-uuid','123',''])assert.equal(canonicalIsbn(value),'');
+});
+test('Equivalent ISBN-10 and ISBN-13 resolve to the same edition identity',async()=>{
+ assert.equal(isbn10Equivalent(ISBN),'0306406152');
+ assert.equal(isbn10Equivalent('9791090636071'),'');
+ const f=fixture();
+ try{
+  const sibling='66666666-6666-4666-8666-666666666666';
+  f.sql.prepare("INSERT INTO editions(id,book_id,edition_name,format,isbn,is_special) VALUES(?,?,'Another ebook','ebook','0-306-40615-2',0)")
+   .run(sibling,BOOK);
+  const p=f.proposal();
+  const preview=await f.call('preview',{items:[p]});
+  assert.equal((await preview.json()).results[0].status,'review');
+  const saved=await f.call('apply',{items:[{...p,approved:true}]});
+  assert.equal((await saved.json()).results[0].status,'review');
+  assert.equal(f.edition().isbn,null);
+ }finally{f.close();}
 });
 test('Read-only cross-source evidence identifies missing ISBNs without inventing editions',()=>{
  const book={id:BOOK,title:'Example Novel',author:'Example Writer',goodreads_id:'100'};
