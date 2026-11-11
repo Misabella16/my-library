@@ -102,7 +102,22 @@
     <p class="small-status" id="virtual-shelf-status" role="status" aria-live="polite">Open My Shelves to load your categories.</p>
     <div id="virtual-genre-rows"></div>
     <div class="virtual-section-heading"><h3>My reading lists</h3><button class="btn mini subtle" type="button" id="virtual-view-all">See every book</button></div>
-    <p class="muted">Named virtual shelves and existing Goodreads CSV reading lists.</p>
+    <p class="muted">Named virtual shelves and existing Goodreads CSV reading lists. Your Goodreads profile is linked for navigation, not automatically scraped.</p>
+    <div class="goodreads-profile-panel" id="goodreads-profile-panel">
+      <form id="goodreads-profile-form" class="goodreads-profile-form">
+        <label for="goodreads-profile-url">My Goodreads profile or shelves URL
+          <input id="goodreads-profile-url" type="url" inputmode="url" autocomplete="url"
+           placeholder="https://www.goodreads.com/user/show/12345" maxlength="2000">
+        </label>
+        <button type="submit" class="btn mini subtle">Save profile link</button>
+        <button type="button" id="goodreads-profile-clear" class="btn mini subtle">Clear</button>
+      </form>
+      <div class="goodreads-profile-links" id="goodreads-profile-links" hidden>
+        <a id="goodreads-profile-open" target="_blank" rel="noopener noreferrer">Open my Goodreads profile</a>
+        <a id="goodreads-shelves-open" target="_blank" rel="noopener noreferrer">Open my Goodreads shelves</a>
+      </div>
+      <p class="small-status" id="goodreads-profile-status" role="status" aria-live="polite">Connect your profile for quick links. Import your latest Goodreads CSV to update shelves.</p>
+    </div>
     <div id="virtual-list-rows"></div>
   </div>
   <div id="virtual-browse" data-virtual-panel="browse" hidden>
