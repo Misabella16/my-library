@@ -188,8 +188,9 @@ async function catalogue(db,request){
  })):chunk,has_more:more,next_cursor:more?chunk.at(-1).id:null});
 }
 const readSource=async(fetcher,url)=>{
- const response=await fetcher(url,{method:'GET',redirect:'error',
+ const response=await fetcher(url,{method:'GET',redirect:'manual',
   headers:{accept:'application/json','user-agent':'MyLibraryOwnerEditionResearch/1.0'}});
+ if(response.status>=300&&response.status<400)throw Error('Provider returned a redirect (HTTP '+response.status+'); review the source URL');
  if(response.status===429||response.status===403)throw Error('Provider is rate limiting requests');
  if(!response.ok)throw Error('Source returned HTTP '+response.status);
  if(Number(response.headers?.get?.('content-length')||0)>600000)
