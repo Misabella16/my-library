@@ -7,7 +7,7 @@ const el=(tag,cls,text)=>{
  if(text!==undefined)item.textContent=String(text);
  return item;
 };
-export function initCollectionManagement(api,{onVisibleChanged=async()=>{}}={}){
+export function initCollectionManagement(api,{onVisibleChanged=async()=>{},notify=()=>{}}={}){
  const mode=byId('collection-visibility-view'),list=byId('collection-private-list'),
   rows=byId('collection-private-rows'),heading=byId('collection-private-heading'),
   summary=byId('collection-private-summary'),more=byId('collection-private-more'),
@@ -41,8 +41,10 @@ export function initCollectionManagement(api,{onVisibleChanged=async()=>{}}={}){
    if(view==='visible')await onVisibleChanged(id);
    else await activate(view);
    announce(message[action]||'Saved');
+   notify(message[action]||'Saved');
   }catch(error){
    announce('Could not update this book: '+(error.message||'Request failed.'));
+   notify(error.message||'Could not update book',true);
   }
  }
  async function loadPage(){
