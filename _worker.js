@@ -14,6 +14,7 @@ import {handleShelfBulkLocationApi} from './shelf-photo-bulk-location-api.mjs';
 import {handleVisualShelvesApi} from './visual-shelves-api.mjs';
 import {handleVirtualShelvesApi} from './virtual-shelves-api.mjs';
 import {handleBookReferenceApi} from './book-reference-api.mjs';
+import {handleBookManagementApi} from './book-management-api.mjs';
 import {handleCollectionHealthApi} from './collection-health-api.mjs';
 import {handleOnlineEnrichApi} from './online-enrich-api.mjs';
 import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
@@ -286,6 +287,8 @@ async function serveApi(request,env,path){
   if(goodreadsSyncResponse)return goodreadsSyncResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
+  const managementResponse=await handleBookManagementApi(request,db,path);
+  if(managementResponse)return managementResponse;
   const referenceResponse=await handleBookReferenceApi(request,db,env,path);
   if(referenceResponse)return referenceResponse;
   const virtualShelfResponse=await handleVirtualShelvesApi(request,db,path);
@@ -350,19 +353,30 @@ async function serveApi(request,env,path){
     const limit=Math.max(1,Math.min(100,parseInt(url.searchParams.get('limit')||'60',10)||60));
     const offset=Math.max(0,Math.min(1000000,parseInt(url.searchParams.get('offset')||'0',10)||0));
     const search='%'+q.replace(/[%_\\]/g,c=>'\\'+c)+'%';
-    const where=" FROM books b WHERE b.archived_at IS NULL"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
+    const view=url.searchParams.get('view')||'legacy';
+    if(!['legacy','visible','hidden','trash'].includes(view))return fail('Invalid collection view',400);
+    const sort=url.searchParams.get('sort')||'az';
+    if(!['az','za','custom'].includes(sort))return fail('Invalid collection sort',400);
+    // Older API clients preserve the original behavior. The updated UI calls
+    // /api/book-management/setup once, then requests scoped views explicitly.
+    const scope={
+      legacy:'b.archived_at IS NULL',
+      visible:'b.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id)',
+      hidden:'b.archived_at IS NULL AND EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id)',
+      trash:'b.archived_at IS NOT NULL'
+    }[view];
+    const where=" FROM books b WHERE "+scope+
+      (q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
     const args=q?[search,search]:[];
-    // The frontend already knows the total when fetching subsequent pages.
-    // Skip scanning the full active book index on every Load more request.
     const includeTotal=url.searchParams.get('include_total')!=='0';
     const count=includeTotal?await getOne(db,'SELECT COUNT(*) AS total'+where,args):null;
+    const direction=sort==='za'?' DESC':' ASC';
     const books=await getAll(db,
-      'SELECT b.id,b.title,b.author,b.goodreads_id,b.reading_status,b.rating,b.synopsis,b.updated_at,'+
-      PREFERRED_BOOK_COVER_SQL+' AS cover_id'+
-      // Use the active identity index for paging instead of a full
-      // title COLLATE NOCASE sort of thousands of imported books.
-      where+' ORDER BY b.normalized_title,b.normalized_author,b.id LIMIT ? OFFSET ?',[...args,limit,offset]);
-    return json({books,...(includeTotal?{total:count?.total||0}:{}),offset,limit});
+      'SELECT b.id,b.title,b.author,b.goodreads_id,b.reading_status,b.rating,b.synopsis,b.updated_at,b.archived_at,'+
+      PREFERRED_BOOK_COVER_SQL+' AS cover_id'+where+
+      ' ORDER BY b.normalized_title'+direction+',b.normalized_author'+direction+',b.id'+direction+
+      ' LIMIT ? OFFSET ?',[...args,limit,offset]);
+    return json({books,...(includeTotal?{total:count?.total||0}:{}),offset,limit,view,sort});
   }
   if(path==='/api/books'&&method==='POST') {
     const b=await body(request), title=requiredText(b.title,'Title'), author=string(b.author,400);
