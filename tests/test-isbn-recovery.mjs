@@ -4,11 +4,12 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {webcrypto} from 'node:crypto';
 import {
- canonicalIsbn,reconcileIsbnEvidence,titleAuthorMatch,isbn10Equivalent
+ canonicalIsbn,reconcileIsbnEvidence,titleAuthorMatch,isbn10Equivalent,bindingSupportsEdition
 } from '../isbn-recovery-evidence.mjs';
 import {handleIsbnRecoveryApi} from '../isbn-recovery-api.mjs';
 import {filterIsbnProposals} from '../isbn-recovery-ui.mjs';
-import {classifyIsbnVerification,verifyIsbnOnline,sameBookIdentity} from '../isbn-independent-verification.mjs';
+import {classifyIsbnVerification,verifyIsbnOnline,verifyIsbnBatch,sameBookIdentity} from '../isbn-independent-verification.mjs';
+import {parseGoodreadsExport} from '../goodreads-preview.mjs';
 import {isBulkEligible,proofKey} from '../isbn-verification-ui.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const BOOK='11111111-1111-4111-8111-111111111111';
@@ -260,11 +261,11 @@ test('Independent ISBN corroboration requires both sources and explicit ebook ed
  const google={items:[{id:'g1',volumeInfo:{title:'Example Novel',
   authors:['Example Writer'],industryIdentifiers:[{type:'ISBN_13',identifier:ISBN}]}}]};
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',ol,google).status,'verified');
- assert.equal(classifyIsbnVerification(book,ISBN,'goodreads_csv',ol,google).status,'needs_review');
- assert.equal(classifyIsbnVerification(book,ISBN,'calibre_local',ol,google).status,'needs_review');
- assert.equal(classifyIsbnVerification({...book,format:'paperback'},ISBN,'saved_epub',ol,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'goodreads_csv',ol,google).status,'probable');
+ assert.equal(classifyIsbnVerification(book,ISBN,'calibre_local',ol,google).status,'probable');
+ assert.equal(classifyIsbnVerification({...book,format:'paperback'},ISBN,'saved_epub',ol,google).status,'probable');
  const noFormat=structuredClone(ol);delete noFormat['ISBN:'+ISBN].details.physical_format;
- assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',noFormat,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',noFormat,google).status,'probable');
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',ol,{}).status,'needs_review');
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',{},{}).status,'not_found');
  assert.equal(sameBookIdentity('Example Novel',['Different Author'],book),false);
@@ -279,7 +280,7 @@ test('Conflicting exact ISBN author/title is a mismatch; missing author is not f
  const missingAuthor=structuredClone(ol);
  missingAuthor['ISBN:'+ISBN].details.title='Example Novel';
  missingAuthor['ISBN:'+ISBN].details.authors=[];
- assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,google).status,'probable');
  const badGoogle=structuredClone(google);badGoogle.items[0].volumeInfo.authors=['Unknown Writer'];
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,badGoogle).status,'mismatch');
 });
@@ -417,4 +418,106 @@ test('Verification workflow is mounted with pause/resume, checkpoint and verifie
  assert.match(html,/id="isbn-verification-apply"/);
  assert.match(script,/initIsbnVerifier/);
  assert.match(script,/require_independent_verification:true/);
+});
+
+test('Goodreads CSV preserves edition clues, conflicting ISBNs and binding-specific eligibility',()=>{
+ const csv=['Title,Author,Book Id,ISBN,ISBN13,Publisher,Binding,Year Published,Original Publication Year',
+  'Example Novel,Example Writer,100,9780306406157,9780140328721,Goodreads Press,Kindle Edition,2017,2002'].join('\n');
+ const entries=parseGoodreadsExport(csv).entries;
+ assert.equal(entries.length,1);
+ assert.equal(entries[0].publisher,'Goodreads Press');
+ assert.equal(entries[0].binding,'Kindle Edition');
+ assert.equal(entries[0].yearPublished,'2017');
+ assert.equal(entries[0].originalPublicationYear,'2002');
+ assert.equal(bindingSupportsEdition('Kindle Edition','ebook'),true);
+ assert.equal(bindingSupportsEdition('Paperback','ebook'),false);
+ assert.equal(bindingSupportsEdition('Hardcover','paperback'),false);
+ const book={id:BOOK,title:'Example Novel',author:'Example Writer',goodreads_id:'100'};
+ const ebook={id:ED,book_id:BOOK,edition_name:'Standard',format:'ebook',
+  is_special:0,isbn:null,updated_at:'2026-11-10'};
+ const result=reconcileIsbnEvidence([book],[ebook],[],entries,[]);
+ assert.equal(result.items.length,2);
+ assert.deepEqual(new Set(result.items.map(x=>x.isbn)),new Set([ISBN,OTHER]));
+ assert.ok(result.items.every(x=>x.source_publisher==='Goodreads Press'&&
+  x.source_binding==='Kindle Edition'&&x.source_year==='2017'));
+ const paperback={...entries[0],binding:'Paperback'};
+ assert.equal(reconcileIsbnEvidence([book],[ebook],[],[paperback],[]).items.length,0);
+});
+test('Batched Work-to-Edition research is read-only, verifies Work and returns real edition covers',async()=>{
+ const f=fixture();try{
+  const requests=[];
+  const mock=async(url,options)=>{
+   requests.push({url,options});
+   if(url.endsWith('/works/OL123W.json'))
+    return Response.json({key:'/works/OL123W',title:'Example Novel'});
+   if(url.includes('/works/OL123W/editions.json'))
+    return Response.json({entries:[{key:'/books/OL987M',title:'Example Novel',
+     isbn_13:[ISBN],publishers:['Sample Publishing'],publish_date:'2015',
+     physical_format:'Paperback',covers:[123456]}]});
+   return new Response('not found',{status:404});
+  };
+  const q='book_id='+BOOK+'&work_id='+encodeURIComponent('/works/OL123W');
+  const result=await f.call('work-editions',null,'GET',{query:q,fetch:mock});
+  assert.equal(result.status,200,await result.clone().text());
+  const report=await result.json();
+  assert.equal(report.read_only,true);
+  assert.equal(report.editions[0].source_edition,'/books/OL987M');
+  assert.equal(report.editions[0].isbn_13[0],ISBN);
+  assert.equal(report.editions[0].publisher,'Sample Publishing');
+  assert.match(report.editions[0].cover_url,/covers\.openlibrary\.org\/b\/id\/123456/);
+  assert.equal(requests.length,2);
+  assert.ok(requests.every(x=>x.options.redirect==='manual'));
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
+  assert.equal(f.edition().isbn,null);
+  const forged=await f.call('work-editions',null,'GET',{
+   query:'book_id='+BOOK+'&work_id='+encodeURIComponent('/works/OL123W')+'&offset=5000',fetch:mock
+  });
+  assert.equal(forged.status,400);
+ }finally{f.close();}
+});
+test('Small batch combines multiple Open Library ISBNs into one lookup and pauses safely',async()=>{
+ const p={book_title:'Example Novel',book_author:'Example Writer',format:'ebook',source:'saved_epub'};
+ const input=[{...p,isbn:ISBN},{...p,isbn:OTHER}];
+ const visited=[];
+ const makeSource=(key)=>({key:'/books/'+(key===ISBN?'OL123M':'OL456M'),
+  title:'Example Novel',isbn_13:[key],authors:[{name:'Example Writer'}],
+  physical_format:'ebook'});
+ const good=async(url,opts)=>{
+  visited.push(url);
+  if(url.includes('openlibrary.org'))return Response.json({
+   ['ISBN:'+ISBN]:{details:makeSource(ISBN)},
+   ['ISBN:'+OTHER]:{details:makeSource(OTHER)}
+  });
+  const isbn=new URL(url).searchParams.get('q').replace('isbn:','');
+  return Response.json({items:[{id:'test',volumeInfo:{title:'Example Novel',
+   authors:['Example Writer'],industryIdentifiers:[{identifier:isbn}]}}]});
+ };
+ const r=await verifyIsbnBatch(input,{ol:good,google:good});
+ assert.equal(r.paused,false);
+ assert.deepEqual(r.results.map(x=>x.status),['verified','verified']);
+ assert.equal(visited.filter(url=>url.includes('openlibrary.org')).length,1);
+ assert.equal(visited.filter(url=>url.includes('googleapis.com')).length,2);
+ const pausedUrls=[];
+ const throttled=async(url)=>{
+  pausedUrls.push(url);
+  if(url.includes('openlibrary.org'))return Response.json({
+   ['ISBN:'+ISBN]:{details:makeSource(ISBN)},
+   ['ISBN:'+OTHER]:{details:makeSource(OTHER)}
+  });
+  const isbn=new URL(url).searchParams.get('q').replace('isbn:','');
+  return isbn===OTHER?new Response(null,{status:429}):
+   Response.json({items:[{id:'ok',volumeInfo:{title:'Example Novel',
+    authors:['Example Writer'],industryIdentifiers:[{identifier:isbn}]}}]});
+ };
+ const partial=await verifyIsbnBatch(input,{ol:throttled,google:throttled});
+ assert.equal(partial.paused,true);
+ assert.equal(partial.results.length,1);
+ assert.equal(partial.results[0].status,'verified');
+});
+test('Probable ISBN proof never authorizes bulk approval',()=>{
+ const p={edition_id:ED,isbn:ISBN,source:'goodreads_csv'};
+ const good={...p,status:'verified'};
+ const probable={...p,status:'probable'};
+ assert.equal(isBulkEligible(p,good,new Set()),true);
+ assert.equal(isBulkEligible(p,probable,new Set()),false);
 });

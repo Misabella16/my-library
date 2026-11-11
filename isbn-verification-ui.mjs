@@ -51,9 +51,21 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
    const card=el('div',undefined,'health-result');
    card.append(el('strong',item.book_title+' · '+item.edition_name));
    card.append(el('p',item.book_author+' · '+item.format+' · ISBN '+item.isbn));
+   const hints=[item.source==='goodreads_csv'?'Goodreads CSV':
+    item.source==='calibre_local'?'Calibre':item.source==='saved_epub'?'Linked EPUB':'',
+    item.source_publisher?'Publisher: '+item.source_publisher:'',
+    item.source_binding?'Binding: '+item.source_binding:'',
+    item.source_year?'Publication year: '+item.source_year:''].filter(Boolean);
+   if(hints.length)card.append(el('p','Local evidence · '+hints.join(' · '),'muted'));
+   if(item.source==='goodreads_csv'&&/^\d{1,36}$/.test(item.source_goodreads_id||'')){
+    const goodreads=el('a','Inspect Goodreads edition (CSV book ID)');
+    goodreads.href='https://www.goodreads.com/book/show/'+item.source_goodreads_id;
+    goodreads.target='_blank';goodreads.rel='noopener noreferrer';card.append(goodreads);
+   }
    const conflicting=conflicts().has(item.edition_id);
    const label=conflicting?'Conflicting local identifiers':
     proof?.status==='verified'?'Independently verified ebook ISBN':
+    proof?.status==='probable'?'Probable edition match, review only':
     proof?.status==='mismatch'?'Source mismatch':
     proof?.status==='not_found'?'Not found in both sources':
     proof?.status==='needs_review'?'Needs edition review':'Not checked';
@@ -67,9 +79,25 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
      const link=el('a','Inspect '+ref.provider+' edition record');
      link.href=ref.url;link.target='_blank';link.rel='noopener noreferrer';
      card.append(link);
-     const summary=[ref.title,ref.authors,ref.publisher,ref.format].filter(Boolean).join(' · ');
+     const summary=[ref.title,ref.authors,ref.publisher,ref.published,ref.format]
+      .filter(Boolean).join(' · ');
      if(summary)card.append(el('p',summary,'muted'));
+     if(ref.provider==='Open Library'&&Number.isSafeInteger(ref.cover_id)&&
+       ref.cover_id>0&&ref.cover_id<=1e9){
+      const img=el('img');img.loading='lazy';
+      img.src='https://covers.openlibrary.org/b/id/'+ref.cover_id+'-M.jpg?default=false';
+      img.alt='Possible cover for source edition, not yet attached';
+      img.style.cssText='display:block;max-width:110px;max-height:150px;object-fit:contain;margin:6px 0';
+      card.append(img);
+     }
     }
+   }
+   if(!conflicting&&['probable','needs_review'].includes(proof?.status)){
+    const review=el('button','Review this edition individually','btn subtle');
+    review.type='button';review.disabled=checking||applying;
+    review.addEventListener('click',()=>reviewOne(item,proof));
+    card.append(review);
+    card.append(el('p','Manual approval requires checking the exact publication format and edition. This item cannot be bulk-approved.','muted'));
    }
    if(isBulkEligible(item,proof,conflicts())){
     const label=el('label',undefined,'collection-health-actions');
@@ -88,14 +116,14 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
   controls();
  }
  function updateStats(){
-  const statuses={verified:0,needs_review:0,mismatch:0,not_found:0};
+  const statuses={verified:0,probable:0,needs_review:0,mismatch:0,not_found:0};
   for(const p of candidates()){
    const s=proofs.get(proofKey(p))?.status;
    if(s in statuses)statuses[s]++;
   }
   stats.textContent=checked()+' of '+candidates().length+
    ' checked · '+statuses.verified+' verified ebook ISBNs · '+
-   statuses.needs_review+' need review · '+statuses.mismatch+
+   statuses.probable+' probable · '+statuses.needs_review+' need review · '+statuses.mismatch+
    ' mismatches · '+statuses.not_found+' not found · '+
    conflicts().size+' conflicts · '+chosen.size+' selected for approval';
   const num=filtered().length;
@@ -148,6 +176,43 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
     '. Completed checks are retained. Click Verify/Resume to retry unfinished records.');
    cursor=0;
   }finally{checking=false;controls();}
+ }
+ async function reviewOne(item,proof){
+  if(checking||applying||uncertain||!isScanComplete()||
+   !['probable','needs_review'].includes(proof?.status)||
+   conflicts().has(item.edition_id))return;
+  const message='Review the actual owned edition before applying this ISBN.\n\n'+
+   item.book_title+' · '+item.edition_name+'\nISBN '+item.isbn+
+   '\nSource: '+item.source+
+   '\nPublisher hint: '+(item.source_publisher||'not recorded')+
+   '\nBinding hint: '+(item.source_binding||'not recorded')+
+   '\n\nHave you checked that this exact ISBN belongs to the edition you own?';
+  if(!window.confirm(message))return;
+  applying=true;controls();
+  try{
+   const response=await api('/api/isbn-recovery/preview',{
+    method:'POST',data:{items:[item]}
+   });
+   const inspection=response.results?.[0];
+   if(inspection?.status!=='ready')throw Error(inspection?.reason||'Edition is not eligible');
+   if(!window.confirm('Final approval: add ISBN '+item.isbn+' ONLY to '+item.edition_name+
+    ' for '+item.book_title+'? This is manually reviewed, not independently verified for bulk.'))return;
+   const write=await api('/api/isbn-recovery/apply',{
+    method:'POST',data:{items:[{...item,approved:true}]}
+   });
+   const saved=write.results?.[0];
+   if(saved?.status==='applied'){
+    await onApplied([saved]);
+    chosen.delete(proofKey(item));draw();
+    say('Manually reviewed ISBN saved with Undo. No edition, copy, cover or note changed.');
+   }else{
+    say('Manual ISBN not saved: '+(saved?.reason||'Server rejected edition match'));
+   }
+  }catch(error){
+   uncertain=true;
+   say('Manual save uncertain: '+(error.message||'Request failed')+
+    '. Check ISBN Recovery history before retrying; a save may have completed.');
+  }finally{applying=false;controls();}
  }
  async function applySelected(){
   if(applying||checking||uncertain||!chosen.size)return;
@@ -224,7 +289,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
    let recovered=0;
    for(const row of report.results){
     const p=valid.get(row.key),proof=row.proof;
-    if(!p||!['verified','needs_review','mismatch','not_found'].includes(proof?.status)||
+    if(!p||!['verified','probable','needs_review','mismatch','not_found'].includes(proof?.status)||
      proof.edition_id!==p.edition_id||proof.isbn!==p.isbn||proof.source!==p.source)
      continue;
     proofs.set(row.key,proof);recovered++;

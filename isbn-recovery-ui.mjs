@@ -334,6 +334,49 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
  onlineSearch.addEventListener('keydown',event=>{
   if(event.key==='Enter'){event.preventDefault();onlineFind.click();}
  });
+ async function browseWorkEditions(bookId,workId,target,offset=0){
+  if(busy||scanning)return;
+  busy=true;controls();target.replaceChildren();
+  try{
+   say('Retrieving publication editions for this Work (read-only)…');
+   const params=new URLSearchParams({
+    book_id:bookId,work_id:workId,offset:String(offset)
+   });
+   const data=await api('/api/isbn-recovery/work-editions?'+params);
+   target.append(node('strong','Open Library publication editions, page '+(offset/20+1)));
+   target.append(node('p','These are possible editions, not owned copies.','muted'));
+   for(const edition of data.editions||[]){
+    const card=node('div',undefined,'health-result');
+    card.append(node('strong',edition.title));
+    card.append(node('p',[
+     edition.publisher,edition.published,edition.format,
+     edition.isbn_13.length?'ISBNs: '+edition.isbn_13.join(', '):'No recorded ISBN'
+    ].filter(Boolean).join(' · '),'muted'));
+    if(edition.cover_url){
+     const image=node('img');image.src=edition.cover_url;
+     image.alt='Open Library source edition cover candidate';image.loading='lazy';
+     image.style.cssText='display:block;max-height:150px;max-width:110px;object-fit:contain';
+     card.append(image);
+    }
+    if(typeof edition.source_url==='string'&&
+     /^https:\/\/openlibrary\.org\/books\/OL[1-9]\d*M$/.test(edition.source_url)){
+     const a=node('a','Inspect edition record');a.href=edition.source_url;
+     a.target='_blank';a.rel='noopener noreferrer';card.append(a);
+    }
+    target.append(card);
+   }
+   if(!data.editions?.length)
+    target.append(node('p','No edition records on this page.','muted'));
+   if(data.has_more){
+    const next=node('button','Next 20 source editions (read-only)','btn subtle');
+    next.type='button';next.addEventListener('click',()=>
+     browseWorkEditions(bookId,workId,target,offset+20));
+    target.append(next);
+   }
+   say('Edition candidates loaded. No ISBN, cover, or owned edition was added.');
+  }catch(error){say('Could not browse editions: '+(error.message||'Source unavailable'));}
+  finally{busy=false;controls();}
+ }
  async function research(item){
   if(busy||scanning)return;
   const key=item.book_id;
@@ -360,6 +403,14 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
     if(typeof result.reference_url==='string'&&result.reference_url.startsWith('https://')){
      const a=node('a','View source and verify edition');
      a.href=result.reference_url;a.target='_blank';a.rel='noopener noreferrer';card.append(a);
+    }
+    if(result.source==='open_library'&&
+     /^\/works\/OL[1-9]\d*W$/.test(result.work_id||'')){
+     const browse=node('button','Browse actual editions and cover candidates','btn subtle');
+     browse.type='button';const holder=node('div',undefined,'epub-preview-list');
+     browse.addEventListener('click',()=>
+      browseWorkEditions(item.book_id,result.work_id,holder));
+     card.append(browse,holder);
     }
     online.append(card);
    }

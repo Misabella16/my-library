@@ -50,30 +50,45 @@ export function classifyIsbnVerification(book,isbn,localSource,openLibraryData,g
   return (!!info.title&&!titleMatchesOwner(info.title,book))||
    (authors.length>0&&!authors.some(a=>same(a,book.author)));
  });
+ const olCover=Array.isArray(detail?.covers)?Number(detail.covers[0]):null;
+ const validCover=Number.isSafeInteger(olCover)&&olCover>0&&olCover<=1e9;
  const refs=[
   ...(olExact?[{provider:'Open Library',
    url:'https://openlibrary.org'+detail.key,
    title:String(detail.title||''),authors:olAuthors.join(', '),
    publisher:(Array.isArray(detail.publishers)?detail.publishers:[])
     .map(v=>typeof v==='string'?v:v?.name).filter(Boolean).join(', '),
-   format:String(detail.physical_format||'') }]:[]),
+   published:String(detail.publish_date||''),format:String(detail.physical_format||''),
+   cover_id:validCover?olCover:null}]:[]),
   ...(googleMatches.length?[{provider:'Google Books',
    url:'https://books.google.com/books?id='+encodeURIComponent(googleMatches[0].id||''),
    title:String(googleMatches[0].volumeInfo.title||''),
    authors:names(googleMatches[0].volumeInfo.authors).join(', '),
-   publisher:String(googleMatches[0].volumeInfo.publisher||'')}]:[])
+   publisher:String(googleMatches[0].volumeInfo.publisher||''),
+   published:String(googleMatches[0].volumeInfo.publishedDate||'')}]:[])
  ];
  if(olConflict||googleConflict)return {status:'mismatch',
   reason:'An exact-ISBN source record contradicts this book’s title or author',references:refs};
- if(!olMatch&&!googleMatches.length)return {status:'not_found',
-  reason:'No confirmed edition record for this ISBN, title and author',references:refs};
+ // An actual source record with missing author data must not be mislabeled
+ // "not found"; an exact title and ISBN plus corroborating Google authors
+ // can be probable, but never automatically verified.
+ const olTitleOnly=olExact&&titleMatchesOwner(detail?.title,book)&&olAuthors.length===0;
+ if(olTitleOnly&&googleMatches.length)return {status:'probable',
+  reason:'Open Library confirms the exact ISBN and title but omits author names; Google Books supplies a matching author. Confirm the actual edition.',
+  references:refs};
+ if(!olMatch&&!googleMatches.length){
+  if(olExact||googleExact.length)return {status:'needs_review',
+   reason:'An exact-ISBN source exists but its author/title evidence is incomplete',references:refs};
+  return {status:'not_found',
+   reason:'No edition-level ISBN record was found in either provider',references:refs};
+ }
  if(!olMatch||!googleMatches.length)return {status:'needs_review',
   reason:'Only one independent source corroborates this ISBN and book identity',references:refs};
- if(localSource!=='saved_epub')return {status:'needs_review',
-  reason:'ISBN identity corroborated, but Goodreads/Calibre evidence is not linked to this specific owned edition',
+ if(localSource!=='saved_epub')return {status:'probable',
+  reason:'Both sources confirm the ISBN, title and author. Goodreads/Calibre record is not linked to this exact owned edition; check binding, publisher and year.',
   references:refs};
- if(!formatEvidence(detail,book.format))return {status:'needs_review',
-  reason:'ISBN matches in both sources, but neither a specific ebook format nor a compatible publisher edition was independently established',
+ if(!formatEvidence(detail,book.format))return {status:'probable',
+  reason:'Both sources confirm ISBN and book identity, but ebook edition format was not independently established. Cover and ISBN remain review-only.',
   references:refs};
  return {status:'verified',
   reason:'Linked EPUB ISBN, exact edition identity and explicit ebook format corroborated by independent source records',
@@ -110,4 +125,32 @@ export async function verifyIsbnOnline(book,isbn,source,{ol=pacedOpenLibrary,goo
  const olData=await getJson(ol,olUrl);
  const googleData=await getJson(google,googleUrl);
  return classifyIsbnVerification(book,id,source,olData,googleData);
+}
+
+export async function verifyIsbnBatch(items,{ol=pacedOpenLibrary,google=pacedGoogle}={}){
+ if(!Array.isArray(items)||items.length<1||items.length>3)
+  throw Error('Verification batch must contain one to three proposals');
+ const ids=[...new Set(items.map(x=>canonicalIsbn(x.isbn)).filter(Boolean))];
+ const olUrl='https://openlibrary.org/api/books?'+new URLSearchParams({
+  bibkeys:ids.map(id=>'ISBN:'+id).join(','),format:'json',jscmd:'details'});
+ let source;
+ try{source=await getJson(ol,olUrl);}
+ catch(error){return {results:[],paused:true,error:String(error.message||'Open Library unavailable')};}
+ const googleCache=new Map(),results=[];
+ for(const item of items){
+  const isbn=canonicalIsbn(item.isbn);
+  try{
+   if(!googleCache.has(isbn)){
+    const query=new URLSearchParams({q:'isbn:'+isbn,maxResults:'8',printType:'books'});
+    googleCache.set(isbn,await getJson(google,
+     'https://www.googleapis.com/books/v1/volumes?'+query));
+   }
+   results.push(classifyIsbnVerification({
+    title:item.book_title,author:item.book_author,format:item.format
+   },isbn,item.source,source,googleCache.get(isbn)));
+  }catch(error){
+   return {results,paused:true,error:String(error.message||'Google Books unavailable')};
+  }
+ }
+ return {results,paused:false};
 }

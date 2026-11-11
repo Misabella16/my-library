@@ -3,7 +3,7 @@
 // server side. Online search results are research only, never automatic writes.
 import {canonicalIsbn,normalized,isbn10Equivalent} from './isbn-recovery-evidence.mjs';
 import {createPacedFetch} from './source-pacing.mjs';
-import {verifyIsbnOnline} from './isbn-independent-verification.mjs';
+import {verifyIsbnOnline,verifyIsbnBatch} from './isbn-independent-verification.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8',
  'cache-control':'private, no-store','x-content-type-options':'nosniff'};
@@ -216,10 +216,10 @@ async function online(db,request,fetchers){
    if(!same(w.title,book.title)||!authors.some(a=>same(a,book.author)))continue;
    const candidates=[...new Set((Array.isArray(w.isbn)?w.isbn:[])
     .map(canonicalIsbn).filter(Boolean))].slice(0,8);
-   if(candidates.length&&/^\/works\/OL\d+W$/.test(w.key||''))items.push({
+   if(/^\/works\/OL[1-9]\d*W$/.test(w.key||''))items.push({
     source:'open_library',title:w.title,author:book.author,
-    isbn_candidates:candidates,reference_url:'https://openlibrary.org'+w.key,
-    note:'Work-level ISBNs are not proof of a specific edition. Review the editions first.'});
+    work_id:w.key,isbn_candidates:candidates,reference_url:'https://openlibrary.org'+w.key,
+    note:'Work-level ISBNs are not proof of a specific edition. Browse its actual editions and covers.'});
   }
  }catch(e){warnings.push('Open Library unavailable: '+String(e.message||'Network error'));}
  const googleQuery='intitle:'+book.title.slice(0,100)+' inauthor:'+book.author.slice(0,80);
@@ -241,6 +241,45 @@ async function online(db,request,fetchers){
  }catch(e){warnings.push('Google Books unavailable: '+String(e.message||'Network error'));}
  return json({book,items,warnings,read_only:true});
 }
+async function workEditions(db,request,fetchers){
+ const q=new URL(request.url).searchParams;
+ const bookId=q.get('book_id'),workId=q.get('work_id'),offset=Number(q.get('offset')||0);
+ if(!uuid(bookId)||!/^\/works\/OL[1-9]\d*W$/.test(workId||'')||
+  !Number.isSafeInteger(offset)||offset<0||offset>200||offset%20)
+  return fail('Invalid Work edition search request');
+ const book=await single(db,
+  'SELECT id,title,author FROM books WHERE id=? AND archived_at IS NULL',bookId);
+ if(!book)return fail('Book not found',404);
+ try{
+  const work=await readSource(fetchers.ol,'https://openlibrary.org'+workId+'.json');
+  if(work?.key!==workId||!same(work.title,book.title))
+   return fail('Source Work title is not the selected book; review the identity',409);
+  const params=new URLSearchParams({limit:'20',offset:String(offset)});
+  const raw=await readSource(fetchers.ol,'https://openlibrary.org'+workId+
+   '/editions.json?'+params);
+  const entries=Array.isArray(raw?.entries)?raw.entries.slice(0,20):[];
+  const editions=entries.filter(e=>/^\/books\/OL[1-9]\d*M$/.test(e?.key||''))
+   .map(e=>{
+    const cover=Number(e.covers?.[0]);
+    const safeCover=Number.isSafeInteger(cover)&&cover>0&&cover<=1e9?cover:null;
+    const isbn13=[...new Set([...(e.isbn_13||[]),...(e.isbn_10||[])]
+     .map(canonicalIsbn).filter(Boolean))].slice(0,10);
+    return {
+     source_edition:e.key,title:clean(e.title||work.title,200),
+     isbn_13:isbn13,publisher:clean(e.publishers?.[0],150),
+     published:clean(e.publish_date,70),format:clean(e.physical_format,70),
+     cover_id:safeCover,
+     cover_url:safeCover?'https://covers.openlibrary.org/b/id/'+safeCover+'-M.jpg?default=false':'',
+     source_url:'https://openlibrary.org'+e.key
+    };
+   });
+  return json({book,work_id:workId,offset,editions,read_only:true,
+   has_more:entries.length===20&&offset<200,
+   note:'Potential edition identities only. Never treat an Open Library edition as an owned copy.'});
+ }catch(error){
+  return fail('Edition research unavailable: '+String(error.message||'Provider failed'),502);
+ }
+}
 export async function handleIsbnRecoveryApi(request,db,path,
  {fetchers={ol:pacedOL,google:pacedGoogle}}={}){
  if(!path.startsWith('/api/isbn-recovery/'))return null;
@@ -248,6 +287,8 @@ export async function handleIsbnRecoveryApi(request,db,path,
   return catalogue(db,request);
  if(path==='/api/isbn-recovery/online'&&request.method==='GET')
   return online(db,request,fetchers);
+ if(path==='/api/isbn-recovery/work-editions'&&request.method==='GET')
+  return workEditions(db,request,fetchers);
  if(path==='/api/isbn-recovery/verify'&&request.method==='POST'){
   // No D1 reads for 1,500+ online checks. Saved EPUB and edition ownership
   // are independently re-checked by checkOne() when anything is applied.
@@ -256,7 +297,6 @@ export async function handleIsbnRecoveryApi(request,db,path,
   let body;try{body=JSON.parse(raw);}catch{return fail('Invalid JSON');}
   if(!Array.isArray(body.items)||body.items.length<1||body.items.length>3)
    return fail('Check one to three ISBNs at a time');
-  const results=[];
   for(const item of body.items){
    if(!uuid(item?.book_id)||!uuid(item?.edition_id)||
       !canonicalIsbn(item.isbn)||
@@ -266,21 +306,15 @@ export async function handleIsbnRecoveryApi(request,db,path,
       item.book_author.length>400||!item.book_author.trim()||
       !['ebook','hardcover','paperback','audiobook','other'].includes(item.format))
     return fail('Invalid ISBN verification candidate');
-   try{
-    const checked=await verifyIsbnOnline({
-     title:item.book_title,author:item.book_author,format:item.format
-    },item.isbn,item.source,fetchers);
-    results.push({book_id:item.book_id,edition_id:item.edition_id,
-     isbn:canonicalIsbn(item.isbn),source:item.source,
-     status:checked.status,reason:checked.reason,references:checked.references||[]});
-   }catch(error){
-    // Preserve earlier successes in this small batch and do not misclassify
-    // 429/network issues as not_found. The UI resumes at this same ISBN.
-    return json({results,paused:true,
-     error:'Provider unavailable; stop and resume verification: '+String(error.message||'Network error')});
-   }
   }
-  return json({results,paused:false});
+  const report=await verifyIsbnBatch(body.items,fetchers);
+  const results=report.results.map((checked,i)=>({
+   book_id:body.items[i].book_id,edition_id:body.items[i].edition_id,
+   isbn:canonicalIsbn(body.items[i].isbn),source:body.items[i].source,
+   status:checked.status,reason:checked.reason,references:checked.references||[]
+  }));
+  return json({results,paused:report.paused,
+   ...(report.paused?{error:'Provider unavailable; stop and resume verification: '+report.error}:{})});
  }
  if(path==='/api/isbn-recovery/history'&&request.method==='GET'){
   const rows=await all(db,"SELECT id,entity_id,created_at,undone_at FROM change_log "+

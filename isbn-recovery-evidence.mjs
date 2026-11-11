@@ -30,18 +30,30 @@ export function isbn10Equivalent(isbn13){
 }
 export const titleAuthorMatch=(a,b)=>!!(normalized(a?.title)&&normalized(a?.author)&&
  normalized(a.title)===normalized(b?.title)&&normalized(a.author)===normalized(b?.author));
+export function bindingSupportsEdition(binding,format){
+ const value=normalized(binding), target=normalized(format);
+ if(!value)return true; // unknown binding must remain evidence-only
+ const kind=/\b(kindle|ebook|e book|electronic|digital|nook)\b/.test(value)?'ebook':
+  /\b(hardcover|hardback|hard bound|library binding)\b/.test(value)?'hardcover':
+  /\b(paperback|softcover|mass market|trade paper)\b/.test(value)?'paperback':'';
+ if(!kind)return true;
+ return !['ebook','hardcover','paperback'].includes(target)||kind===target;
+}
 const validId=x=>typeof x==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
 const candidate=(book,ed,raw,source,details={})=>{
  const isbn=canonicalIsbn(raw);
  if(!isbn||!validId(book?.id)||!validId(ed?.id)||ed.is_special||String(ed.isbn||'').trim()||
   String(ed.edition_name||'').trim().toLowerCase()==='online display')return null;
  const note=source==='saved_epub'?'Linked EPUB identifier; verify original publication edition':
+  source==='goodreads_csv'?'Goodreads CSV edition record; its ISBN belongs to the Goodreads edition, not necessarily this owned ebook':
   'Book title/author match only; verify the exact edition before approving';
  return {book_id:book.id,edition_id:ed.id,expected_updated_at:ed.updated_at,
   book_title:book.title,book_author:book.author,edition_name:ed.edition_name,
   format:ed.format,isbn,source,source_title:details.title||book.title,
   source_author:details.author||book.author,source_id:details.id||'',
   source_file_id:details.file_id||'',source_goodreads_id:details.goodreads_id||'',
+  source_publisher:details.publisher||'',source_binding:details.binding||'',
+  source_year:details.year||'',source_formats:details.formats||[],
   note};
 };
 export function reconcileIsbnEvidence(books,editions,epubRecords,goodreads=[],calibre=[]){
@@ -89,18 +101,27 @@ export function reconcileIsbnEvidence(books,editions,epubRecords,goodreads=[],ca
    if(!titleAuthorMatch(book,gr))continue;
    // A conflicting Goodreads ID is not eligible for this book.
    if(book.goodreads_id&&gr.goodreadsId&&String(book.goodreads_id)!==String(gr.goodreadsId))continue;
-   const isbn=canonicalIsbn(gr.isbn13)||canonicalIsbn(gr.isbn);
-   for(const ed of missing)add(book,ed,isbn,'goodreads_csv',{
-    title:gr.title,author:gr.author,id:String(gr.goodreadsId||''),
-    goodreads_id:String(gr.goodreadsId||'')
-   });
+   // Preserve both fields when they disagree, rather than silently assuming
+   // the exported ISBN13 overrides a different valid ISBN10.
+   const ids=[...new Set([canonicalIsbn(gr.isbn13),canonicalIsbn(gr.isbn)].filter(Boolean))];
+   for(const ed of missing){
+    if(!bindingSupportsEdition(gr.binding,ed.format))continue;
+    for(const isbn of ids)add(book,ed,isbn,'goodreads_csv',{
+     title:gr.title,author:gr.author,id:String(gr.goodreadsId||''),
+     goodreads_id:String(gr.goodreadsId||''),
+     binding:String(gr.binding||''),publisher:String(gr.publisher||''),
+     year:String(gr.yearPublished||'')
+    });
+   }
   }
   for(const cal of calibreByKey.get(pair(book))||[]){
    for(const ed of missing){
     // A CSV ebook identifier doesn't prove hardcover ISBN identity.
     if(cal.formats?.length&&ed.format==='ebook'&&!cal.formats.some(f=>
      ['EPUB','AZW3','MOBI','PDF'].includes(String(f).toUpperCase())))continue;
-    add(book,ed,cal.isbn,'calibre_local',{title:cal.title,author:cal.authors,id:String(cal.calibre_id||'')});
+    add(book,ed,cal.isbn,'calibre_local',{title:cal.title,author:cal.authors,
+     id:String(cal.calibre_id||''),publisher:String(cal.publisher||''),
+     year:String(cal.publication_date||''),formats:cal.formats||[]});
    }
   }
   if(start===all.length)counts.without_identifiers++;
