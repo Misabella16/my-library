@@ -115,3 +115,31 @@ export async function verifyIsbnOnline(book,isbn,source,{ol=pacedOpenLibrary,goo
  const googleData=await getJson(google,googleUrl);
  return classifyIsbnVerification(book,id,source,olData,googleData);
 }
+
+export async function verifyIsbnBatch(items,{ol=pacedOpenLibrary,google=pacedGoogle}={}){
+ if(!Array.isArray(items)||items.length<1||items.length>3)
+  throw Error('Verification batch must contain one to three proposals');
+ const ids=[...new Set(items.map(x=>canonicalIsbn(x.isbn)).filter(Boolean))];
+ const olUrl='https://openlibrary.org/api/books?'+new URLSearchParams({
+  bibkeys:ids.map(id=>'ISBN:'+id).join(','),format:'json',jscmd:'details'});
+ let source;
+ try{source=await getJson(ol,olUrl);}
+ catch(error){return {results:[],paused:true,error:String(error.message||'Open Library unavailable')};}
+ const googleCache=new Map(),results=[];
+ for(const item of items){
+  const isbn=canonicalIsbn(item.isbn);
+  try{
+   if(!googleCache.has(isbn)){
+    const query=new URLSearchParams({q:'isbn:'+isbn,maxResults:'8',printType:'books'});
+    googleCache.set(isbn,await getJson(google,
+     'https://www.googleapis.com/books/v1/volumes?'+query));
+   }
+   results.push(classifyIsbnVerification({
+    title:item.book_title,author:item.book_author,format:item.format
+   },isbn,item.source,source,googleCache.get(isbn)));
+  }catch(error){
+   return {results,paused:true,error:String(error.message||'Google Books unavailable')};
+  }
+ }
+ return {results,paused:false};
+}
