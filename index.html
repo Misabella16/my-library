@@ -653,6 +653,47 @@
         <div class="epub-preview-list" id="isbn-recovery-history-list"></div>
         <p class="muted">An ISBN is edition-specific. Goodreads and Calibre title/author matches are candidate evidence, not proof that a particular edition carries that ISBN. No ISBN is added without explicit owner approval, a current edition check and checksum validation. Existing ISBNs, special editions, covers, copies, shelves, books and EPUBs remain untouched. Only approved additions can be undone.</p>
       </section>
+    </details>
+    <details class="imports-disclosure">
+      <summary>Use recovered ISBNs to restore missing edition covers and publishers</summary>
+      <section class="surface collection-health" id="isbn-edition-enrich" aria-labelledby="isbn-edition-enrich-heading">
+        <p class="section-kicker">✧ EXACT EDITION ISBN · PREVIEW FIRST</p>
+        <h2 id="isbn-edition-enrich-heading">Find missing cover art and publisher information</h2>
+        <p>Scan your <strong>existing standard editions with valid ISBNs</strong> for missing publisher information or artwork. Research the corresponding Open Library edition using its ISBN, inspect the actual source, and explicitly approve only missing fields. Special editions, owner-selected artwork, copies, shelf locations, EPUBs, reviews and private notes are never changed. The scan uses a cursor to avoid expensive D1 counts. ISBN research runs only after you choose it and can be paused.</p>
+        <div class="collection-health-actions">
+          <button class="btn subtle" id="isbn-edition-enrich-scan" type="button">Scan all missing edition fields</button>
+          <button class="btn" id="isbn-edition-enrich-lookup" type="button" disabled>Check ISBN sources (continue automatically)</button>
+          <button class="btn subtle" id="isbn-edition-enrich-pause" type="button" disabled>Pause research</button>
+          <button class="btn subtle" id="isbn-edition-enrich-resume" type="button" disabled>Resume research</button>
+          <button class="btn subtle" id="isbn-edition-enrich-history" type="button">Recovery history &amp; Undo</button>
+        </div>
+        <p id="isbn-edition-enrich-status" class="small-status" role="status" aria-live="polite">First scan the existing ISBN editions. No website data changes until you approve a specific source cover or missing publisher.</p>
+        <p id="isbn-edition-enrich-stats" class="small-status" aria-live="polite"></p>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="isbn-edition-enrich-filter">Filter editions by title, author or ISBN
+            <input type="search" id="isbn-edition-enrich-filter" placeholder="Search eligible editions" autocomplete="off" disabled>
+          </label>
+        </div>
+        <div id="isbn-edition-enrich-results" class="epub-preview-list"></div>
+        <div class="health-result">
+          <h3>Review one edition</h3>
+          <div id="isbn-edition-enrich-details" class="epub-preview-list"></div>
+          <div class="collection-health-actions">
+            <button class="btn subtle" id="isbn-edition-enrich-preview" type="button" disabled>Recheck this edition (read-only)</button>
+          </div>
+          <label id="isbn-edition-enrich-cover-choice-label" class="collection-health-actions" hidden>
+            <input id="isbn-edition-enrich-cover-choice" type="checkbox" hidden disabled>
+            Include the previewed source cover (only when this edition has no artwork)
+          </label>
+          <label class="collection-health-actions">
+            <input id="isbn-edition-enrich-approve" type="checkbox" disabled>
+            I verified the exact edition ISBN, publisher, and any chosen cover artwork.
+          </label>
+          <button class="btn" id="isbn-edition-enrich-apply" type="button" disabled>Apply approved missing edition details</button>
+        </div>
+        <div id="isbn-edition-enrich-history-list" class="epub-preview-list"></div>
+        <p class="muted">Your previous Goodreads, Calibre, and EPUB ISBN recovery remains separate. This feature only enriches the <em>existing</em> editions after a checksum-valid ISBN is present. Missing cover art is always previewed and labeled possible, not user-verified. If a save response is lost, consult history before trying again; Undo refuses to remove later owner edits.</p>
+      </section>
     </details></details></section>
 </main>
 <footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
