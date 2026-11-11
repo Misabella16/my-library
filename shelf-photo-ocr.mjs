@@ -2,13 +2,13 @@
 // A pinned Tesseract.js engine and English language model are downloaded on
 // demand. The selected photo is processed entirely on the user's device.
 // No photo bytes are posted to a network endpoint.
-const ENGINE_URL='https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.esm.min.js';
+const ENGINE_URL='/api/photo-ocr/engine.js';
 let enginePromise=null;
 async function getEngine(){
  if(!enginePromise){
   enginePromise=import(ENGINE_URL).catch(error=>{
    enginePromise=null;
-   throw Error('Could not load the on-device OCR engine. Check your connection or use iPhone Photos → Live Text.');
+   throw Error('Could not load the local OCR software. Refresh the site and retry, or use iPhone Photos → Live Text.');
   });
  }
  const engine=await enginePromise;
@@ -75,6 +75,11 @@ export async function recognizeShelfPhotoLocally(file,{
  let worker=null;
  try{
   worker=await createWorker('eng',1,{
+   // Same-origin worker, wasm and traineddata prevent Safari CDN script blocks.
+   workerPath:'/api/photo-ocr/worker.js',
+   workerBlobURL:false,
+   corePath:'/api/photo-ocr/core',
+   langPath:'/api/photo-ocr/lang',
    logger:info=>{
     if(info?.status==='recognizing text'){
      const progress=Math.round(Math.max(0,Math.min(1,info.progress||0))*100);
