@@ -192,6 +192,37 @@
         <p id="photo-cover-status" class="small-status" role="status"></p>
         <div id="photo-cover-results" class="photo-match-results" aria-live="polite"></div>
       </div>
+      <div class="photo-search-controls photo-link-workflow" id="photo-link-workflow">
+        <h3>Match a photographed book or add a new one</h3>
+        <p class="muted">Use the title printed on your cover, or paste text from iPhone Live Text. Search your library first to prevent duplicates. You can then pick the exact edition and its artwork.</p>
+        <label for="photo-find-title">Book title from the photo</label>
+        <input id="photo-find-title" type="search" maxlength="250" placeholder="e.g. Bodies of Magic">
+        <label for="photo-find-author">Author (helps avoid duplicates)</label>
+        <input id="photo-find-author" type="text" maxlength="400" placeholder="e.g. Freya Marske">
+        <button class="btn" type="button" id="photo-find-book">Find in My Library</button>
+        <div id="photo-find-results" class="photo-match-results" aria-live="polite"></div>
+        <button class="btn subtle" type="button" id="photo-create-book">+ Create new book if missing</button>
+        <div id="photo-selected-book" class="photo-selected-book" aria-live="polite"></div>
+        <h4>Choose the exact edition</h4>
+        <label for="photo-edition-choice">Existing edition or new edition</label>
+        <select id="photo-edition-choice"></select>
+        <div class="photo-edition-fields">
+          <label>Edition name<input id="photo-edition-name" maxlength="240" placeholder="FairyLoot exclusive edition"></label>
+          <label>Publisher / special edition vendor<input id="photo-edition-vendor" maxlength="120" placeholder="FairyLoot, Illumicrate, OwlCrate…"></label>
+          <label>ISBN (if known)<input id="photo-edition-isbn" maxlength="32" inputmode="numeric" placeholder="Optional"></label>
+          <label>Format<select id="photo-edition-format"><option value="hardcover">Hardcover</option><option value="paperback">Paperback</option><option value="ebook">Ebook</option><option value="other">Other</option></select></label>
+        </div>
+        <label class="photo-special-check"><input type="checkbox" id="photo-edition-special"> Special or exclusive edition</label>
+        <h4>Choose the cover artwork</h4>
+        <p class="muted">Your actual cropped photograph is usually best for exclusive covers. Or search Google Books and Open Library by title and compare their candidate artwork locally. This is not a Google Lens reverse-image search.</p>
+        <button class="btn subtle" type="button" id="photo-find-covers">Find covers in Google Books and Open Library</button>
+        <p id="photo-online-status" class="small-status" role="status" aria-live="polite">Choose a title to search public cover sources.</p>
+        <div id="photo-online-covers" class="photo-online-covers" aria-live="polite"></div>
+        <div id="photo-cover-choice" hidden></div>
+        <button class="btn" id="photo-save-cover" type="button" disabled>Save chosen cover to selected edition</button>
+        <button class="btn subtle" id="photo-open-book" type="button" disabled>Open selected book</button>
+        <p id="photo-book-status" class="small-status" role="status" aria-live="polite">No book selected. Nothing has been saved.</p>
+      </div>
       <div class="photo-search-controls">
         <label for="photo-book-search">Find a pictured book by title or author</label>
         <input id="photo-book-search" type="search" maxlength="150" placeholder="Search the collection…">
