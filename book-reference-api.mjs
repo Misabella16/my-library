@@ -46,6 +46,23 @@ function imageType(bytes,claimed){
   return {type:'image/webp',ext:'webp'};
  return null;
 }
+async function readBoundedImage(response,max=8*1024*1024){
+ const reader=response.body?.getReader?.();
+ if(!reader)return null;
+ const chunks=[];let size=0;
+ try{
+  while(true){
+   const part=await reader.read();
+   if(part.done)break;
+   size+=part.value.byteLength;
+   if(size>max){await reader.cancel();return null;}
+   chunks.push(part.value);
+  }
+ }finally{try{reader.releaseLock();}catch{}}
+ const bytes=new Uint8Array(size);let offset=0;
+ for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+ return bytes;
+}
 export async function handleBookReferenceApi(request,db,env,path,{fetchImage=fetch}={}){
  const goodreads=/^\/api\/books\/([0-9a-f-]{36})\/goodreads-link$/.exec(path);
  if(goodreads){
@@ -90,8 +107,8 @@ export async function handleBookReferenceApi(request,db,env,path,{fetchImage=fet
  if(response.status!==200)return fail('This image URL did not return a direct image (redirects are not followed)',422);
  if(Number(response.headers.get('content-length')||0)>8*1024*1024)return fail('Image is larger than 8 MB',413);
  let bytes;
- try{bytes=new Uint8Array(await response.arrayBuffer());}catch{return fail('Image download failed',502);}
- if(bytes.length>8*1024*1024||bytes.length<64)return fail('Image too large or empty',413);
+ try{bytes=await readBoundedImage(response);}catch{return fail('Image download failed',502);}
+ if(!bytes||bytes.length<64)return fail('Image too large or empty',413);
  const type=imageType(bytes,response.headers.get('content-type'));
  if(!type)return fail('URL must return a real JPEG, PNG or WebP image',415);
  const imageId=crypto.randomUUID(),key='edition-covers/manual-link/'+editionId+'/'+imageId+'.'+type.ext;
