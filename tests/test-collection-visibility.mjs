@@ -79,3 +79,13 @@ test('visible book list excludes hidden/trash without removing canonical records
  assert.match(ui,/data-visibility-action="hide"/);
  assert.match(ui,/data-visibility-action="trash"/);
 });
+
+test('collection summaries wait two seconds and title sorting is server-paginated',()=>{
+ const css=readFileSync(new URL('../collection-compact.css',import.meta.url),'utf8');
+ const worker=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../library.js',import.meta.url),'utf8');
+ assert.match(css,/ease 2s/);
+ assert.match(css,/visibility 0s linear 2s/);
+ assert.match(worker,/const sort=url.searchParams.get\('sort'\)==='za'\?'za':'az'/);
+ assert.match(ui,/sort:state.sort/);
+});
