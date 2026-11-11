@@ -122,10 +122,16 @@ test('Cover URL import accepts only trusted direct image links and preserves pri
  assert.equal(saved.status,201);
  const result=await saved.json();
  assert.equal(images.size,1);
+ assert.equal(sql.prepare('SELECT preferred_edition_id FROM books WHERE id=?')
+  .get(ids[0]).preferred_edition_id,ids[3]);
  assert.equal(sql.prepare('SELECT COUNT(*) AS count FROM edition_images').get().count,2);
  const covers=sql.prepare('SELECT id,display_cover FROM edition_images WHERE edition_id=?').all(ids[3]);
  assert.equal(covers.find(x=>x.id===previous).display_cover,0);
  assert.equal(covers.find(x=>x.id===result.image_id).display_cover,1);
+ const swap=await handleBookReferenceApi(post('/api/books/'+ids[0]+'/display-edition',{
+  edition_id:ids[3]
+ }),db,env,'/api/books/'+ids[0]+'/display-edition');
+ assert.equal(swap.status,200);
 });
 test('virtual shelf tab and metadata panels remain wired to the book page',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
