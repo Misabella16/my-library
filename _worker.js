@@ -25,6 +25,7 @@ import {handleExistingCoverRelinkApi} from './existing-cover-relink-api.mjs';
 import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
 import {handleCalibreRepairApi} from './calibre-repair-api.mjs';
 import {handleShelfLayoutApi} from './visual-shelf-layout-api.mjs';
+import {handleCollectionLayoutApi} from './collection-layout-api.mjs';
 import {handleSiteContentApi} from './site-content-api.mjs';
 import {handleShelfSavedReviewApi} from './shelf-saved-review-api.mjs';
 import {classifyDatabaseError} from './database-errors.mjs';
@@ -287,6 +288,8 @@ async function serveApi(request,env,path){
   if(savedReviewResponse)return savedReviewResponse;
   const siteContentResponse=await handleSiteContentApi(request,env,path);
   if(siteContentResponse)return siteContentResponse;
+  const collectionLayoutResponse=await handleCollectionLayoutApi(request,env,path);
+  if(collectionLayoutResponse)return collectionLayoutResponse;
   const shelfLayoutResponse=await handleShelfLayoutApi(request,db,env,path);
   if(shelfLayoutResponse)return shelfLayoutResponse;
   const calibreRepairResponse=await handleCalibreRepairApi(request,db,env,path);
