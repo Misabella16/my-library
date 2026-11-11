@@ -88,11 +88,15 @@ export async function handleVirtualShelvesApi(request,db,path){
  if(!selection)return fail('Invalid virtual shelf selection');
  if(path==='/api/virtual-shelves/tags'){
   const clauses=whereFor({genre:selection.genre,tag:'',shelf:selection.shelf});
-  const tags=await rows(db,"SELECT t.id,t.label,t.kind,COUNT(*) AS count FROM tags t "+
+  const offset=Math.max(0,Math.min(100000,Number.parseInt(params.get('offset')||'0',10)||0));
+  const limit=60;
+  const allTags=await rows(db,"SELECT t.id,t.label,t.kind,COUNT(*) AS count FROM tags t "+
    "JOIN book_tags bt ON bt.tag_id=t.id JOIN books b ON b.id=bt.book_id "+
    "WHERE NOT "+genre('t')+" AND "+clauses.sql+
-   " GROUP BY t.id,t.label,t.kind ORDER BY count DESC,t.label COLLATE NOCASE LIMIT 75",clauses.args);
-  return json({tags});
+   " GROUP BY t.id,t.label,t.kind ORDER BY count DESC,t.label COLLATE NOCASE LIMIT ? OFFSET ?",
+   [...clauses.args,limit+1,offset]);
+  return json({tags:allTags.slice(0,limit),
+   next_offset:allTags.length>limit?offset+limit:null});
  }
  if(path==='/api/virtual-shelves/books'){
   const cursor=decodeCursor(params.get('cursor')||'');
