@@ -629,6 +629,42 @@
         </div>
         <p id="isbn-recovery-status" class="small-status" role="status" aria-live="polite">Local files are optional. Scanning your saved EPUB and edition metadata requires no new downloads.</p>
         <p id="isbn-recovery-metrics" class="small-status" aria-live="polite"></p>
+        <section id="isbn-verification" aria-labelledby="isbn-verification-heading">
+          <h3 id="isbn-verification-heading">Independently verify ISBNs before approving</h3>
+          <p>Check edition-level ISBN, title, author and available format evidence against Open Library and Google Books. A title-only match, an unverified EPUB identifier or one provider alone is not enough for bulk approval. This is an on-demand scan that progresses automatically and can be paused. No ISBN is saved during verification.</p>
+          <div class="collection-health-actions">
+            <button id="isbn-verification-start" class="btn" type="button" disabled>Verify / resume all ISBN candidates</button>
+            <button id="isbn-verification-pause" class="btn subtle" type="button" disabled>Pause verification or save</button>
+            <button id="isbn-verification-export" class="btn subtle" type="button" disabled>Export verification checkpoint</button>
+            <label class="goodreads-file-label" for="isbn-verification-import">Restore previous verification (optional)
+              <input id="isbn-verification-import" type="file" accept=".json,application/json" disabled>
+            </label>
+          </div>
+          <p id="isbn-verification-status" role="status" aria-live="polite" class="small-status">First run the full local ISBN Recovery scan above, then choose independent verification.</p>
+          <p id="isbn-verification-stats" class="small-status" aria-live="polite"></p>
+          <div class="collection-health-actions">
+            <label class="epub-filter-label" for="isbn-verification-filter">Verification category
+              <select id="isbn-verification-filter" disabled>
+                <option value="all">All proposals</option>
+                <option value="verified">Verified ebook ISBNs</option>
+                <option value="needs_review">Needs edition review</option>
+                <option value="mismatch">Mismatched records</option>
+                <option value="not_found">No reliable match</option>
+                <option value="conflict">Conflicting ISBNs</option>
+                <option value="unchecked">Still unchecked</option>
+              </select>
+            </label>
+            <button id="isbn-verification-prev" class="btn subtle" type="button" disabled>Previous 12</button>
+            <button id="isbn-verification-next" class="btn subtle" type="button" disabled>Next 12</button>
+          </div>
+          <p class="small-status" id="isbn-verification-page"></p>
+          <div id="isbn-verification-results" class="epub-preview-list"></div>
+          <div class="collection-health-actions">
+            <button id="isbn-verification-select" class="btn subtle" type="button" disabled>Select all independently verified ebook ISBNs</button>
+            <button id="isbn-verification-apply" class="btn" type="button" disabled>Apply 0 selected verified ISBNs</button>
+          </div>
+          <p class="muted">Only matches independently corroborated by both providers, with exact ebook format evidence and a linked EPUB, qualify for bulk approval. All other books remain review-only. Each approved ISBN is checked again on the server before saving, with protected editions and Undo history. This process runs only while this page stays open.</p>
+        </section>
         <div class="collection-health-actions">
           <label class="epub-filter-label" for="isbn-recovery-search">Filter recovered ISBN proposals
             <input id="isbn-recovery-search" type="search" placeholder="Title, author or ISBN" autocomplete="off" disabled>
