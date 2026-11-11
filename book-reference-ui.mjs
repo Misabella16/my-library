@@ -17,9 +17,9 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
   const target=document.getElementById('book-reference-tools');
   if(!target||!book)return;
   target.replaceChildren();
-  const source=node('details','reference-section');
-  const label=node('summary','', 'Find missing metadata from a book link');
-  const content=node('div','reference-content');
+  const source=node('details',undefined,'reference-section');
+  const label=node('summary','Find missing metadata from a book link');
+  const content=node('div',undefined,'reference-content');
   const explanation=node('p',
    'Paste a Goodreads book link to connect this existing record to its Goodreads ID. '+
    'We do not scrape Goodreads: the metadata preview searches Open Library using '+
@@ -80,9 +80,9 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
   content.append(explanation,link.wrap,button,feedback);
   source.append(label,content);
   target.append(source);
-  const coverSection=node('details','reference-section');
-  const coverTitle=node('summary','','Change a displayed cover');
-  const coverContent=node('div','reference-content');
+  const coverSection=node('section',undefined,'reference-section');
+  const coverTitle=node('h3','Change the displayed cover');
+  const coverContent=node('div',undefined,'reference-content');
   coverContent.append(node('p',
    'Choose the exact edition. Paste a direct image URL from a supported host or upload a JPG, PNG or WebP. '+
    'Your earlier covers remain available under My Editions & Copies.','muted'));
@@ -139,21 +139,34 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
    coverContent.append(editionLabel,imageLink.wrap,save,photo,note,coverFeedback);
   }
   coverSection.append(coverTitle,coverContent);
-  target.append(coverSection);
-  const locations=node('details','reference-section');
-  locations.append(node('summary','','Where are my physical copies?'));
-  const locationBody=node('div','reference-content');
+  const nearCover=document.getElementById('book-cover-editor');
+  const editButton=document.getElementById('book-edit-cover-btn');
+  if(nearCover&&editButton){
+   nearCover.replaceChildren(coverSection);
+   nearCover.hidden=true;
+   editButton.setAttribute('aria-expanded','false');
+   editButton.addEventListener('click',()=>{
+    const opening=nearCover.hidden;
+    nearCover.hidden=!opening;
+    editButton.setAttribute('aria-expanded',String(opening));
+    editButton.textContent=opening?'✕ Close cover editor':'✎ Edit cover';
+    if(opening)nearCover.scrollIntoView({block:'nearest',behavior:'smooth'});
+   });
+  }else target.append(coverSection);
+  const locations=node('details',undefined,'reference-section');
+  locations.append(node('summary','Where are my physical copies?'));
+  const locationBody=node('div',undefined,'reference-content');
   const copies=editions.flatMap(e=>(e.copies||[]).filter(c=>c.medium==='physical')
    .map(c=>({...c,editionName:e.edition_name||'Edition'})));
   if(!copies.length)locationBody.append(node('p','No physical copies yet. Add one under My Editions & Copies to record its room, bookcase, shelf and position.','muted'));
   for(const copy of copies){
-   const form=node('form','reference-location-form');
+   const form=node('form',undefined,'reference-location-form');
    const caption=node('strong',copy.editionName+' · '+copy.ownership);
    form.append(caption);
    const fields=[
     ['Room','room'],['Bookcase','bookcase'],['Shelf','shelf'],['Position','shelf_position']
    ];
-   const controls=node('div','reference-location-fields');
+   const controls=node('div',undefined,'reference-location-fields');
    const inputs={};
    for(const [name,key] of fields){
     const entry=field(name,copy[key]||'');
