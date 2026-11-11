@@ -22,7 +22,7 @@ const dateValue=v=>{
  return d.getUTCFullYear()===+m[1]&&d.getUTCMonth()+1===+m[2]&&d.getUTCDate()===+m[3]
   ?m[1]+'-'+m[2]+'-'+m[3]:null;
 };
-const fields=['rating','review','date_started','date_finished'];
+const fields=['rating','review','date_started','date_finished','goodreads_id'];
 const same=(a,b)=>a===b||((a==null||a==='')&&(b==null||b===''));
 export function validateSyncRows(input,limit=MAX_PREVIEW){
  if(!Array.isArray(input)||input.length<1||input.length>limit)
@@ -98,6 +98,9 @@ export async function planGoodreadsSync(db,items){
  return items.map(item=>{
   const book=books.get(item.book_id);
   if(!book)return {book_id:item.book_id,status:'review',reason:'Library book is unavailable or archived.'};
+  if(book.goodreads_id&&item.goodreadsId&&book.goodreads_id!==item.goodreadsId)
+   return {book_id:book.id,title:book.title,status:'review',
+    reason:'The CSV uses a different Goodreads edition ID. Keep the existing link and review manually.'};
   const matched=book.goodreads_id&&book.goodreads_id===item.goodreadsId ||
    (importNormalize(book.title)===importNormalize(item.title)&&
     importNormalize(book.author)===importNormalize(item.author));
@@ -113,6 +116,9 @@ export async function planGoodreadsSync(db,items){
    if(existing===null||existing==='')changes[key]=value;
    else if(!same(existing,value))conflicts[key]='Existing value is preserved';
   }
+  // Goodreads CSV Book Id is the stable destination for the book page.
+  // Link only an unlinked canonical book, after safe exact-work matching.
+  if(item.goodreadsId&&!book.goodreads_id)changes.goodreads_id=item.goodreadsId;
   const assigned=shelfMap.get(book.id)||new Set();
   const missingShelves=item.shelves.filter(s=>!assigned.has(s.toLocaleLowerCase()));
   if(missingShelves.length)changes.shelves=missingShelves;
@@ -202,7 +208,7 @@ export async function undoGoodreadsSync(db,batchId){
   "WHERE batch_id=? AND action='goodreads_sync_existing' AND undone_at IS NULL",[batchId]);
  if(!logs.length)return bad('No changes to undo',409);
  const ids=logs.map(x=>x.entity_id);
- const books=await all(db,'SELECT id,rating,review,date_started,date_finished,updated_at FROM books '+
+ const books=await all(db,'SELECT id,rating,review,date_started,date_finished,goodreads_id,updated_at FROM books '+
   'WHERE archived_at IS NULL AND id IN ('+placeholders(ids)+')',ids);
  const bookMap=new Map(books.map(x=>[x.id,x]));
  const memberships=await all(db,'SELECT bs.book_id,s.name FROM book_shelves bs '+
