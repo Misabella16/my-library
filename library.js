@@ -457,7 +457,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       await perform(btn,async()=>{await api('/api/books/'+state.selectedId+'/shelves/'+btn.dataset.removeShelf,{method:'DELETE'});await selectBook(state.selectedId)},'Shelf removed');
     }
     if(btn.dataset.displayCover){
-      await perform(btn,async()=>{await api('/api/editions/'+btn.dataset.editionId+'/display-cover',{method:'PATCH',data:{image_id:btn.dataset.displayCover}});await selectBook(state.selectedId)},'Display cover updated');
+      await perform(btn,async()=>{await api('/api/editions/'+btn.dataset.editionId+'/display-cover',{method:'PATCH',data:{image_id:btn.dataset.displayCover}});await api('/api/books/'+state.selectedId+'/display-edition',{method:'POST',data:{edition_id:btn.dataset.editionId}});await listBooks();await selectBook(state.selectedId)},'Display cover updated');
     }
     if(btn.dataset.lookupIsbnCover){
       const editionId=safeId(btn.dataset.lookupIsbnCover);
