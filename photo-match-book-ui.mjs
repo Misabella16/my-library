@@ -334,7 +334,8 @@ export function initPhotoBookMatching(api,{
  save.addEventListener('click',async()=>{
   if(!book?.id){say('Select an existing book or create a new one first.');return;}
   if(busy)return;
-  if(choice!=='photo'&&queryKey!==(text(title)+'\n'+text(author,400))){
+  if(choice!=='photo'&&choice!=='google-upload'&&
+   queryKey!==(text(title)+'\n'+text(author,400))){
    say('Title or author changed. Search online covers again before saving.');return;
   }
   if(typeof confirm==='function'&&!confirm(
