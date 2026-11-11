@@ -13,6 +13,12 @@ const node=(tag,text,cls)=>{
 };
 const sourceLabel={saved_epub:'Linked EPUB metadata',goodreads_csv:'Goodreads CSV',
  calibre_local:'Calibre library'};
+export function filterIsbnProposals(proposals,query=''){
+ const needle=normalized(query);
+ return proposals.filter(item=>!needle||normalized(
+  item.book_title+' '+item.book_author+' '+item.edition_name+' '+item.isbn
+ ).includes(needle));
+}
 export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
  const root=document.getElementById('isbn-recovery');
  if(!root)return null;
@@ -80,6 +86,10 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
    if(seen.has(k))return false;
    seen.add(k);return true;
   });
+  // A successful scan must populate the visible list, not only the totals.
+  // Otherwise the UI reports thousands found but renders "0 proposals".
+  display=filterIsbnProposals(candidates,search.value);
+  offset=0;previewed.clear();confirmations.clear();
   done=true;phase=types.length;
   render();
   say('Full scan completed. '+candidates.length+' unique ISBN proposals found. '+
@@ -87,9 +97,7 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
    'Preview each page and approve only the edition whose ISBN you verified.');
  }
  function listFilter(){
-  const query=normalized(search.value);
-  display=candidates.filter(p=>!query||normalized(
-   p.book_title+' '+p.book_author+' '+p.edition_name+' '+p.isbn).includes(query));
+  display=filterIsbnProposals(candidates,search.value);
   offset=0;previewed.clear();confirmations.clear();render();
  }
  const page=()=>display.slice(offset,offset+20);
@@ -132,7 +140,8 @@ export function initIsbnRecovery(api,{onUpdated=async()=>{}}={}){
   else results.append(fragment);
   showMetrics();
   const end=Math.min(offset+shown.length,display.length);
-  $('page').textContent=done?(offset+1)+'–'+end+' of '+display.length+' proposals':'';
+  $('page').textContent=done?(display.length?offset+1:0)+'–'+end+
+   ' of '+display.length+' proposals':'';
   controls();
  }
  async function readLocal(){
