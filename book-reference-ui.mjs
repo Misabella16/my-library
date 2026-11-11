@@ -129,6 +129,8 @@ export function initBookReferenceUI(api,{onUpdated=async()=>{},message=()=>{}}={
      if(!validId(added.image?.id))throw Error('Cover uploaded but no image ID was returned');
      await api('/api/editions/'+edition.value+'/display-cover',{method:'PATCH',
       data:{image_id:added.image.id}});
+     await api('/api/books/'+book.id+'/display-edition',{method:'POST',
+      data:{edition_id:edition.value}});
      message('Uploaded cover selected. Earlier covers have been preserved.');
      await onUpdated(book.id);
     }catch(error){coverFeedback.textContent='Cover upload or selection failed: '+error.message;}
