@@ -15,20 +15,24 @@ const COMMON_GENRE=["fantasy","romance","mystery","thriller","horror","science f
 const genre=alias=>"("+alias+".kind='genre' OR lower(trim("+alias+".label)) IN ("+
  COMMON_GENRE.map(name=>"'"+name+"'").join(",")+"))";
 const limitValue=(value,fallback=18,max=60)=>{
- const n=Number(value);return Number.isSafeInteger(n)?Math.min(max,Math.max(1,n)):fallback;
+ const n=value===null||value===''?NaN:Number(value);
+ return Number.isSafeInteger(n)?Math.min(max,Math.max(1,n)):fallback;
 };
 function decodeCursor(value){
  if(!value)return null;
  if(value.length>1200)return false;
  try{
-  const raw=JSON.parse(atob(value.replace(/-/g,'+').replace(/_/g,'/')+
-   '='.repeat((4-value.length%4)%4)));
+  const encoded=atob(value.replace(/-/g,'+').replace(/_/g,'/')+
+   '='.repeat((4-value.length%4)%4));
+  const raw=JSON.parse(new TextDecoder().decode(
+   Uint8Array.from(encoded,char=>char.charCodeAt(0))));
   if(!Array.isArray(raw)||raw.length!==2||typeof raw[0]!=='string'||
    raw[0].length>500||!uuid(raw[1]))return false;
   return raw;
  }catch{return false;}
 }
-const encodeCursor=(title,id)=>btoa(JSON.stringify([title,id]))
+const encodeCursor=(title,id)=>btoa(String.fromCharCode(
+ ...new TextEncoder().encode(JSON.stringify([title,id]))))
  .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 function scope(params){
  const genre=params.get('genre')||'all',tag=params.get('tag')||'',
