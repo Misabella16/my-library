@@ -20,6 +20,7 @@ import {handleOfflineTextReviewApi} from './offline-text-review-api.mjs';
 import {handleEditionRecoveryApi} from './edition-recovery-api.mjs';
 import {handleLocalEditionApi} from './edition-local-api.mjs';
 import {handleIsbnRecoveryApi} from './isbn-recovery-api.mjs';
+import {handleIsbnEditionEnrichApi} from './isbn-edition-enrich-api.mjs';
 import {handleExistingCoverRelinkApi} from './existing-cover-relink-api.mjs';
 import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
 import {handleCalibreRepairApi} from './calibre-repair-api.mjs';
@@ -292,6 +293,8 @@ async function serveApi(request,env,path){
   if(calibreRepairResponse)return calibreRepairResponse;
   const calibreResponse=await handleCalibreCompareApi(request,db,path);
   if(calibreResponse)return calibreResponse;
+  const isbnEditionResponse=await handleIsbnEditionEnrichApi(request,db,path);
+  if(isbnEditionResponse)return isbnEditionResponse;
   const isbnRecoveryResponse=await handleIsbnRecoveryApi(request,db,path);
   if(isbnRecoveryResponse)return isbnRecoveryResponse;
   const localEditionResponse=await handleLocalEditionApi(request,db,env,path);
