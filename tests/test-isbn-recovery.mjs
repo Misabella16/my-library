@@ -527,7 +527,8 @@ test('Each unverified ISBN offers action even when online providers rate-limit',
  for(const proof of [undefined,{status:'not_found'},{status:'needs_review'},
   {status:'probable'},{status:'verified'}]){
   assert.equal(canManuallyReview(p,proof),true);
-  assert.equal(isBulkEligible(p,proof,new Set()),proof?.status==='verified');
+  assert.equal(isBulkEligible(p,proof?.status==='verified'?{...p,...proof}:proof,new Set()),
+   proof?.status==='verified');
  }
  assert.equal(canManuallyReview(p,{status:'mismatch'}),false);
  assert.equal(canManuallyReview(null,null),false);
