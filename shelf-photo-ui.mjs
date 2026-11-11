@@ -2,6 +2,7 @@ import {extractIsbn13} from './epub-isbn.mjs';
 import {scanShelfTextLocal,shelfTitleLines} from './shelf-photo-text.mjs';
 import {recognizeShelfPhotoLocally} from './shelf-photo-ocr.mjs';
 import {initShelfCoverComparison} from './shelf-cover-ui.mjs';
+import {initPhotoBookMatching} from './photo-match-book-ui.mjs';
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
 import {createPhotoReview,setReviewPhotos,assignPhotoMatch,addPhotoBookMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
@@ -706,6 +707,14 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    renderReview();
   },
   onSelectBook
+ });
+ const bookPhotoMatch=initPhotoBookMatching(api,{
+  getPhotoCrop:()=>coverComparison?.croppedCover()||null,
+  onSelectBook
+ });
+ const olderHint=document.getElementById?.('photo-cover-hint');
+ olderHint?.addEventListener('change',()=>{
+  if(olderHint.value?.trim())bookPhotoMatch?.prefill(olderHint.value);
  });
  return {clear};
 }
