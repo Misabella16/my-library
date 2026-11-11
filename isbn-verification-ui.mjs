@@ -1,4 +1,5 @@
 // Opt-in independent verification and strict bulk approval for ISBN Recovery.
+import {normalized} from './isbn-recovery-evidence.mjs';
 // Reads the parent scanner's in-memory proposals. No D1 reads during source checks.
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
 export const proofKey=p=>p.edition_id+'|'+p.isbn+'|'+p.source;
@@ -12,8 +13,9 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  const $=s=>root.querySelector('#isbn-verification-'+s);
  const start=$('start'),pause=$('pause'),select=$('select'),apply=$('apply'),
   status=$('status'),stats=$('stats'),results=$('results'),filter=$('filter'),
-  pagePrev=$('prev'),pageNext=$('next'),save=$('export'),load=$('import');
- if([start,pause,select,apply,status,stats,results,filter,pagePrev,pageNext,save,load].some(x=>!x))
+  pagePrev=$('prev'),pageNext=$('next'),save=$('export'),load=$('import'),
+  search=$('search');
+ if([start,pause,select,apply,status,stats,results,filter,pagePrev,pageNext,save,load,search].some(x=>!x))
   return null;
  let proofs=new Map(),chosen=new Set(),cursor=0,offset=0,
   checking=false,applying=false,shouldStop=false,uncertain=false,errors='';
@@ -22,8 +24,9 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  const checked=()=>candidates().filter(p=>proofs.has(proofKey(p))).length;
  const say=x=>{status.textContent=x;};
  function filtered(){
-  const mode=filter.value;
+  const mode=filter.value,needle=normalized(search.value);
   return candidates().filter(p=>{
+   if(needle&&!normalized([p.book_title,p.book_author,p.edition_name,p.isbn].join(' ')).includes(needle))return false;
    const proof=proofs.get(proofKey(p));
    if(mode==='all')return true;
    if(mode==='conflict')return conflicts().has(p.edition_id);
@@ -38,6 +41,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
   select.disabled=active||!getVerified().length;
   apply.disabled=active||uncertain||!chosen.size;
   filter.disabled=active||!isScanComplete();
+  search.disabled=active||!isScanComplete();
   pagePrev.disabled=active||offset===0;
   pageNext.disabled=active||offset+12>=filtered().length;
   save.disabled=active||!proofs.size;
@@ -314,6 +318,7 @@ export function initIsbnVerifier(api,{getCandidates,getConflicts,isScanComplete,
  });
  apply.addEventListener('click',applySelected);
  filter.addEventListener('change',()=>{offset=0;draw();});
+ search.addEventListener('input',()=>{offset=0;draw();});
  pagePrev.addEventListener('click',()=>{offset=Math.max(0,offset-12);draw();});
  pageNext.addEventListener('click',()=>{offset+=12;draw();});
  save.addEventListener('click',()=>{
