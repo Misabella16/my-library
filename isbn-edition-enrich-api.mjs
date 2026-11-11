@@ -44,8 +44,9 @@ export function verifiedEditionDetails(record,edition){
 async function sourceLookup(isbn,fetcher){
  const uri='https://openlibrary.org/api/books?'+new URLSearchParams({
   bibkeys:'ISBN:'+isbn,format:'json',jscmd:'details'});
- const response=await fetcher(uri,{method:'GET',redirect:'error',headers:{
+ const response=await fetcher(uri,{method:'GET',redirect:'manual',headers:{
   accept:'application/json','user-agent':'MyLibraryVerifiedEditionReview/1.0'}});
+ if(response.status>=300&&response.status<400)throw Error('Open Library returned a redirect (HTTP '+response.status+'); no source record accepted');
  if(response.status===403||response.status===429)
   throw Error('Open Library is rate limiting; stop and retry later');
  if(response.status!==200)throw Error('Open Library response was HTTP '+response.status);
