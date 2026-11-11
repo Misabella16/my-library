@@ -1,5 +1,6 @@
 import {handleGoodreadsApi} from './goodreads-import-api.mjs';
 import {handleGoodreadsSyncApi} from './goodreads-sync-api.mjs';
+import {handleGoodreadsProfileApi} from './goodreads-profile-api.mjs';
 import {handleEpubApi} from './epub-import-api.mjs';
 import {handleDigitalFilesApi} from './digital-files-api.mjs';
 import {handleEpubTitleCleanupApi} from './epub-title-cleanup-api.mjs';
@@ -285,6 +286,8 @@ async function serveApi(request,env,path){
   }
   const goodreadsSyncResponse=await handleGoodreadsSyncApi(request,db,path);
   if(goodreadsSyncResponse)return goodreadsSyncResponse;
+  const profileResponse=await handleGoodreadsProfileApi(request,env,path);
+  if(profileResponse)return profileResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
   const visibilityResponse=await handleCollectionVisibilityApi(request,db,path);
