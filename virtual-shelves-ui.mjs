@@ -10,6 +10,7 @@ const node=(tag,cls,text)=>{
 };
 function coverCard(book,onSelect,onPreview=()=>{}){
  const item=node('article','virtual-book');
+ let hoverTimer=null;
  const button=node('button','virtual-book-open');
  button.type='button';button.title='Open '+book.title;
  const cover=node('div','virtual-book-cover');
@@ -32,8 +33,13 @@ function coverCard(book,onSelect,onPreview=()=>{}){
   toggle.setAttribute('aria-expanded',String(open));
   onPreview(open?book:null);
  });
- item.addEventListener('mouseenter',()=>onPreview(book));
+ item.addEventListener('mouseenter',()=>{
+  if(hoverTimer)clearTimeout(hoverTimer);
+  hoverTimer=setTimeout(()=>{hoverTimer=null;onPreview(book);},2000);
+ });
  item.addEventListener('mouseleave',()=>{
+  if(hoverTimer)clearTimeout(hoverTimer);
+  hoverTimer=null;
   if(!item.classList.contains('preview-open'))onPreview(null);
  });
  item.addEventListener('focusin',()=>onPreview(book));
