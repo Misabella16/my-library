@@ -12,6 +12,7 @@ function fixture(){
  const sql=new DatabaseSync(':memory:');
  sql.exec(readFileSync(new URL('../database/001_initial_schema.sql',import.meta.url),'utf8'));
  const p=statement=>({
+  run:async()=>({meta:{changes:sql.prepare(statement).run().changes}}),
   bind(...args){
    const s=sql.prepare(statement);
    return {

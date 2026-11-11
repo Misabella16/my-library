@@ -1,6 +1,7 @@
 // Owner-only virtual shelves: genre masters, tag sub-shelves and named reading lists.
 // All pages are bounded and cursor-based; no book metadata is changed by browsing.
 import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
+import {ensureBookVisibilitySchema} from './collection-visibility-api.mjs';
 const HEAD={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEAD});
 const fail=(error,status=400)=>json({error},status);
@@ -43,7 +44,7 @@ function scope(params){
  return {genre,tag,shelf};
 }
 function whereFor(selection){
- const conditions=['b.archived_at IS NULL'],args=[];
+ const conditions=['b.archived_at IS NULL','NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id AND (v.hidden_at IS NOT NULL OR v.trashed_at IS NOT NULL))'],args=[];
  if(selection.genre==='uncategorized'){
   conditions.push("NOT EXISTS (SELECT 1 FROM book_tags bg JOIN tags g ON g.id=bg.tag_id "+
    "WHERE bg.book_id=b.id AND "+genre('g')+")");
@@ -65,19 +66,24 @@ function whereFor(selection){
 export async function handleVirtualShelvesApi(request,db,path){
  if(!path.startsWith('/api/virtual-shelves'))return null;
  if(request.method!=='GET')return fail('Method not allowed',405);
+ await ensureBookVisibilitySchema(db);
  const params=new URL(request.url).searchParams;
  if(path==='/api/virtual-shelves/overview'){
   const [total,genres,lists,unsorted]=await Promise.all([
-   one(db,"SELECT COUNT(*) AS count FROM books WHERE archived_at IS NULL"),
+   one(db,"SELECT COUNT(*) AS count FROM books b WHERE b.archived_at IS NULL "+
+    "AND NOT EXISTS(SELECT 1 FROM book_visibility v WHERE v.book_id=b.id)"),
    rows(db,"SELECT t.id,t.label,COUNT(*) AS count FROM tags t "+
     "JOIN book_tags bt ON bt.tag_id=t.id JOIN books b ON b.id=bt.book_id "+
     "WHERE "+genre('t')+" AND b.archived_at IS NULL "+
+    "AND NOT EXISTS(SELECT 1 FROM book_visibility v WHERE v.book_id=b.id) "+
     "GROUP BY t.id,t.label ORDER BY count DESC,t.label COLLATE NOCASE LIMIT 100"),
    rows(db,"SELECT s.id,s.name,s.origin,COUNT(*) AS count FROM shelves s "+
     "JOIN book_shelves bs ON bs.shelf_id=s.id JOIN books b ON b.id=bs.book_id "+
-    "WHERE b.archived_at IS NULL GROUP BY s.id,s.name,s.origin "+
+    "WHERE b.archived_at IS NULL AND NOT EXISTS(SELECT 1 FROM book_visibility v WHERE v.book_id=b.id) "+
+    "GROUP BY s.id,s.name,s.origin "+
     "ORDER BY count DESC,s.name COLLATE NOCASE LIMIT 80"),
    one(db,"SELECT COUNT(*) AS count FROM books b WHERE b.archived_at IS NULL "+
+    "AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id AND (v.hidden_at IS NOT NULL OR v.trashed_at IS NOT NULL)) "+
     "AND NOT EXISTS (SELECT 1 FROM book_tags bt JOIN tags t ON t.id=bt.tag_id "+
     "WHERE bt.book_id=b.id AND "+genre('t')+")")
   ]);

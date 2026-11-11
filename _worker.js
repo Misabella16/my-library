@@ -28,6 +28,7 @@ import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
 import {handleCalibreRepairApi} from './calibre-repair-api.mjs';
 import {handleShelfLayoutApi} from './visual-shelf-layout-api.mjs';
 import {handleCollectionLayoutApi} from './collection-layout-api.mjs';
+import {handleCollectionVisibilityApi,ensureBookVisibilitySchema} from './collection-visibility-api.mjs';
 import {handleSiteContentApi} from './site-content-api.mjs';
 import {handleShelfSavedReviewApi} from './shelf-saved-review-api.mjs';
 import {classifyDatabaseError} from './database-errors.mjs';
@@ -286,6 +287,8 @@ async function serveApi(request,env,path){
   if(goodreadsSyncResponse)return goodreadsSyncResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
+  const visibilityResponse=await handleCollectionVisibilityApi(request,db,path);
+  if(visibilityResponse)return visibilityResponse;
   const referenceResponse=await handleBookReferenceApi(request,db,env,path);
   if(referenceResponse)return referenceResponse;
   const virtualShelfResponse=await handleVirtualShelvesApi(request,db,path);
@@ -347,10 +350,12 @@ async function serveApi(request,env,path){
   if(path==='/api/books'&&method==='GET') {
     const url=new URL(request.url);
     const q=string(url.searchParams.get('q'),150);
+    const sort=url.searchParams.get('sort')==='za'?'za':'az';
+    await ensureBookVisibilitySchema(db);
     const limit=Math.max(1,Math.min(100,parseInt(url.searchParams.get('limit')||'60',10)||60));
     const offset=Math.max(0,Math.min(1000000,parseInt(url.searchParams.get('offset')||'0',10)||0));
     const search='%'+q.replace(/[%_\\]/g,c=>'\\'+c)+'%';
-    const where=" FROM books b WHERE b.archived_at IS NULL"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
+    const where=" FROM books b WHERE b.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id AND (v.hidden_at IS NOT NULL OR v.trashed_at IS NOT NULL))"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
     const args=q?[search,search]:[];
     // The frontend already knows the total when fetching subsequent pages.
     // Skip scanning the full active book index on every Load more request.
@@ -361,7 +366,7 @@ async function serveApi(request,env,path){
       PREFERRED_BOOK_COVER_SQL+' AS cover_id'+
       // Use the active identity index for paging instead of a full
       // title COLLATE NOCASE sort of thousands of imported books.
-      where+' ORDER BY b.normalized_title,b.normalized_author,b.id LIMIT ? OFFSET ?',[...args,limit,offset]);
+      where+' ORDER BY b.normalized_title '+(sort==='za'?'DESC':'ASC')+',b.normalized_author '+(sort==='za'?'DESC':'ASC')+',b.id '+(sort==='za'?'DESC':'ASC')+' LIMIT ? OFFSET ?',[...args,limit,offset]);
     return json({books,...(includeTotal?{total:count?.total||0}:{}),offset,limit});
   }
   if(path==='/api/books'&&method==='POST') {

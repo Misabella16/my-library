@@ -1,4 +1,5 @@
 // A lightweight shelf-of-shelves browser. Each row loads only when expanded.
+import {synopsisPlainText} from './synopsis-format.mjs';
 // The existing physical-location browser stays intact in a separate view.
 const byId=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{
@@ -9,6 +10,7 @@ const node=(tag,cls,text)=>{
 };
 function coverCard(book,onSelect,onPreview=()=>{}){
  const item=node('article','virtual-book');
+ let hoverTimer=null;
  const button=node('button','virtual-book-open');
  button.type='button';button.title='Open '+book.title;
  const cover=node('div','virtual-book-cover');
@@ -22,7 +24,7 @@ function coverCard(book,onSelect,onPreview=()=>{}){
  button.addEventListener('click',()=>{onPreview(null);onSelect(book.id);});
  const summary=node('aside','virtual-book-synopsis');
  summary.append(node('strong','',book.title),node('small','',book.author||'Unknown author'),
-  node('p','',book.synopsis||'No synopsis saved yet. Open the book to add one.'));
+  node('p','',synopsisPlainText(book.synopsis)||'No synopsis saved yet. Open the book to add one.'));
  const toggle=node('button','virtual-book-info','ⓘ Synopsis');
  toggle.type='button';toggle.setAttribute('aria-expanded','false');
  toggle.addEventListener('click',()=>{
@@ -31,8 +33,13 @@ function coverCard(book,onSelect,onPreview=()=>{}){
   toggle.setAttribute('aria-expanded',String(open));
   onPreview(open?book:null);
  });
- item.addEventListener('mouseenter',()=>onPreview(book));
+ item.addEventListener('mouseenter',()=>{
+  if(hoverTimer)clearTimeout(hoverTimer);
+  hoverTimer=setTimeout(()=>{hoverTimer=null;onPreview(book);},2000);
+ });
  item.addEventListener('mouseleave',()=>{
+  if(hoverTimer)clearTimeout(hoverTimer);
+  hoverTimer=null;
   if(!item.classList.contains('preview-open'))onPreview(null);
  });
  item.addEventListener('focusin',()=>onPreview(book));
@@ -52,7 +59,7 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
  const viewButtons=[...panel.querySelectorAll('[data-virtual-view]')];
  const rowsStatus=message=>{status.textContent=message;};
  const previewText=book=>book.title+' · '+(book.author||'Unknown author')+'\n'+
-  (book.synopsis||'No synopsis saved yet. Open the book to add one.');
+  (synopsisPlainText(book.synopsis)||'No synopsis saved yet. Open the book to add one.');
  const showBrowsePreview=book=>{
   if(!browsePreview)return;
   browsePreview.hidden=!book;

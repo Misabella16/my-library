@@ -95,7 +95,7 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
 
 /* Hover/focus shelf details. Touch users may press Details to pin the panel. */
 .visual-shelf-book{position:relative}
-.visual-shelf-hover{display:none;position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);
+.visual-shelf-hover{display:block;opacity:0;visibility:hidden;pointer-events:none;transition:none;position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);
  transform:translateX(-50%);width:min(340px,calc(100vw - 44px));max-height:330px;overflow:auto;
  background:#fffaf0;color:#263b31;padding:15px;border:1px solid #bfa98b;border-radius:10px;
  box-shadow:0 12px 32px #231d1944;overflow-wrap:anywhere;text-align:left}
@@ -103,9 +103,10 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
 .visual-shelf-hover p{margin:5px 0;font-size:12px;line-height:1.45}
 .visual-shelf-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
 .visual-shelf-tags .badge{font-size:10px;padding:4px 7px}
-.visual-shelf-book:hover .visual-shelf-hover,
+.visual-shelf-book:hover .visual-shelf-hover{opacity:1;visibility:visible;pointer-events:auto;
+ transition:opacity .12s ease 2s,visibility 0s linear 2s}
 .visual-shelf-book:focus-within .visual-shelf-hover,
-.visual-shelf-book.details-open .visual-shelf-hover{display:block}
+.visual-shelf-book.details-open .visual-shelf-hover{opacity:1;visibility:visible;pointer-events:auto;transition:none}
 .visual-shelf-details-toggle{margin-top:4px}
 .visual-shelf-order-buttons{display:flex;gap:3px}
 .visual-shelf-order-buttons .btn{min-width:26px;min-height:30px}
