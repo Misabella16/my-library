@@ -10,7 +10,7 @@ const js = readFileSync(new URL('../library.js', import.meta.url), 'utf8');
 
 test('Rococo theme stays loaded once with only a scoped collection override afterward', () => {
   const styles = [...html.matchAll(/<link\s+rel="stylesheet"\s+href="([^"]+)"/g)].map(m => m[1]);
-  assert.deepEqual(styles, ['/library.css', '/cute.css', '/vintage.css', '/pastoral.css', '/collection-compact.css']);
+  assert.deepEqual(styles, ['/library.css', '/cute.css', '/vintage.css', '/pastoral.css', '/collection-compact.css', '/virtual-shelves.css']);
   assert.match(compact, /#library/);
   assert.match(html, /<meta name="theme-color" content="#f7f1ed">/);
 });

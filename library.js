@@ -8,6 +8,8 @@ import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
 import {initVisualShelves} from './visual-shelves-ui.mjs';
+import {initVirtualShelves} from './virtual-shelves-ui.mjs';
+import {initBookReferenceUI} from './book-reference-ui.mjs';
 import {initCollectionGrid} from './collection-grid-ui.mjs';
 import {initCollectionHealth} from './collection-health-ui.mjs';
 import {initOnlineEnrich} from './online-enrich-ui.mjs';
@@ -30,6 +32,7 @@ const state = {
 };
 const $ = s => document.querySelector(s);
 let collectionGrid=null;
+let bookReference=null;
 const safe = x => String(x??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'' :'&#39;'}[ch]));
 const safeId = x => /^[0-9a-f-]{36}$/i.test(x||'') ? x : '';
 const statuses = {unread:'Want to read',reading:'Reading',read:'Read',paused:'Paused',dnf:'Did not finish'};
@@ -194,6 +197,7 @@ function renderDetail(){
       (b.rating!==null&&b.rating!==undefined?'<span class="badge">'+safe(b.rating)+' ★</span>':'')+
       '</div></div></div>'+
     '<section class="detail-section"><h3>Synopsis</h3><p class="detail-text">'+safe(b.synopsis||'No synopsis added yet.')+'</p></section>'+
+    '<section class="detail-section"><h3>Metadata, covers & locations</h3><div id="book-reference-tools"></div></section>'+
     '<section class="detail-section"><h3>Genres & Tags</h3><div class="tag-row">'+(genreTags||'<span class="muted">No tags yet.</span>')+'</div>'+
       '<form class="inline-form" data-form="add-tag"><input name="label" placeholder="Add tag" required maxlength="90" aria-label="New tag"><select name="kind" aria-label="Tag type"><option value="personal">My tag</option><option value="genre">Genre</option></select><button class="btn mini" type="submit">Add</button></form></section>'+
     '<section class="detail-section"><h3>My shelves</h3><div class="tag-row">'+(shelves||'<span class="muted">No personal shelves yet.</span>')+'</div>'+
@@ -343,6 +347,7 @@ function renderDetail(){
     }catch(error){dest.textContent='Could not load EPUBs: '+(error.message||'Request failed');}
     finally{load.disabled=false;}
   });
+  bookReference?.mount(b);
 }
 async function refreshCurrent({list=true}={}){
   if(list) await listBooks();
@@ -404,11 +409,11 @@ async function submitForm(form,button){
   }
 }
 document.addEventListener('DOMContentLoaded',async()=>{
-  let visualShelves=null;
+  let visualShelves=null,virtualShelves=null;
   document.querySelectorAll('[data-tab]').forEach(tab=>tab.addEventListener('click',()=>{
     document.querySelectorAll('[data-tab]').forEach(t=>{t.classList.toggle('active',t===tab);t.setAttribute('aria-current',t===tab?'page':'false');});
     document.querySelectorAll('.tab-panel').forEach(p=>{p.hidden=p.id!==tab.dataset.tab;p.classList.toggle('active',p.id===tab.dataset.tab);});
-    if(tab.dataset.tab==='shelves')visualShelves?.activate();
+    if(tab.dataset.tab==='shelves')virtualShelves?.activate();
   }));
   $('#add-book').addEventListener('click',()=>showDialog('add-book-dialog'));
   $('#refresh').addEventListener('click',async()=>{
@@ -452,7 +457,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       await perform(btn,async()=>{await api('/api/books/'+state.selectedId+'/shelves/'+btn.dataset.removeShelf,{method:'DELETE'});await selectBook(state.selectedId)},'Shelf removed');
     }
     if(btn.dataset.displayCover){
-      await perform(btn,async()=>{await api('/api/editions/'+btn.dataset.editionId+'/display-cover',{method:'PATCH',data:{image_id:btn.dataset.displayCover}});await selectBook(state.selectedId)},'Display cover updated');
+      await perform(btn,async()=>{await api('/api/editions/'+btn.dataset.editionId+'/display-cover',{method:'PATCH',data:{image_id:btn.dataset.displayCover}});await api('/api/books/'+state.selectedId+'/display-edition',{method:'POST',data:{edition_id:btn.dataset.editionId}});await listBooks();await selectBook(state.selectedId)},'Display cover updated');
     }
     if(btn.dataset.lookupIsbnCover){
       const editionId=safeId(btn.dataset.lookupIsbnCover);
@@ -550,6 +555,9 @@ document.addEventListener('DOMContentLoaded',async()=>{
     status:$('#collection-arrangement-status'),undo:$('#collection-undo')
   });
   await collectionGrid.load();
+  bookReference=initBookReferenceUI(api,{onUpdated:async bookId=>{
+    await listBooks();await selectBook(bookId);
+  },message:showMessage});
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
     const digitalImporter=initDigitalImport(api,{onImported:async()=>{
@@ -663,6 +671,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
       await selectBook(bookId);
       document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
     }});
+    virtualShelves=initVirtualShelves(api,{
+      activatePhysical:()=>visualShelves?.activate(),
+      onSelectBook:async bookId=>{
+        document.querySelector('[data-tab="library"]')?.click();
+        await selectBook(bookId);
+        document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
+      }
+    });
     initShelfPhotoAssistant(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);

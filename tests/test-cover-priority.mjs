@@ -47,6 +47,20 @@ test('Owner-verified special-edition cover priority requires no destructive cove
   assert.equal(after.display_cover,1);
  }finally{f.close();}
 });
+test('A deliberately chosen main edition cover overrides the special-edition default',()=>{
+ const f=fixture();
+ try{
+  f.sql.prepare('UPDATE books SET preferred_edition_id=? WHERE id=?').run(normal,bid);
+  assert.equal(f.query(),generic);
+  const card={preferred_edition_id:normal,editions:[
+   {id:normal,is_special:0,copies:[],images:[{id:generic,display_cover:1,
+    role:'cover',match_status:'unverified',has_saved_asset:1}]},
+   {id:special,is_special:1,copies:[{medium:'physical',ownership:'owned'}],
+    images:[{id:seCover,display_cover:0,role:'cover',match_status:'user_verified',has_saved_asset:1}]}
+  ]};
+  assert.equal(preferredDetailCoverId(card),generic);
+ }finally{f.close();}
+});
 test('Detail and grid cover preference agree, with owned special editions first',()=>{
  const f=fixture();
  try{
