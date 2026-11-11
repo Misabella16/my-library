@@ -10,7 +10,7 @@ import {handleIsbnRecoveryApi} from '../isbn-recovery-api.mjs';
 import {filterIsbnProposals} from '../isbn-recovery-ui.mjs';
 import {classifyIsbnVerification,verifyIsbnOnline,verifyIsbnBatch,sameBookIdentity} from '../isbn-independent-verification.mjs';
 import {parseGoodreadsExport} from '../goodreads-preview.mjs';
-import {isBulkEligible,proofKey} from '../isbn-verification-ui.mjs';
+import {isBulkEligible,proofKey,canManuallyReview} from '../isbn-verification-ui.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const BOOK='11111111-1111-4111-8111-111111111111';
 const ED='22222222-2222-4222-8222-222222222222';
@@ -520,4 +520,53 @@ test('Probable ISBN proof never authorizes bulk approval',()=>{
  const probable={...p,status:'probable'};
  assert.equal(isBulkEligible(p,good,new Set()),true);
  assert.equal(isBulkEligible(p,probable,new Set()),false);
+});
+
+test('Each unverified ISBN offers action even when online providers rate-limit',()=>{
+ const p={edition_id:ED,isbn:ISBN,source:'saved_epub'};
+ for(const proof of [undefined,{status:'not_found'},{status:'needs_review'},
+  {status:'probable'},{status:'verified'}]){
+  assert.equal(canManuallyReview(p,proof),true);
+  assert.equal(isBulkEligible(p,proof,new Set()),proof?.status==='verified');
+ }
+ assert.equal(canManuallyReview(p,{status:'mismatch'}),false);
+ assert.equal(canManuallyReview(null,null),false);
+ assert.equal(isBulkEligible(p,{...p,status:'verified'},new Set([ED])),false);
+ const script=readFileSync(new URL('../isbn-verification-ui.mjs',import.meta.url),'utf8');
+ assert.match(script,/Check this ISBN online/);
+ assert.match(script,/Review and approve this ISBN manually/);
+ assert.match(script,/Resolve this conflicting ISBN manually/);
+ assert.match(script,/https:\/\/openlibrary\.org\/isbn\//);
+ assert.match(script,/https:\/\/books\.google\.com\/books\?q=isbn%3A/);
+ assert.match(script,/https:\/\/www\.goodreads\.com\/search\?q=/);
+ assert.match(script,/async function checkOneOnline\(item\)/);
+ assert.match(script,/async function reviewOne\(item,proof\)/);
+ assert.match(script,/const inspection=response\.results\?\.\[0\]/);
+ assert.match(script,/if\(writeSubmitted\)\{/);
+ assert.match(script,/!canManuallyReview\(item,proof\)/);
+});
+test('One edition-recovery workflow exposes two steps without duplicate proposal clutter',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const workflow=html.indexOf('id="edition-metadata-workflow"');
+ const addBooks=html.indexOf('id="add-library-books"');
+ const advanced=html.indexOf('id="repair-advanced"');
+ const isbn=html.indexOf('id="isbn-recovery"');
+ const cover=html.indexOf('id="isbn-edition-enrich"');
+ const oldList=html.indexOf('id="isbn-recovery-extra"');
+ assert.ok(workflow>0&&workflow<addBooks&&addBooks<advanced);
+ assert.ok(workflow<isbn&&isbn<cover&&cover<advanced);
+ assert.ok(isbn<oldList&&oldList<cover);
+ assert.match(html,/id="isbn-verification-search"/);
+ assert.match(html,/<details class="imports-disclosure" id="isbn-recovery-extra">/);
+ assert.equal((html.match(/id="isbn-recovery-results"/g)||[]).length,1);
+ assert.equal((html.match(/id="isbn-verification-results"/g)||[]).length,1);
+ assert.equal((html.match(/id="isbn-edition-enrich-results"/g)||[]).length,1);
+ let depth=0;for(const tag of html.matchAll(/<\/?details\b[^>]*>/g)){
+  depth+=tag[0].startsWith('</')?-1:1;
+  assert.ok(depth>=0,'unexpected closing details');
+ }
+ assert.equal(depth,0,'unclosed details disclosures');
+ const ui=readFileSync(new URL('../isbn-verification-ui.mjs',import.meta.url),'utf8');
+ assert.match(ui,/search\.addEventListener\('input'/);
+ assert.match(ui,/search\.disabled=active\|\|!isScanComplete\(\)/);
 });
