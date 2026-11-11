@@ -220,6 +220,13 @@
           <option value="0">No rotation</option><option value="90">90° clockwise</option>
           <option value="270">90° counterclockwise</option><option value="180">180°</option>
         </select>
+        <a class="btn subtle" id="photo-google-images-link" href="#" target="_blank" rel="noopener noreferrer">Search Google Images for this exact edition</a>
+        <p class="muted photo-google-help">Opens real Google Images results in a new tab. Search uses your title, author, and special-edition details. Long-press the correct cover and save it to Photos, then return here to upload it. Nothing is saved automatically.</p>
+        <label for="photo-google-file">Upload a cover saved from Google Images (JPG, PNG, WebP)
+          <input id="photo-google-file" type="file" accept="image/jpeg,image/png,image/webp">
+        </label>
+        <a id="photo-google-lens-link" class="photo-source-link" href="#" target="_blank" rel="noopener noreferrer">Search your photograph using Google Lens</a>
+        <p class="muted photo-google-help">Google Lens requires you to choose or upload the photograph on Google's site. My Library does not share your private photo automatically.</p>
         <button class="btn subtle" type="button" id="photo-find-covers">Find covers in Google Books and Open Library</button>
         <p id="photo-online-status" class="small-status" role="status" aria-live="polite">Choose a title to search public cover sources.</p>
         <div id="photo-online-covers" class="photo-online-covers" aria-live="polite"></div>

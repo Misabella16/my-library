@@ -2,6 +2,7 @@
 // Search is title-based Google Books / Open Library, with optional local artwork
 // resemblance. It is not a Google Lens reverse image service.
 import {coverSignature,visualCoverSimilarity} from './shelf-cover-compare.mjs';
+import {googleImagesUrl,GOOGLE_LENS_URL} from './google-image-search.mjs';
 
 const el=(tag,text,cls)=>{
  const e=document.createElement(tag);
@@ -74,13 +75,57 @@ export function initPhotoBookMatching(api,{
   selected=id('photo-selected-book'),editionChoice=id('photo-edition-choice'),
   onlineButton=id('photo-find-covers'),create=id('photo-create-book'),
   save=id('photo-save-cover'),open=id('photo-open-book'),
-  artwork=id('photo-cover-choice'),rotation=id('photo-artwork-rotate');
+  artwork=id('photo-cover-choice'),rotation=id('photo-artwork-rotate'),
+  googleLink=id('photo-google-images-link'),googleFile=id('photo-google-file'),
+  googleLens=id('photo-google-lens-link');
  if(!title||!lookup||!results||!sourceResults||!selected||!editionChoice||
   !save||!artwork||!onlineButton||!create||!status)return null;
  let book=null,candidates=[],choice='photo',busy=false,queryKey='',created=false;
+ let googleUpload=null,googlePreviewUrl='';
  const say=message=>{status.textContent=message;};
  const sourceSay=message=>{if(onlineStatus)onlineStatus.textContent=message;};
  const text=(field,max=250)=>safeText(field?.value,max);
+ function updateGoogleLink(){
+  if(!googleLink)return;
+  const url=googleImagesUrl({
+   title:text(title),author:text(author,400),editionName:text(editionName,240),
+   vendor:text(vendor,120),isSpecial:!!isSpecial?.checked
+  });
+  if(url){
+   googleLink.href=url;googleLink.removeAttribute?.('aria-disabled');
+  }else{
+   googleLink.href='https://www.google.com/imghp';
+   googleLink.setAttribute?.('aria-disabled','true');
+  }
+  googleLink.title=url?
+   'Open an exact-edition Google Images search in a new tab':
+   'Enter a book title before searching exact-edition covers';
+ }
+ for(const control of [title,author,editionName,vendor]){
+  control?.addEventListener('input',updateGoogleLink);
+  control?.addEventListener('change',updateGoogleLink);
+ }
+ isSpecial?.addEventListener('change',updateGoogleLink);
+ if(googleLens)googleLens.href=GOOGLE_LENS_URL;
+ googleLink?.addEventListener('click',event=>{
+  if(!text(title)){event.preventDefault();say('Enter a book title first to search Google Images.');}
+ });
+ googleFile?.addEventListener('change',()=>{
+  const file=googleFile.files?.[0];
+  if(!file)return;
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||
+   file.size<64||file.size>8*1024*1024){
+   sourceSay('Choose a valid JPEG, PNG or WebP cover saved from Google Images, under 8 MB.');
+   googleFile.value='';return;
+  }
+  if(googlePreviewUrl&&typeof URL.revokeObjectURL==='function'){
+   URL.revokeObjectURL(googlePreviewUrl);googlePreviewUrl='';
+  }
+  googleUpload=file;
+  if(typeof URL.createObjectURL==='function')googlePreviewUrl=URL.createObjectURL(file);
+  choice='google-upload';renderCovers();
+  sourceSay('Cover image selected. Choose the correct existing or new edition, then save the artwork. No book changes yet.');
+ });
  function setWorking(value){
   busy=value;
   for(const button of [lookup,create,save,onlineButton])button.disabled=value;
@@ -195,6 +240,20 @@ export function initPhotoBookMatching(api,{
  }
  function renderCovers(){
   sourceResults.replaceChildren();
+  if(googleUpload){
+   const picked=el('article',undefined,'photo-online-cover');
+   const preview=el('img');
+   if(googlePreviewUrl)preview.src=googlePreviewUrl;
+   else preview.hidden=true;
+   preview.alt='Cover saved from Google Images';
+   const keep=el('button',choice==='google-upload'?'✓ Selected: saved Google image':'Use saved Google image','btn mini subtle');
+   keep.type='button';keep.addEventListener('click',()=>{
+    choice='google-upload';renderCovers();
+   });
+   picked.append(preview,el('strong','Saved from Google Images'),
+    el('p',googleUpload.name+' · '+Math.ceil(googleUpload.size/1024)+' KB','muted'),keep);
+   sourceResults.append(picked);
+  }
   const photoOption=el('article',undefined,'photo-online-cover');
   const photoButton=el('button',choice==='photo'?'✓ Use my photographed cover':'Use my photographed cover','btn mini subtle');
   photoButton.type='button';photoButton.addEventListener('click',()=>{
@@ -277,7 +336,8 @@ export function initPhotoBookMatching(api,{
  save.addEventListener('click',async()=>{
   if(!book?.id){say('Select an existing book or create a new one first.');return;}
   if(busy)return;
-  if(choice!=='photo'&&queryKey!==(text(title)+'\n'+text(author,400))){
+  if(choice!=='photo'&&choice!=='google-upload'&&
+   queryKey!==(text(title)+'\n'+text(author,400))){
    say('Title or author changed. Search online covers again before saving.');return;
   }
   if(typeof confirm==='function'&&!confirm(
@@ -287,7 +347,7 @@ export function initPhotoBookMatching(api,{
   try{
    let bytes=choice==='photo'?
     await rotatePhotographedCover(await getPhotoCrop(),rotation?.value||0):
-    await coverBlob(choice);
+    choice==='google-upload'?googleUpload:await coverBlob(choice);
    if(!bytes||!['image/jpeg','image/png','image/webp'].includes(bytes.type))
     throw Error('No usable cover crop. Select a photo and crop one cover first, or choose an online suggestion.');
    if(bytes.size>8*1024*1024)throw Error('Cover image exceeds 8 MB');
@@ -313,9 +373,10 @@ export function initPhotoBookMatching(api,{
   const which=event.target?.closest?.('[data-photo-choosing]');
   if(which){choice=which.dataset.photoChoosing;renderCovers();}
  });
- renderBook();renderCovers();
+ renderBook();renderCovers();updateGoogleLink();
  return {prefill:(value,writer='')=>{
   title.value=safeText(value,250);
   if(writer)author.value=safeText(writer,400);
+  updateGoogleLink();
  }};
 }
