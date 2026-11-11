@@ -146,7 +146,7 @@
   <section class="tab-panel" id="photos" hidden>
     <div class="site-section-artwork" data-site-section-image="photosBanner" hidden></div>
     <div class="surface"><h2 data-site-text="photosTitle">Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
-      <div class="tip"><strong>Privacy-first helper:</strong> <span data-site-text="photosTip">Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Some browsers can detect visible text locally; others require typing the titles. Cover-art image matching is not yet supported. You can review multiple books found in one photo. No photo or copy information is saved automatically.</span></div>
+      <div class="tip"><strong>Privacy-first helper:</strong> <span data-site-text="photosTip">Photos stay on your device. Use on-device OCR to read printed titles, including from your iPhone, then review matches before linking books. No physical copies are created automatically.</span></div>
       <label class="upload">Choose shelf photos <input id="photo-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
       <p id="photo-status" class="small-status" role="status">Choose a shelf photo to preview privately.</p>
       <div id="photo-preview" class="preview-pictures"></div>
@@ -158,10 +158,23 @@
       </div>
       <div class="photo-search-controls">
         <h3>Recognize book titles on covers and spines</h3>
-        <p class="muted">Try local text detection when your browser supports it, or type the titles you can see, one per line. Images stay on this device. Each suggested book must be reviewed; no copies are created automatically.</p>
-        <button class="btn subtle" id="photo-scan-text" type="button">Read text from first shelf photo (if supported)</button>
-        <label for="photo-title-lines">Visible titles, one per line (up to 12)</label>
-        <textarea id="photo-title-lines" rows="5" maxlength="2200" placeholder="Title one&#10;Title two"></textarea>
+        <p class="muted">Read printed titles from a selected photo on iPhone or computer. The browser downloads its OCR language model once, then recognizes the image on this device. Check spelling and combine split-up spine words before searching. Nothing is added to your library automatically.</p>
+        <label for="photo-ocr-source">Photo to read
+          <select id="photo-ocr-source" aria-label="Choose which shelf photo to read"></select>
+        </label>
+        <label for="photo-ocr-rotation">Text direction
+          <select id="photo-ocr-rotation">
+            <option value="auto">Auto: upright, then sideways if needed</option>
+            <option value="upright">Upright only (fastest)</option>
+            <option value="right">Rotate 90° clockwise</option>
+            <option value="left">Rotate 90° counterclockwise</option>
+            <option value="upside-down">Rotate 180°</option>
+          </select>
+        </label>
+        <button class="btn subtle" id="photo-scan-text" type="button">Read titles from selected photo</button>
+        <p id="photo-text-status" class="small-status" role="status" aria-live="polite">Choose a photo above, then tap Read titles. Works on iPhone Safari with on-device OCR.</p>
+        <label for="photo-title-lines">Detected titles and text, one title per line (review before matching)</label>
+        <textarea id="photo-title-lines" rows="7" maxlength="6000" placeholder="Recognized titles will appear here. You can also paste text from iPhone Photos → Live Text."></textarea>
         <label for="photo-title-photo">Associate reviewed books with this photo</label>
         <select id="photo-title-photo"></select>
         <button class="btn" id="photo-match-titles" type="button">Find these titles in My Library</button>

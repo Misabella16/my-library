@@ -21,7 +21,7 @@ export async function scanShelfTextLocal(file){
   const detector=new TextDetector();
   const detected=await detector.detect(bitmap);
   const text=detected.map(hit=>String(hit.rawValue||'')).join('\n');
-  return {supported:true,lines:shelfTitleLines(text)};
+  return {supported:true,lines:shelfTitleLines(text,40)};
  }catch{return {supported:false,lines:[]};}
  finally{bitmap?.close?.();}
 }

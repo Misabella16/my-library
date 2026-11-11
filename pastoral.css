@@ -655,3 +655,22 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-vi
  justify-content:space-between;gap:8px;flex-wrap:wrap}
 .photo-match-result .muted{font-size:13px}
 @media(max-width:620px){.photo-search-controls{grid-template-columns:1fr}}
+
+/* Compact shelf-photo OCR controls, including narrow iPhone layouts. */
+#photos .photo-search-controls select#photo-ocr-source,
+#photos .photo-search-controls select#photo-ocr-rotation{
+ display:block;width:100%;max-width:100%;min-width:0;
+ padding:10px 12px;margin:6px 0 11px;border:1px solid #ddcbd4;
+ border-radius:9px;background:#fffdf9;color:#644b5b;font:inherit
+}
+#photos #photo-scan-text{width:100%;min-height:48px}
+#photos #photo-text-status{
+ font-size:13px;line-height:1.55;overflow-wrap:anywhere;
+ padding:9px 10px;margin-top:8px;border-radius:8px;
+ background:#fffaf7;border:1px solid #ecdbe3
+}
+#photos #photo-title-lines{min-height:165px;resize:vertical}
+@media(max-width:570px){
+ #photos .photo-search-controls select#photo-ocr-source,
+ #photos .photo-search-controls select#photo-ocr-rotation{font-size:16px}
+}
