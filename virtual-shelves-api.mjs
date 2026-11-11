@@ -44,7 +44,7 @@ function scope(params){
  return {genre,tag,shelf};
 }
 function whereFor(selection){
- const conditions=['b.archived_at IS NULL','NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id)'],args=[];
+ const conditions=['b.archived_at IS NULL','NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id AND (v.hidden_at IS NOT NULL OR v.trashed_at IS NOT NULL))'],args=[];
  if(selection.genre==='uncategorized'){
   conditions.push("NOT EXISTS (SELECT 1 FROM book_tags bg JOIN tags g ON g.id=bg.tag_id "+
    "WHERE bg.book_id=b.id AND "+genre('g')+")");
@@ -83,7 +83,7 @@ export async function handleVirtualShelvesApi(request,db,path){
     "GROUP BY s.id,s.name,s.origin "+
     "ORDER BY count DESC,s.name COLLATE NOCASE LIMIT 80"),
    one(db,"SELECT COUNT(*) AS count FROM books b WHERE b.archived_at IS NULL "+
-    "AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id) "+
+    "AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id AND (v.hidden_at IS NOT NULL OR v.trashed_at IS NOT NULL)) "+
     "AND NOT EXISTS (SELECT 1 FROM book_tags bt JOIN tags t ON t.id=bt.tag_id "+
     "WHERE bt.book_id=b.id AND "+genre('t')+")")
   ]);
