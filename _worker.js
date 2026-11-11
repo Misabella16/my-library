@@ -355,7 +355,7 @@ async function serveApi(request,env,path){
     const limit=Math.max(1,Math.min(100,parseInt(url.searchParams.get('limit')||'60',10)||60));
     const offset=Math.max(0,Math.min(1000000,parseInt(url.searchParams.get('offset')||'0',10)||0));
     const search='%'+q.replace(/[%_\\]/g,c=>'\\'+c)+'%';
-    const where=" FROM books b WHERE b.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id)"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
+    const where=" FROM books b WHERE b.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id AND (v.hidden_at IS NOT NULL OR v.trashed_at IS NOT NULL))"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
     const args=q?[search,search]:[];
     // The frontend already knows the total when fetching subsequent pages.
     // Skip scanning the full active book index on every Load more request.
