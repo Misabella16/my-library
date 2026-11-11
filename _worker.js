@@ -15,6 +15,7 @@ import {handleShelfBulkLocationApi} from './shelf-photo-bulk-location-api.mjs';
 import {handleVisualShelvesApi} from './visual-shelves-api.mjs';
 import {handleVirtualShelvesApi} from './virtual-shelves-api.mjs';
 import {handleBookReferenceApi} from './book-reference-api.mjs';
+import {handlePhotoOnlineCoverApi} from './photo-online-cover-api.mjs';
 import {handleCollectionHealthApi} from './collection-health-api.mjs';
 import {handleOnlineEnrichApi} from './online-enrich-api.mjs';
 import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
@@ -292,6 +293,8 @@ async function serveApi(request,env,path){
   if(goodreadsResponse) return goodreadsResponse;
   const visibilityResponse=await handleCollectionVisibilityApi(request,db,path);
   if(visibilityResponse)return visibilityResponse;
+  const onlinePhotoResponse=await handlePhotoOnlineCoverApi(request,path);
+  if(onlinePhotoResponse)return onlinePhotoResponse;
   const referenceResponse=await handleBookReferenceApi(request,db,env,path);
   if(referenceResponse)return referenceResponse;
   const virtualShelfResponse=await handleVirtualShelvesApi(request,db,path);
