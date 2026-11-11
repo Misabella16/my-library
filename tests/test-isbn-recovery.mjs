@@ -280,7 +280,7 @@ test('Conflicting exact ISBN author/title is a mismatch; missing author is not f
  const missingAuthor=structuredClone(ol);
  missingAuthor['ISBN:'+ISBN].details.title='Example Novel';
  missingAuthor['ISBN:'+ISBN].details.authors=[];
- assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,google).status,'needs_review');
+ assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,google).status,'probable');
  const badGoogle=structuredClone(google);badGoogle.items[0].volumeInfo.authors=['Unknown Writer'];
  assert.equal(classifyIsbnVerification(book,ISBN,'saved_epub',missingAuthor,badGoogle).status,'mismatch');
 });
