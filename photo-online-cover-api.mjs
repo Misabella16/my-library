@@ -69,6 +69,34 @@ async function readBounded(res,max=850000){
  for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}
  return bytes;
 }
+const allowedCoverRedirect=url=>{
+ try{
+  const u=new URL(url);
+  if(u.protocol!=='https:'||u.username||u.password||u.port)return false;
+  const h=u.hostname.toLowerCase();
+  return ['books.google.com','covers.openlibrary.org','books.googleusercontent.com',
+   'lh3.googleusercontent.com','lh4.googleusercontent.com','lh5.googleusercontent.com',
+   'lh6.googleusercontent.com'].includes(h)||h.endsWith('.archive.org');
+ }catch{return false;}
+};
+async function trustedImageFetch(url,fetcher){
+ let current=url;
+ for(let i=0;i<4;i++){
+  if(!allowedCoverRedirect(current))throw Error('Untrusted cover redirect');
+  const res=await fetcher(current,{method:'GET',redirect:'manual',
+   headers:{accept:'image/jpeg,image/png,image/webp'}});
+  if([301,302,303,307,308].includes(res.status)){
+   const location=res.headers.get('location');
+   if(!location)throw Error('Missing cover redirect destination');
+   const target=new URL(location,current).href;
+   if(!allowedCoverRedirect(target))throw Error('Untrusted cover redirect');
+   current=target;
+   continue;
+  }
+  return res;
+ }
+ throw Error('Too many cover redirects');
+}
 const imageMime=(data,type)=>{
  const m=(type||'').split(';')[0].toLowerCase();
  if(m==='image/jpeg'&&data[0]===255&&data[1]===216&&data[2]===255)return m;
@@ -108,8 +136,7 @@ export async function handlePhotoOnlineCoverApi(request,path,{fetcher=fetch}={})
   const source=resolveSourceImage(params.get('key'));
   if(!source)return fail('Invalid cover source');
   let res;
-  try{res=await fetcher(source,{method:'GET',redirect:'manual',
-    headers:{accept:'image/jpeg,image/png,image/webp'}});}
+  try{res=await trustedImageFetch(source,fetcher);}
   catch{return fail('Cover provider unavailable',502);}
   if(res.status!==200)return fail('Cover image unavailable',404);
   const declared=Number(res.headers.get('content-length')||0);
