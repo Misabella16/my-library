@@ -80,10 +80,14 @@ export function classifyIsbnVerification(book,isbn,localSource,openLibraryData,g
   references:refs};
 }
 async function getJson(fetcher,url){
- const response=await fetcher(url,{method:'GET',redirect:'error',headers:{
+ const response=await fetcher(url,{method:'GET',redirect:'manual',headers:{
   accept:'application/json','user-agent':'MyLibraryISBNIndependentVerifier/1.0'}});
  if([403,429].includes(response.status)||response.status>=500){
   const error=new Error('Provider temporarily unavailable (HTTP '+response.status+')');
+  error.retryable=true;throw error;
+ }
+ if(response.status>=300&&response.status<400){
+  const error=new Error('ISBN provider returned a redirect (HTTP '+response.status+'); verify the source endpoint');
   error.retryable=true;throw error;
  }
  if(response.status===404)return {};
