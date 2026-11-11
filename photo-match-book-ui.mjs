@@ -2,7 +2,7 @@
 // Search is title-based Google Books / Open Library, with optional local artwork
 // resemblance. It is not a Google Lens reverse image service.
 import {coverSignature,visualCoverSimilarity} from './shelf-cover-compare.mjs';
-import {googleImagesUrl} from './google-image-search.mjs';
+import {googleImagesUrl,GOOGLE_LENS_URL} from './google-image-search.mjs';
 
 const el=(tag,text,cls)=>{
  const e=document.createElement(tag);
@@ -76,7 +76,8 @@ export function initPhotoBookMatching(api,{
   onlineButton=id('photo-find-covers'),create=id('photo-create-book'),
   save=id('photo-save-cover'),open=id('photo-open-book'),
   artwork=id('photo-cover-choice'),rotation=id('photo-artwork-rotate'),
-  googleLink=id('photo-google-images-link'),googleFile=id('photo-google-file');
+  googleLink=id('photo-google-images-link'),googleFile=id('photo-google-file'),
+  googleLens=id('photo-google-lens-link');
  if(!title||!lookup||!results||!sourceResults||!selected||!editionChoice||
   !save||!artwork||!onlineButton||!create||!status)return null;
  let book=null,candidates=[],choice='photo',busy=false,queryKey='',created=false;
@@ -105,6 +106,7 @@ export function initPhotoBookMatching(api,{
   control?.addEventListener('change',updateGoogleLink);
  }
  isSpecial?.addEventListener('change',updateGoogleLink);
+ if(googleLens)googleLens.href=GOOGLE_LENS_URL;
  googleLink?.addEventListener('click',event=>{
   if(!text(title)){event.preventDefault();say('Enter a book title first to search Google Images.');}
  });
