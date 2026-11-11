@@ -69,8 +69,19 @@ export function classifyIsbnVerification(book,isbn,localSource,openLibraryData,g
  ];
  if(olConflict||googleConflict)return {status:'mismatch',
   reason:'An exact-ISBN source record contradicts this book’s title or author',references:refs};
- if(!olMatch&&!googleMatches.length)return {status:'not_found',
-  reason:'No confirming edition-level ISBN record was found in either provider',references:refs};
+ // An actual source record with missing author data must not be mislabeled
+ // "not found"; an exact title and ISBN plus corroborating Google authors
+ // can be probable, but never automatically verified.
+ const olTitleOnly=olExact&&titleMatchesOwner(detail?.title,book)&&olAuthors.length===0;
+ if(olTitleOnly&&googleMatches.length)return {status:'probable',
+  reason:'Open Library confirms the exact ISBN and title but omits author names; Google Books supplies a matching author. Confirm the actual edition.',
+  references:refs};
+ if(!olMatch&&!googleMatches.length){
+  if(olExact||googleExact.length)return {status:'needs_review',
+   reason:'An exact-ISBN source exists but its author/title evidence is incomplete',references:refs};
+  return {status:'not_found',
+   reason:'No edition-level ISBN record was found in either provider',references:refs};
+ }
  if(!olMatch||!googleMatches.length)return {status:'needs_review',
   reason:'Only one independent source corroborates this ISBN and book identity',references:refs};
  if(localSource!=='saved_epub')return {status:'probable',
