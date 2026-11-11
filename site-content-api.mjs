@@ -19,7 +19,7 @@ export const SITE_TEXT_DEFAULTS=Object.freeze({
  shelvesTitle:"My Shelves",
  shelvesTip:"Browse owned physical copies by room, bookcase and shelf, switch between covers and spines, and edit each copy’s real location separately.",
  photosTitle:"Shelf Photos",
- photosTip:"Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Some browsers can detect visible text locally; others require typing the titles. Cover-art image matching is not yet supported. You can review multiple books found in one photo. No photo or copy information is saved automatically.",
+ photosTip:"Selected photos stay on your device. Printed text can be read with on-device OCR, including on iPhone Safari when the OCR engine is available. You must review matches before associating books; no physical copy is created automatically.",
  importsTitle:"Imports & Undo",
  importsDescription:"Preview your Goodreads export, then import only the new books you choose. Existing books and special editions remain untouched.",
  studioTitle:"Customize My Library",
