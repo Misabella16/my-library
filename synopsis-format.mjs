@@ -16,7 +16,6 @@ const decodeEntities=value=>String(value??'').replace(
   return named[key.toLowerCase()]??match;
  });
 const allowed=new Set(['p','strong','b','em','i','br','ul','ol','li','blockquote']);
-const block=new Set(['p','br','li','blockquote']);
 export function synopsisPlainText(raw){
  const decoded=decodeEntities(raw||'');
  return decodeEntities(decoded.replace(/<\s*br\s*\/?>/gi,'\n')
@@ -25,7 +24,7 @@ export function synopsisPlainText(raw){
   .replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
 }
 export function synopsisToSafeHtml(raw){
- const source=decodeEntities(raw||'').trim();
+ const source=decodeEntities(decodeEntities(raw||'')).trim();
  if(!source)return '<p>No synopsis added yet.</p>';
  // A one-time second decode handles twice-encoded literal <p> tags
  // without ever trusting tags or attributes from the imported text.
