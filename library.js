@@ -200,10 +200,12 @@ function renderDetail(){
     '<div class="detail-cover-action">'+bookCover(b.title,currentCover(b))+
     '<button class="btn mini subtle detail-cover-edit-button" id="book-edit-cover-btn" type="button" aria-expanded="false" aria-controls="book-cover-editor">✎ Edit cover</button></div>'+
     '<form class="edit-form detail-inline-form" data-form="edit-book" aria-label="Edit book information">'+
+      '<h3 class="detail-inline-label">Edit book information</h3>'+
       '<label>Title<input name="title" value="'+safe(b.title)+'" required maxlength="300"></label>'+
       '<label>Author<input name="author" value="'+safe(b.author)+'" maxlength="400"></label>'+
       '<label>Reading status<select name="reading_status">'+options(Object.entries(statuses),b.reading_status)+'</select></label>'+
-      '<div class="actions"><button class="btn mini" type="submit">Save book information</button></div>'+
+      '<div class="actions"><button class="btn mini" type="submit">Save book information</button>'+ 
+      '<span class="small-status" id="book-info-state" role="status">Edit directly, then save.</span></div>'+
     '</form></div>'+
     '<div id="book-cover-editor" class="book-cover-editor" hidden></div>'+
     '<section class="detail-section editable-synopsis"><h3>Synopsis</h3>'+
@@ -217,7 +219,7 @@ function renderDetail(){
     '<section class="detail-section book-visibility-actions"><h3>Collection visibility</h3>'+
       '<div class="actions start"><button class="btn mini subtle" type="button" data-visibility-action="hide" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Hide from collection</button>'+
       '<button class="btn mini subtle" type="button" data-visibility-action="trash" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Move to Trash (recoverable)</button></div></section>'+
-    '<section class="detail-section"><h3>Metadata, covers & locations</h3><div id="book-reference-tools"></div></section>'+
+    '<section class="detail-section"><h3>Metadata sources & physical locations</h3><div id="book-reference-tools"></div></section>'+
     '<section class="detail-section"><h3>Genres & Tags</h3><div class="tag-row">'+(genreTags||'<span class="muted">No tags yet.</span>')+'</div>'+
       '<form class="inline-form" data-form="add-tag"><input name="label" placeholder="Add tag" required maxlength="90" aria-label="New tag"><select name="kind" aria-label="Tag type"><option value="personal">My tag</option><option value="genre">Genre</option></select><button class="btn mini" type="submit">Add</button></form></section>'+
     '<section class="detail-section"><h3>My shelves</h3><div class="tag-row">'+(shelves||'<span class="muted">No personal shelves yet.</span>')+'</div>'+
@@ -386,16 +388,32 @@ async function submitForm(form,button){
     await api('/api/books/'+bookId,{method:'PATCH',data:{review:formValue(form,'review'),rating:formValue(form,'rating')===''?null:Number(formValue(form,'rating')),expected_updated_at:detail.updated_at}});
     await refreshCurrent();
   },'Your review is saved');
-  if(mode==='edit-book') return perform(button,async()=>{
-    await api('/api/books/'+bookId,{method:'PATCH',data:{title:formValue(form,'title'),author:formValue(form,'author'),reading_status:formValue(form,'reading_status'),expected_updated_at:detail.updated_at}});
-    await refreshCurrent();
-  },'Book information updated');
-  if(mode==='edit-synopsis') return perform(button,async()=>{
-    const text=formValue(form,'synopsis');
-    await api('/api/books/'+bookId,{method:'PATCH',
-      data:{synopsis:text,expected_updated_at:detail.updated_at}});
-    await refreshCurrent();
-  },'Synopsis saved');
+  // Keep editing in place rather than scrolling the page to a global notice.
+  if(mode==='edit-book'||mode==='edit-synopsis'){
+    if(button?.disabled)return;
+    const status=form.querySelector('[role="status"]');
+    setBusy(button,true);
+    if(status)status.textContent='Saving…';
+    try{
+      const data=mode==='edit-book'?{
+        title:formValue(form,'title'),author:formValue(form,'author'),
+        reading_status:formValue(form,'reading_status')
+      }:{synopsis:formValue(form,'synopsis')};
+      const result=await api('/api/books/'+bookId,{
+        method:'PATCH',data:{...data,expected_updated_at:detail.updated_at}
+      });
+      state.detail={...detail,...result.item};
+      await listBooks();
+      renderDetail();
+      const dest=$('#'+(mode==='edit-book'?'book-info-state':'synopsis-state'));
+      if(dest)dest.textContent='Saved just now.';
+    }catch(error){
+      if(status)status.textContent=error.status===409?
+        'This book changed elsewhere. Copy unsaved edits before refreshing.':
+        'Could not save: '+(error.message||'Request failed');
+    }finally{setBusy(button,false);}
+    return;
+  }
   if(mode==='add-tag') return perform(button,async()=>{
     await api('/api/books/'+bookId+'/tags',{method:'POST',data:{label:formValue(form,'label'),kind:formValue(form,'kind')}});
     await selectBook(bookId);
