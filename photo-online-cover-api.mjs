@@ -10,7 +10,7 @@ const validTitle=s=>clean(s).length>=3;
 const GoogleId=/^[a-zA-Z0-9_-]{2,75}$/;
 const OlId=/^[1-9][0-9]{0,10}$/;
 function sourceKey(type,id){
- if(type==='gb'&&GoogleId.test(id))return 'gb:'+id;
+ if(type==='gb'&&typeof id==='string'&&GoogleId.test(id))return 'gb:'+id;
  if(type==='ol'&&OlId.test(String(id)))return 'ol:'+id;
  return null;
 }
