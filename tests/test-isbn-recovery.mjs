@@ -355,6 +355,60 @@ test('A forged verified flag cannot bypass independent server verification or pr
   assert.equal(f.edition().isbn,null);
  }finally{f.close();}
 });
+test('Cloudflare ISBN verification uses manual redirect mode and pauses on redirects',async()=>{
+ const f=fixture();
+ try{
+  const calls=[];
+  const mock=async(url,options)=>{
+   calls.push({url,options});
+   if(url.includes('openlibrary.org'))return Response.json({['ISBN:'+ISBN]:{details:{
+    key:'/books/OL123M',title:'Example Novel',isbn_13:[ISBN],
+    authors:[{name:'Example Writer'}],physical_format:'eBook'
+   }}});
+   return Response.json({items:[{id:'g',volumeInfo:{
+    title:'Example Novel',authors:['Example Writer'],
+    industryIdentifiers:[{identifier:ISBN}]
+   }}]});
+  };
+  const checked=await f.call('verify',{items:[f.proposal()]},'POST',{fetch:mock});
+  assert.equal(checked.status,200);
+  const report=await checked.json();
+  assert.equal(report.results[0].status,'verified');
+  assert.equal(calls.length,2);
+  assert.ok(calls.every(x=>x.options.redirect==='manual'));
+  assert.ok(calls.every(x=>x.url.startsWith('https://')));
+  const visited=[];
+  const redirected=async(url,opts)=>{
+   visited.push({url,opts});
+   return new Response(null,{status:302,headers:{location:'https://not-our-provider.example/fake'}});
+  };
+  const paused=await f.call('verify',{items:[f.proposal()]},'POST',{fetch:redirected});
+  assert.equal(paused.status,200);
+  const failure=await paused.json();
+  assert.equal(failure.paused,true);
+  assert.equal(failure.results.length,0);
+  assert.match(failure.error,/redirect/i);
+  assert.equal(visited.length,1);
+  assert.equal(visited[0].opts.redirect,'manual');
+  assert.equal(f.edition().isbn,null);
+ }finally{f.close();}
+});
+test('Read-only ISBN lookup uses manual redirects and refuses redirected sources',async()=>{
+ const f=fixture();
+ try{
+  const redirects=[];
+  const redirecting=async(url,opts)=>{
+   redirects.push({url,opts});
+   return new Response(null,{status:302,headers:{location:'https://invalid.example/'}});};
+  const response=await f.call('online',null,'GET',{query:'book_id='+BOOK,fetch:redirecting});
+  assert.equal(response.status,200);
+  const report=await response.json();
+  assert.equal(report.items.length,0);
+  assert.ok(report.warnings.some(x=>/redirect/i.test(x)));
+  assert.equal(redirects.length,2);
+  assert.ok(redirects.every(x=>x.opts.redirect==='manual'));
+ }finally{f.close();}
+});
 test('Verification workflow is mounted with pause/resume, checkpoint and verified-only batch approval',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
  const script=readFileSync(new URL('../isbn-recovery-ui.mjs',import.meta.url),'utf8');
