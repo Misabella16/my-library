@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/vintage.css">
 <link rel="stylesheet" href="/pastoral.css">
 <link rel="stylesheet" href="/collection-compact.css">
+<link rel="stylesheet" href="/virtual-shelves.css">
 <script type="module" src="/library.js"></script>
 </head>
 <body>
@@ -84,8 +85,33 @@
   </section>
   <section class="tab-panel" id="shelves" hidden>
     <div class="site-section-artwork" data-site-section-image="shelvesBanner" hidden></div>
-    <div class="surface"><h2 data-site-text="shelvesTitle">My Shelves</h2><p data-site-text="shelvesDescription">Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.</p><div class="tip" data-site-text="shelvesTip">Browse owned physical books by room, bookcase and shelf. Search by title, author or tag, filter special editions, switch between covers and spines, and hover or tap Details for summaries. Drag spines or use Move left / right, save your preferred display, and export the visible shelf inventory without changing physical-copy locations.</div></div>
-    <div class="surface visual-shelf-browser" aria-label="Physical library by location">
+    <div class="surface">
+  <h2 data-site-text="shelvesTitle">My Shelves</h2>
+  <p data-site-text="shelvesDescription">Virtual shelves by genre and tag, personal reading lists, plus a separate physical-location view.</p>
+  <div class="virtual-shelf-toolbar" role="tablist" aria-label="My Shelves views">
+    <button class="btn mini active" data-virtual-view="overview" role="tab" aria-selected="true" type="button">Virtual shelves</button>
+    <button class="btn mini" data-virtual-view="browse" role="tab" aria-selected="false" type="button">Browse all</button>
+    <button class="btn mini" data-virtual-view="physical" role="tab" aria-selected="false" type="button">Physical locations</button>
+  </div>
+  <div class="virtual-shelf-overview" id="virtual-overview" data-virtual-panel="overview">
+    <div class="virtual-section-heading"><h3>Genre master shelves</h3><button class="btn mini subtle" type="button" id="virtual-refresh">Refresh shelves</button></div>
+    <p class="muted">Expand a genre for a scrollable cover row, then open its tag sub-shelves.</p>
+    <p class="small-status" id="virtual-shelf-status" role="status" aria-live="polite">Open My Shelves to load your categories.</p>
+    <div id="virtual-genre-rows"></div>
+    <div class="virtual-section-heading"><h3>My reading lists</h3><button class="btn mini subtle" type="button" id="virtual-view-all">See every book</button></div>
+    <p class="muted">Named virtual shelves and existing Goodreads CSV reading lists.</p>
+    <div id="virtual-list-rows"></div>
+  </div>
+  <div id="virtual-browse" data-virtual-panel="browse" hidden>
+    <h3 id="virtual-browse-title">All books</h3>
+    <p class="small-status" id="virtual-browse-status" aria-live="polite">Choose a shelf or Browse all.</p>
+    <div class="virtual-browse-grid" id="virtual-browse-books"></div>
+    <div class="virtual-browse-more"><button class="btn mini subtle" id="virtual-browse-more" type="button" hidden>Load more books</button></div>
+  </div>
+</div>
+<div id="virtual-physical" data-virtual-panel="physical" hidden>
+  <div class="surface"><h3>Physical book locations</h3><p class="muted" data-site-text="shelvesTip">Track the room, bookcase, shelf and position for your owned physical copies.</p></div>
+<div class="surface visual-shelf-browser" aria-label="Physical library by location">
       <div class="visual-shelf-toolbar">
         <div><p class="section-kicker">❦ THE PHYSICAL COLLECTION ❦</p><h3>Browse my bookcases</h3></div>
         <button class="btn subtle" id="shelf-inventory-refresh" type="button">Refresh shelves</button>
@@ -96,7 +122,8 @@
       <div id="shelf-location-contents" class="visual-shelf-contents" aria-live="polite"></div>
       <div class="loadmore"><button class="btn subtle" type="button" id="shelf-copies-more" hidden>Load more books on this shelf</button></div>
     </div>
-  </section>
+  </div>
+</section>
   <section class="tab-panel" id="photos" hidden>
     <div class="site-section-artwork" data-site-section-image="photosBanner" hidden></div>
     <div class="surface"><h2 data-site-text="photosTitle">Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
