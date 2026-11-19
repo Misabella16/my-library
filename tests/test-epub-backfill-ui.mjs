@@ -3,6 +3,7 @@ import {summarizeEpubHealth} from '../epub-backfill-health.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initEpubBackfill} from '../epub-backfill-ui.mjs';
+import {readEpubScanProgress,saveEpubScanProgress,clearEpubScanProgress} from '../epub-backfill-checkpoint.mjs';
 class FakeNode {
  constructor(id=''){this.id=id;this.listeners={};this.disabled=false;this.children=[];
  this.textContent='';this.className='';this.value='';}
@@ -11,12 +12,12 @@ class FakeNode {
  append(...nodes){this.children.push(...nodes);}
  replaceChildren(...nodes){this.children=[...nodes];}
 }
-function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1,pauseAfterFirst=false}={}){
+function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1,pauseAfterFirst=false,storage=null}={}){
  const keys=['epub-backfill-preview','epub-backfill-apply','epub-backfill-next',
  'epub-backfill-status','epub-backfill-results','epub-backfill-undo','epub-backfill-bulk',
  'epub-backfill-history','epub-backfill-history-list',
  'epub-backfill-health','epub-backfill-health-status','epub-health-report',
- 'epub-backfill-retry','epub-backfill-pause','epub-backfill-all'];
+ 'epub-backfill-retry','epub-backfill-pause','epub-backfill-all','epub-backfill-reset'];
  const refs=new Map(keys.map(x=>[x,new FakeNode(x)]));
  const root=new FakeNode('epub-backfill');
  root.querySelector=selector=>refs.get(selector.replace(/^#/,''));
@@ -64,7 +65,7 @@ function fixture(rows=55,{failOnceAt=-1,failTransientAt=-1,pauseAfterFirst=false
   if(path==='/api/epubs/backfill/undo')return {status:'undone'};
   throw Error('Unexpected API call: '+path);
  };
- initEpubBackfill(api);
+ initEpubBackfill(api,{storage});
  return {refs,calls,applied,get:key=>refs.get(key),restore(){globalThis.document=old;}};
 }
 test('Legacy repair button also continues past 50 without another click',async()=>{
@@ -268,4 +269,55 @@ test('Pause on the final page does not incorrectly mark unprocessed EPUBs comple
   await f.get('epub-backfill-all').click();
   assert.equal(f.applied.length,8);
  }finally{f.restore();}
+});
+
+const EMPTY_PROGRESS={bulkCursor:'',healthCursor:'',bulkFinished:false,healthFinished:false,healthScanned:0};
+const memoryStorage=()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,
+ setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),size:()=>m.size};};
+test('EPUB scan checkpoints store cursors only and can be cleared without deleting books',()=>{
+ const storage=memoryStorage();
+ saveEpubScanProgress(storage,{bulkCursor:'a'.repeat(36),healthCursor:'b'.repeat(36),
+  bulkFinished:false,healthFinished:true,healthScanned:12,title:'Secret Novel'});
+ assert.deepEqual(readEpubScanProgress(storage),{bulkCursor:'a'.repeat(36),healthCursor:'b'.repeat(36),
+  bulkFinished:false,healthFinished:true,healthScanned:12});
+ assert.doesNotMatch(storage.getItem('my-library:epub-repair-progress:v1'),/Secret/);
+ saveEpubScanProgress(storage,{bulkCursor:'../not-an-id'});
+ assert.equal(readEpubScanProgress(storage).bulkCursor,'');
+ clearEpubScanProgress(storage);
+ assert.deepEqual(readEpubScanProgress(storage),EMPTY_PROGRESS);
+});
+test('Restart lets finished EPUB health and repair scans run again, keeping saved repairs',async()=>{
+ const storage=memoryStorage();
+ const f=fixture(12,{storage});
+ try{
+  await f.get('epub-backfill-bulk').click();
+  await f.get('epub-backfill-health').click();
+  assert.equal(f.get('epub-backfill-bulk').disabled,true);
+  assert.equal(f.get('epub-backfill-health').disabled,true);
+  await f.get('epub-backfill-reset').click();
+  assert.equal(f.get('epub-backfill-bulk').disabled,false);
+  assert.equal(f.get('epub-backfill-health').disabled,false);
+  assert.equal(f.get('epub-backfill-health').textContent,'Scan all saved EPUBs (no edits)');
+  assert.deepEqual(readEpubScanProgress(storage),EMPTY_PROGRESS);
+  assert.equal(f.calls.filter(p=>p==='/api/epubs/backfill/undo').length,0);
+ }finally{f.restore();}
+});
+test('EPUB repair scan resumes after a page reload instead of starting over',async()=>{
+ const storage=memoryStorage();
+ const first=fixture(25,{pauseAfterFirst:true,storage});
+ let firstApplied;
+ try{
+  await first.get('epub-backfill-bulk').click();
+  firstApplied=[...first.applied];
+  assert.ok(firstApplied.length>=1&&firstApplied.length<25);
+ }finally{first.restore();}
+ assert.equal(readEpubScanProgress(storage).bulkCursor,firstApplied.at(-1));
+ const second=fixture(25,{storage});
+ try{
+  assert.match(second.get('epub-backfill-health-status').textContent,/Previous scan found/);
+  await second.get('epub-backfill-bulk').click();
+  assert.equal(second.applied.length,25-firstApplied.length);
+  assert.ok(!second.applied.includes(firstApplied[0]));
+  assert.equal(readEpubScanProgress(storage).bulkFinished,true);
+ }finally{second.restore();}
 });
