@@ -25,6 +25,16 @@ Open **http://127.0.0.1:8788** in Safari. The same Rococo My Library layout will
 
 Do **not** run \`wrangler dev --remote\` or \`wrangler d1 execute ... --remote\`. These are not needed.
 
+### Open it like an app (no Terminal)
+
+Run this once from the **my-library** folder:
+
+```sh
+npm run local:app
+```
+
+It creates **My Library** and **Stop My Library** in your user Applications folder (`~/Applications`, also searchable in Spotlight and Launchpad) and a **My Library** shortcut on your Desktop. Double-click My Library: it starts the private local site in the background if needed and opens it in your browser. Closing the browser tab leaves the server running quietly; use **Stop My Library** to shut it down (restarting the Mac also stops it). If you move the my-library folder, run `npm run local:app` again. Server messages go to `.my-library-local/server.log`.
+
 ### Where are my local books saved?
 
 \`my-library/.my-library-local/state/\`

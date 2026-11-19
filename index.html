@@ -69,7 +69,8 @@
     </div>
     <div class="toolbar">
       <label class="search-label"><span class="visually-hidden">Search library</span><input id="search" type="search" placeholder="Find a treasured title or author…" autocomplete="off" maxlength="150"></label>
-      <label class="collection-tool-label" for="collection-sort">Sort <select id="collection-sort" aria-label="Sort collection"><option value="az">Title A–Z</option><option value="za">Title Z–A</option><option value="custom">My arrangement</option></select></label>
+      <label class="collection-tool-label" for="collection-sort">Sort <select id="collection-sort" aria-label="Sort collection"><option value="az">Title A–Z</option><option value="za">Title Z–A</option><option value="priority">Priority (1st first)</option><option value="custom">My arrangement</option></select></label>
+      <label class="collection-tool-label" for="collection-priority">Priority <select id="collection-priority" aria-label="Filter by priority"><option value="all">All books</option><option value="1">1st priority</option><option value="2">2nd priority</option><option value="3">3rd priority</option><option value="any">Any priority</option><option value="none">No priority</option></select></label>
       <label class="collection-tool-label" for="collection-visibility-view">View <select id="collection-visibility-view" aria-label="Choose collection visibility"><option value="visible">My collection</option><option value="hidden">Hidden</option><option value="trash">Trash</option></select></label>
       <button class="btn subtle" type="button" id="refresh">Refresh</button>
     </div>
@@ -93,6 +94,7 @@
   <p data-site-text="shelvesDescription">Virtual shelves by genre and tag, personal reading lists, plus a separate physical-location view.</p>
   <div class="virtual-shelf-toolbar" role="tablist" aria-label="My Shelves views">
     <button class="btn mini active" data-virtual-view="overview" role="tab" aria-selected="true" type="button">Virtual shelves</button>
+    <button class="btn mini" data-virtual-view="auto" role="tab" aria-selected="false" type="button">Auto collections</button>
     <button class="btn mini" data-virtual-view="browse" role="tab" aria-selected="false" type="button">Browse all</button>
     <button class="btn mini" data-virtual-view="physical" role="tab" aria-selected="false" type="button">Physical locations</button>
   </div>
@@ -119,6 +121,27 @@
       <p class="small-status" id="goodreads-profile-status" role="status" aria-live="polite">Connect your profile for quick links. Import your latest Goodreads CSV to update shelves.</p>
     </div>
     <div id="virtual-list-rows"></div>
+  </div>
+  <div id="virtual-auto" data-virtual-panel="auto" hidden>
+    <div class="virtual-section-heading"><h3>Auto collections</h3>
+      <div class="actions start"><button class="btn mini" type="button" id="auto-collection-new">＋ New collection</button>
+      <button class="btn mini subtle" type="button" id="auto-collection-refresh">Refresh all</button>
+      <button class="btn mini subtle" type="button" id="auto-collection-restore" hidden>Restore missing defaults</button></div></div>
+    <p class="muted">Books sort themselves into these collections from their genres, tags, shelves (including Goodreads shelves) and synopsis. Edit any collection’s keywords, delete the ones you don’t want, or make your own. On a book’s page you can add it to a collection or take it out, and that choice sticks. Author nationality isn’t stored in Goodreads or EPUB data, so the origin collections use tags, shelves and “translated from…” notes.</p>
+    <p class="small-status" id="auto-collection-status" role="status" aria-live="polite">Open Auto collections to sort your books.</p>
+    <details class="auto-online" id="auto-online">
+      <summary>Find more tags online (Open Library)</summary>
+      <p class="muted">Looks up each book on Open Library and adds the subjects it doesn’t have yet (like Witches, Time travel or Fairies), then re-sorts that book’s collections. Only books with a confident title-and-author or ISBN match are changed. Each book takes about 3 seconds, so a big library takes hours: keep this tab open, pause any time, and resume later without repeating finished books. Every change can be undone under Imports &amp; Undo.</p>
+      <div class="actions start">
+        <button class="btn mini" type="button" id="auto-online-run">Find tags online</button>
+        <button class="btn mini subtle" type="button" id="auto-online-pause" disabled>Pause</button>
+        <button class="btn mini subtle" type="button" id="auto-online-reset">Check every book again</button>
+      </div>
+      <p class="small-status" id="auto-online-status" role="status" aria-live="polite">Open this section to see how many books are left to check.</p>
+      <ul class="auto-online-log" id="auto-online-log"></ul>
+    </details>
+    <div id="auto-collection-new-form"></div>
+    <div id="auto-collection-groups"></div>
   </div>
   <div id="virtual-browse" data-virtual-panel="browse" hidden>
     <h3 id="virtual-browse-title">All books</h3>
@@ -871,6 +894,10 @@
     <label>Author <input name="author" maxlength="400" autocomplete="off"></label>
     <label>Synopsis <textarea name="synopsis" rows="4" maxlength="25000"></textarea></label>
     <label>Reading status <select name="reading_status"><option value="unread">Want to read</option><option value="reading">Reading</option><option value="read">Read</option><option value="paused">Paused</option><option value="dnf">Did not finish</option></select></label>
+    <label>Priority <select name="priority"><option value="">No priority</option><option value="1">1st priority</option><option value="2">2nd priority</option><option value="3">3rd priority</option></select></label>
+    <label>Cover image URL (optional) <input name="cover_url" type="url" inputmode="url" maxlength="2000" placeholder="Paste an image link (https)" autocomplete="off"></label>
+    <label>Genres (comma-separated) <input name="genres" maxlength="600" placeholder="Fantasy, Romance, Xianxia" autocomplete="off"></label>
+    <label>Tags (comma-separated) <input name="tags" maxlength="600" placeholder="Female lead, Slow burn, Revenge" autocomplete="off"></label>
     <label>Private notes (optional) <textarea name="private_notes" rows="3" maxlength="120000"></textarea></label>
     <div class="actions"><button class="btn subtle" type="button" data-close-dialog>Cancel</button><button class="btn" type="submit">Add to library</button></div>
   </form>

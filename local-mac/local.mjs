@@ -28,6 +28,16 @@ function prep(){
 }
 const cliArgs=(result)=>['--config',result.config];
 const persistence=result=>['--persist-to',result.state];
+// Newer Wrangler versions refuse --config for Pages and do not discover the
+// generated wrangler.jsonc, so pass the same local-only bindings as flags.
+function pagesBindings(result){
+  const cfg=JSON.parse(readFileSync(result.config,'utf8'));
+  const args=['--compatibility-date',cfg.compatibility_date];
+  for(const d of cfg.d1_databases||[])args.push('--d1',d.binding+'='+(d.preview_database_id||d.database_id));
+  for(const b of cfg.r2_buckets||[])args.push('--r2',b.binding+'='+b.bucket_name);
+  for(const [k,v] of Object.entries(cfg.vars||{}))args.push('--binding',k+'='+v);
+  return args;
+}
 function safeLocalDb(sql,result){
   call(['d1','execute','BOOK_DB','--local',...cliArgs(result),...persistence(result),
     '--file',sql,'--yes']);
@@ -62,7 +72,7 @@ switch(command){
     console.log('Leave this Terminal window open. Press Control+C to close the local server.\n');
     console.log('Your data is on this Mac: '+r.state+'\n');
     const child=spawn(wrangler,
-      ['pages','dev',r.runtime,'--config',r.config,'--ip','127.0.0.1','--port','8788',
+      ['pages','dev',r.runtime,...pagesBindings(r),'--ip','127.0.0.1','--port','8788',
         ...persistence(r),'--show-interactive-dev-session=false'],
       {cwd:base,stdio:'inherit',env:process.env,shell:false});
     child.on('error',e=>fail(e.message));

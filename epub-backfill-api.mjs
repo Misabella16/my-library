@@ -1,4 +1,5 @@
 import {inspectEpub,MAX_EPUB_BYTES} from './epub-reader.mjs';
+import {refreshBookCollections} from './auto-collections-api.mjs';
 // Safe metadata repair for EPUBs already stored in the owner-only library.
 // Reads bounded D1 pages; never fetches or uploads an EPUB, and never edits a
 // nonempty synopsis, private note, review, rating, edition or owned copy.
@@ -307,6 +308,7 @@ export async function handleEpubBackfillApi(request,db,path,env={}){
    if(coverKey)try{await env.BOOK_FILES.delete(coverKey);}catch{}
    throw error;
   }
+  if(additions.length)try{await refreshBookCollections(db,row.book_id);}catch{}
   return json({status:'applied',change_id:changeId,file_id:row.id,
    synopsis_filled:!!description,tags_added:additions.length,
    cover_added:!!coverId,cover_selected:!!selectedCover,

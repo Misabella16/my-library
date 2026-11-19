@@ -1,5 +1,6 @@
 // A lightweight shelf-of-shelves browser. Each row loads only when expanded.
 import {synopsisPlainText} from './synopsis-format.mjs';
+import {PRIORITY_LABELS} from './book-extras.mjs';
 import {initGoodreadsProfile} from './goodreads-profile-ui.mjs';
 // The existing physical-location browser stays intact in a separate view.
 const byId=id=>document.getElementById(id);
@@ -9,18 +10,22 @@ const node=(tag,cls,text)=>{
  if(text!==undefined)el.textContent=String(text);
  return el;
 };
-function coverCard(book,onSelect,onPreview=()=>{}){
+export function coverCard(book,onSelect,onPreview=()=>{}){
  const item=node('article','virtual-book');
  let hoverTimer=null;
  const button=node('button','virtual-book-open');
  button.type='button';button.title='Open '+book.title;
  const cover=node('div','virtual-book-cover');
- if(book.cover_id&&/^[0-9a-f-]{36}$/i.test(book.cover_id)){
+ if(/^https:\/\//i.test(book.cover_url||'')||(book.cover_id&&/^[0-9a-f-]{36}$/i.test(book.cover_id))){
   const image=node('img');
-  image.src='/api/images/'+book.cover_id;
+  // A pasted https cover URL wins over saved edition covers.
+  if(/^https:\/\//i.test(book.cover_url||'')){image.src=book.cover_url;image.referrerPolicy='no-referrer';}
+  else image.src='/api/images/'+book.cover_id;
   image.alt='Cover of '+book.title;image.loading='lazy';
   cover.append(image);
  }else cover.append(node('strong','',book.title||'Untitled'));
+ if(PRIORITY_LABELS[book.priority])
+  item.append(node('span','badge priority-badge priority-'+Number(book.priority),PRIORITY_LABELS[book.priority]));
  button.append(cover,node('span','virtual-book-title',book.title||'Untitled'));
  button.addEventListener('click',()=>{onPreview(null);onSelect(book.id);});
  const summary=node('aside','virtual-book-synopsis');
@@ -47,7 +52,7 @@ function coverCard(book,onSelect,onPreview=()=>{}){
  item.append(button,toggle,summary);
  return item;
 }
-export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysical=()=>{}}={}){
+export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysical=()=>{},activateAuto=()=>{}}={}){
  const panel=byId('shelves'),overview=byId('virtual-overview'),
   browse=byId('virtual-browse'),physical=byId('virtual-physical'),
   genreRows=byId('virtual-genre-rows'),listRows=byId('virtual-list-rows'),
@@ -70,13 +75,14 @@ export function initVirtualShelves(api,{onSelectBook=async()=>{},activatePhysica
  const url=(path,filters)=>path+'?'+new URLSearchParams(filters).toString();
  const booksPath='/api/virtual-shelves/books';
  function activateView(name){
-  for(const element of [overview,browse,physical])element.hidden=element.dataset.virtualPanel!==name;
+  for(const element of panel.querySelectorAll('[data-virtual-panel]'))element.hidden=element.dataset.virtualPanel!==name;
   for(const button of viewButtons){
    const active=button.dataset.virtualView===name;
    button.classList.toggle('active',active);
    button.setAttribute('aria-selected',String(active));
   }
   if(name==='physical')activatePhysical();
+  if(name==='auto')activateAuto();
  }
  function heading(title,count){
   return title+(typeof count==='number'?' · '+count.toLocaleString()+' books':'');

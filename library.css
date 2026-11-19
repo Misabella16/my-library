@@ -307,3 +307,9 @@ details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collaps
  #isbn-verification .isbn-card-actions{align-items:stretch}
  #isbn-verification .isbn-card-actions .btn{width:100%}
 }
+/* Reading priority badges (1st / 2nd / 3rd) */
+.badge.priority-badge{margin-left:5px;font-weight:700;white-space:nowrap}
+.badge.priority-1{background:#f6e3e6;color:#8a3d4c;border-color:#e8c2ca}
+.badge.priority-2{background:#f3ead6;color:#7d5c2c;border-color:#e3d1a6}
+.badge.priority-3{background:#e7eef0;color:#3f5d68;border-color:#c9d9de}
+.virtual-book .priority-badge{position:absolute;top:6px;left:6px;z-index:3;margin:0;font-size:10px;padding:2px 7px}
