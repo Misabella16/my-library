@@ -153,7 +153,11 @@ test('API and UI are owner-only, bounded, and need explicit action',async()=>{
   const library=readFileSync(new URL('../library.js',import.meta.url),'utf8');
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(worker,/handleOfflineBulkApi\(request,db,env,path\)/);
-  assert.match(worker,/covers\.openlibrary\.org/);
+  // Pasted cover URLs may point at any https image host; scripts and
+  // network requests stay same-origin only.
+  assert.match(worker,/img-src 'self' blob: data: https:;/);
+  assert.match(worker,/script-src 'self';/);
+  assert.match(worker,/connect-src 'self';/);
   assert.match(library,/initOfflineBulk\(api/);
   assert.match(html,/id="offline-export"/);
   assert.match(html,/id="offline-apply"/);

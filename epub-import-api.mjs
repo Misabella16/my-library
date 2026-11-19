@@ -1,6 +1,7 @@
 import {handleMultipartEpubApi} from './epub-multipart-api.mjs';
 import {cleanEpubTitle,cleanEpubAuthor,normalizeEpubTitle} from './epub-metadata.mjs';
 import {extractIsbn13} from './epub-isbn.mjs';
+import {refreshBookCollections} from './auto-collections-api.mjs';
 // Owner-only private EPUB intake. The enclosing Worker already verifies Access
 // and write origin. One file per request keeps D1/R2 usage predictable.
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store'};
@@ -365,6 +366,8 @@ async function savePreparedEpub(db,env,{metadata,originalFilename,actual,coverBy
       ).bind(uuid(),batchId,fileId,JSON.stringify({book_id:bookId,edition_id:targetEdition,
         cover_id:coverId,sha256:actual}),ts));
       await db.batch(statements);
+      // Sort the book into auto collections now (its EPUB subjects are tags).
+      try{await refreshBookCollections(db,bookId);}catch{}
       return json({status:'uploaded',uploaded:true,book_id:bookId,
         book_created:matched.status==='new',edition_id:targetEdition,
         cover_extracted:!!coverBytes,file_id:fileId,batch_id:batchId},201);

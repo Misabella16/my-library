@@ -2,6 +2,7 @@
 // All pages are bounded and cursor-based; no book metadata is changed by browsing.
 import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
 import {ensureBookVisibilitySchema} from './collection-visibility-api.mjs';
+import {ensureBookExtrasSchema} from './book-extras.mjs';
 const HEAD={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEAD});
 const fail=(error,status=400)=>json({error},status);
@@ -12,7 +13,13 @@ const COMMON_GENRE=["fantasy","romance","mystery","thriller","horror","science f
  "sci-fi","historical fiction","literary fiction","contemporary fiction","fiction",
  "nonfiction","non-fiction","biography","memoir","poetry","classics","young adult",
  "paranormal","adventure","gothic","dystopian","romantasy","comics","graphic novels",
- "manga","light novel","webnovel","danmei","wuxia","xianxia","urban fantasy"];
+ "manga","light novel","webnovel","danmei","wuxia","xianxia","urban fantasy",
+ // Web-novel genres (Novel Updates style) also count as genres automatically,
+ // even when they were added as a personal tag.
+ "action","comedy","drama","harem","josei","martial arts","mature","mecha",
+ "psychological","school life","seinen","shoujo","shoujo ai","shounen","shounen ai",
+ "slice of life","supernatural","tragedy","xuanhuan","yaoi","yuri","isekai",
+ "boys love","girls love","bl","gl","historical","sports","smut"];
 const genre=alias=>"("+alias+".kind='genre' OR lower(trim("+alias+".label)) IN ("+
  COMMON_GENRE.map(name=>"'"+name+"'").join(",")+"))";
 const limitValue=(value,fallback=18,max=60)=>{
@@ -67,6 +74,7 @@ export async function handleVirtualShelvesApi(request,db,path){
  if(!path.startsWith('/api/virtual-shelves'))return null;
  if(request.method!=='GET')return fail('Method not allowed',405);
  await ensureBookVisibilitySchema(db);
+ await ensureBookExtrasSchema(db);
  const params=new URL(request.url).searchParams;
  if(path==='/api/virtual-shelves/overview'){
   const [total,genres,lists,unsorted]=await Promise.all([
@@ -116,7 +124,9 @@ export async function handleVirtualShelvesApi(request,db,path){
    args.push(cursor[0],cursor[0],cursor[1]);
   }
   const books=await rows(db,"SELECT b.id,b.title,b.author,b.synopsis,b.reading_status,"+
-   "b.normalized_title,"+PREFERRED_BOOK_COVER_SQL+" AS cover_id FROM books b WHERE "+
+   "b.normalized_title,"+PREFERRED_BOOK_COVER_SQL+" AS cover_id,"+
+   "(SELECT x.priority FROM book_extras x WHERE x.book_id=b.id) AS priority,"+
+   "COALESCE((SELECT x.cover_url FROM book_extras x WHERE x.book_id=b.id),'') AS cover_url FROM books b WHERE "+
    clause+" ORDER BY b.normalized_title,b.id LIMIT ?",[...args,limit+1]);
   const more=books.length>limit;
   const shown=books.slice(0,limit);
