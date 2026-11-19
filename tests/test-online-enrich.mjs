@@ -4,25 +4,29 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {webcrypto} from 'node:crypto';
 import {handleOnlineEnrichApi,verifiedOpenLibraryDoc} from '../online-enrich-api.mjs';
+import {handleAutoCollectionsApi} from '../auto-collections-api.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const bookId='11111111-1111-4111-8111-111111111111';
 const edId='22222222-2222-4222-8222-222222222222';
 const coverBytes=Uint8Array.from([255,216,255,224,0,16,74,70,73,70,0,1,2,3,4,5,6,7,8,9,255,217]);
 function fixture({title='Example Book',author='Writer',synopsis='',image=false,
- oldTags=false,edition=true,isbn='9780306406157',source='full'}={}){
+ oldTags=false,edition=true,special=false,isbn='9780306406157',source='full'}={}){
  const sql=new DatabaseSync(':memory:');
  sql.exec(readFileSync(new URL('../database/001_initial_schema.sql',import.meta.url),'utf8'));
  sql.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis,private_notes,review) VALUES(?,?,?,?,?,?,?,?)')
  .run(bookId,title,author,title.toLowerCase().replace(/\W+/g,' '),author.toLowerCase(),synopsis,'Keep my notes','Keep my review');
- if(edition)sql.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special,isbn) VALUES(?,?,'Standard','ebook',0,?)")
-  .run(edId,bookId,isbn);
+ if(edition)sql.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special,isbn) VALUES(?,?,?,?,?,?)")
+  .run(edId,bookId,special?'FairyLoot':'Standard','ebook',special?1:0,isbn);
  if(image)sql.prepare("INSERT INTO edition_images(id,edition_id,origin,private_object_key,display_cover) VALUES(?,?,'manual','keep/manual.jpg',1)")
   .run('33333333-3333-4333-8333-333333333333',edId);
  if(oldTags){
   sql.prepare("INSERT INTO tags(id,label,kind) VALUES ('44444444-4444-4444-8444-444444444444','Owned tag','personal')").run();
   sql.prepare("INSERT INTO book_tags(book_id,tag_id,source) VALUES(?, '44444444-4444-4444-8444-444444444444','manual')").run(bookId);
  }
- const db={prepare(query){return{bind(...args){return{
+ const db={prepare(query){return{
+  // Real D1 also allows run() without bind().
+  run:async()=>({meta:{changes:sql.prepare(query).run().changes}}),
+  bind(...args){return{
   sql:query,args,
   first:async()=>sql.prepare(query).get(...args)||null,
   all:async()=>({results:sql.prepare(query).all(...args)}),
@@ -49,7 +53,8 @@ function fixture({title='Example Book',author='Writer',synopsis='',image=false,
   ]});
   if(url.includes('/works/OL123W.json'))return Response.json({
    key:'/works/OL123W',description:{value:'An authentic summary'},
-   subjects:['Fiction','Historical Fiction','Adventure'],covers:[123]
+   subjects:['Fiction','Historical Fiction','Adventure','Juvenile fiction',"Children's fiction",
+    'collectionID:EanesChallenge','nyt:young-adult=2016'],covers:[123]
   });
   if(url.includes('covers.openlibrary.org'))return new Response(coverBytes,{
    status:200,headers:{'content-type':'image/jpeg'}});
@@ -83,7 +88,9 @@ test('Online preview is read-only and returns source-backed suggested data',asyn
   assert.equal(data.status,'verified');
   assert.equal(data.proposed.synopsis,'An authentic summary');
   assert.equal(data.proposed.cover_id,123);
-  assert.equal(data.proposed.tags.length,3);
+  // Library bookkeeping ("Fiction", "collectionID:...") and unreliable
+  // age-range subjects ("Juvenile fiction") are skipped.
+  assert.deepEqual(data.proposed.tags,['Historical Fiction','Adventure']);
   assert.equal(data.source_url,'https://openlibrary.org/works/OL123W');
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM change_log').get().n,0);
   assert.equal(f.files.size,0);
@@ -100,7 +107,7 @@ test('Explicit repair fills blanks, stores a private cover, preserves notes and 
   const data=await r.json();
   assert.equal(data.cover_saved,true);
   assert.equal(data.synopsis_filled,true);
-  assert.equal(data.tags_added,3);
+  assert.equal(data.tags_added,2);
   assert.equal(f.book().synopsis,'An authentic summary');
   assert.equal(f.book().private_notes,'Keep my notes');
   assert.equal(f.book().review,'Keep my review');
@@ -115,17 +122,66 @@ test('Explicit repair fills blanks, stores a private cover, preserves notes and 
   assert.equal(f.book().private_notes,'Keep my notes');
  }finally{f.close();}
 });
-test('Existing cover, synopsis and personal tags are not overwritten',async()=>{
+test('Existing cover, synopsis and personal tags are kept; only missing subjects are added',async()=>{
  const f=fixture({image:true,oldTags:true,synopsis:'My own description'});
  try{
+  // The book already has "Adventure" (different case): it must not be duplicated.
+  f.sql.prepare("INSERT INTO tags(id,label,kind) VALUES ('55555555-5555-4555-8555-555555555555','adventure','personal')").run();
+  f.sql.prepare("INSERT INTO book_tags(book_id,tag_id,source) VALUES(?,'55555555-5555-4555-8555-555555555555','manual')").run(bookId);
   const r=await f.call('repair',{method:'POST',
    data:{book_id:bookId,expected_updated_at:f.book().updated_at}});
   const d=await r.json();
-  assert.equal(d.status,'no_changes');
+  assert.equal(d.status,'applied');
+  assert.equal(d.tags_added,1);
+  assert.equal(d.synopsis_filled,false);
+  assert.equal(d.cover_saved,false);
   assert.equal(f.book().synopsis,'My own description');
   assert.equal(f.files.size,0);
   assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,1);
-  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM book_tags').get().n,1);
+  const labels=f.sql.prepare('SELECT t.label,bt.source FROM book_tags bt JOIN tags t ON t.id=bt.tag_id ORDER BY t.label').all()
+   .map(r=>r.label+':'+r.source);
+  assert.deepEqual(labels,['adventure:manual','Historical Fiction:open_library','Owned tag:manual']);
+  // Undo removes only the added subject; the owner's tags stay.
+  const undo=await f.call('undo',{method:'POST',data:{change_id:d.change_id}});
+  assert.equal(undo.status,200,await undo.clone().text());
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM book_tags').get().n,2);
+ }finally{f.close();}
+});
+test('Whole-library subject run adds tags only, tracks checked books and re-sorts collections',async()=>{
+ const f=fixture({image:true,oldTags:true,synopsis:'My own description'});
+ try{
+  const made=await handleAutoCollectionsApi(new Request('https://library.example/api/auto-collections',{
+   method:'POST',body:JSON.stringify({name:'Adventures',label_keywords:'adventure*'})}),f.db,'/api/auto-collections');
+  assert.equal(made.status,201,await made.clone().text());
+  let s=await (await f.call('subjects-status')).json();
+  assert.deepEqual(s,{remaining:1,checked:0,tags_added:0});
+  const r=await (await f.call('subjects-batch',{method:'POST'})).json();
+  assert.equal(r.results[0].status,'applied');
+  assert.equal(r.results[0].tags_added,2);
+  assert.equal(r.done,true);
+  assert.equal(r.remaining,0);
+  assert.equal(f.book().synopsis,'My own description');
+  assert.equal(f.files.size,0);
+  // Already checked: a second run does no lookups.
+  const before=f.calls.length;
+  const again=await (await f.call('subjects-batch',{method:'POST'})).json();
+  assert.equal(again.results.length,0);
+  assert.equal(f.calls.length,before);
+  // The new "Adventure" subject sorted the book into the matching collection.
+  const member=f.sql.prepare("SELECT m.reason FROM auto_collection_members m JOIN auto_collections c "+
+   "ON c.id=m.collection_id WHERE m.book_id=? AND c.name='Adventures'").get(bookId);
+  assert.equal(member?.reason,'tag or shelf: adventure*');
+  s=await (await f.call('subjects-reset',{method:'POST'})).json();
+  assert.equal(s.remaining,1);
+ }finally{f.close();}
+});
+test('Whole-library subject run stops on a rate limit without marking the book checked',async()=>{
+ const f=fixture({source:'limit'});
+ try{
+  const r=await (await f.call('subjects-batch',{method:'POST'})).json();
+  assert.equal(r.halt,true);
+  assert.match(r.reason,/rate limit/);
+  assert.equal(r.remaining,1);
  }finally{f.close();}
 });
 test('Unverified cross-work titles do not save metadata or cover files',async()=>{
@@ -279,3 +335,32 @@ test('Public metadata is reused from edge cache without exposing user records',a
  }
 });
 
+
+test('Online repair enriches an editionless book without creating Online display',async()=>{
+ const f=fixture({edition:false});
+ try{
+  const r=await f.call('repair-auto',{method:'POST',data:{book_id:bookId}});
+  assert.equal(r.status,201,await r.clone().text());
+  const result=await r.json();
+  assert.equal(result.cover_saved,false);
+  assert.equal(result.cover_skipped,true);
+  assert.equal(result.synopsis_filled,true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,0);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,0);
+  assert.equal(f.files.size,0);
+ }finally{f.close();}
+});
+test('Online repair preserves the sole special edition and skips generic cover art',async()=>{
+ const f=fixture({special:true});
+ try{
+  const r=await f.call('repair-auto',{method:'POST',data:{book_id:bookId}});
+  assert.equal(r.status,201,await r.clone().text());
+  const result=await r.json();
+  assert.equal(result.cover_saved,false);
+  assert.equal(result.synopsis_filled,true);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM editions').get().n,1);
+  assert.equal(f.sql.prepare('SELECT is_special FROM editions').get().is_special,1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM edition_images').get().n,0);
+  assert.equal(f.files.size,0);
+ }finally{f.close();}
+});

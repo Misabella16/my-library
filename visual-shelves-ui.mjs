@@ -1,4 +1,5 @@
 import {spineStyleFor,spineDescription} from './visual-shelf-spines.mjs';
+import {synopsisPlainText} from './synopsis-format.mjs';
 import {matchesShelfFilters,safeTags,shelfCsv} from './visual-shelf-tools.mjs';
 // Lazy-loaded, read-only visual shelves. No library-wide scans in the browser.
 const byId=id=>document.getElementById(id);
@@ -274,7 +275,7 @@ export function initVisualShelves(api,{onSelectBook=async()=>{}}={}){
      element('p',(copy.edition_name||'Standard')+
       (copy.vendor?' · '+copy.vendor:'')+
       (copy.is_special?' · Special edition':''),'muted'));
-    const synopsis=String(copy.synopsis_preview||'').trim();
+    const synopsis=synopsisPlainText(copy.synopsis_preview);
     hover.append(element('p',synopsis||
      'No summary saved for this book yet.','visual-shelf-summary'));
     let tags=[];

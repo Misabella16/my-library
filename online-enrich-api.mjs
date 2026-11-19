@@ -4,6 +4,7 @@
 import {extractIsbn13} from './epub-isbn.mjs';
 import {machineTitleReason} from './epub-metadata.mjs';
 import {createPacedFetch} from './source-pacing.mjs';
+import {refreshBookCollections} from './auto-collections-api.mjs';
 const pacedSourceFetch=createPacedFetch((...args)=>fetch(...args));
 const HEAD={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store'};
 const json=(o,status=200)=>new Response(JSON.stringify(o),{status,headers:HEAD});
@@ -22,9 +23,16 @@ const description=value=>{
  .replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;/gi,"'")
  .replace(/\s+/g,' ')).slice(0,12000);
 };
+// Open Library subjects include library bookkeeping ("Accessible book",
+// "nyt:..." lists, "Fiction"); skip those so tags stay meaningful.
+const JUNK_SUBJECT=/^(?:accessible book|protected daisy|in library|lending library|large type books|overdrive|open library staff picks|internet archive wishlist|long now manifesto commonplace book|fiction|general|fiction,? general|novels?|english fiction|literature|readers|reading level.*|[a-z_]+:.*|new york times.*)$/i;
+// Open Library often files YA and adult books under "Juvenile fiction" or
+// "Children's ...", so age-range subjects are left to the owner's own shelves.
+const AGE_SUBJECT=/\b(?:juvenile|children'?s?|childrens|young adult|picture books?|teen)\b/i;
 const tagList=input=>(Array.isArray(input)?[...new Set(input.filter(s=>
- typeof s==='string'&&s.trim().length>=3&&s.trim().length<=75)
-  .map(s=>s.trim()))].slice(0,8):[]);
+ typeof s==='string'&&s.trim().length>=3&&s.trim().length<=75&&!JUNK_SUBJECT.test(s.trim())&&
+ !AGE_SUBJECT.test(s.trim()))
+  .map(s=>s.trim()))].slice(0,12):[]);
 const workKey=key=>/^(?:\/works\/)?OL\d+W$/.test(key||'')?('/works/'+String(key).replace(/^\/works\//,'')):'';
 const read=async(db,sql,...args)=>db.prepare(sql).bind(...args).first();
 const rows=async(db,sql,...args)=>(await db.prepare(sql).bind(...args).all()).results||[];
@@ -70,8 +78,10 @@ async function record(db,id){
  }
  const hasCover=!!await read(db,'SELECT i.id FROM edition_images i JOIN editions e '+
   'ON e.id=i.edition_id WHERE e.book_id=? LIMIT 1',id);
- const hasTags=!!await read(db,'SELECT tag_id FROM book_tags WHERE book_id=? LIMIT 1',id);
- return {book,editions:ed,isbn:isbnSet.length===1?isbnSet[0]:'',hasCover,hasTags};
+ const tagLabels=(await rows(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id '+
+  'WHERE bt.book_id=? LIMIT 200',id)).map(r=>String(r.label).toLocaleLowerCase());
+ return {book,editions:ed,isbn:isbnSet.length===1?isbnSet[0]:'',hasCover,
+  hasTags:tagLabels.length>0,tagLabels};
 }
 export function verifiedOpenLibraryDoc(book,doc,isbn=''){
  if(!doc||!workKey(doc.key)||!validAuthor(book.author))return false;
@@ -107,12 +117,15 @@ async function lookup(db,id,fetcher,options={}){
  const work=await requestData(fetcher,'https://openlibrary.org'+key+'.json');
  if(!work||workKey(work.key)!==key)return {status:'review',reason:'Work record could not be verified',state};
  const summary=description(work.description);
- const subjects=tagList(work.subjects||doc.subject);
+ // Subjects the book doesn't already have, so tagged books still gain the
+ // missing ones (e.g. "Witches") without duplicating existing tags.
+ const have=new Set(state.tagLabels||[]);
+ const subjects=tagList(work.subjects||doc.subject).filter(s=>!have.has(s.toLocaleLowerCase()));
  const coverId=(Array.isArray(work.covers)?work.covers.find(Number.isSafeInteger):null)||
   (Number.isSafeInteger(doc.cover_i)?doc.cover_i:null);
  const eligibleCover=!state.hasCover&&Number.isSafeInteger(coverId)&&coverId>0;
  return {status:'verified',state,source:'Open Library',source_url:'https://openlibrary.org'+key,
-  proposed:{synopsis:!text(book.synopsis)?summary:'',tags:!options.noTags&&!state.hasTags?subjects:[],
+  proposed:{synopsis:!text(book.synopsis)?summary:'',tags:!options.noTags?subjects:[],
    cover_id:eligibleCover?coverId:null},
   match:isbn?'isbn_and_author':'title_and_author'};
 }
@@ -135,13 +148,15 @@ async function apply(db,env,id,expected,fetcher,options={}){
  // UPDATE below still refuses to overwrite a concurrent owner edit.
  const safeExpected=expected===null?b.updated_at:expected;
  if(b.updated_at!==safeExpected)return json({status:'changed',reason:'The book changed since scanning'},409);
- const synopsis=proposed.synopsis||'',tags=proposed.tags;
+ // tagsOnly: the whole-library subject run adds tags and nothing else.
+ const synopsis=options.tagsOnly?'':proposed.synopsis||'',tags=proposed.tags;
  const alternatives=state.editions.filter(e=>e.is_special===0);
  const ebook=alternatives.filter(e=>e.format==='ebook');
  const chosen=ebook.length===1?ebook[0]:alternatives.length===1?alternatives[0]:null;
- const mayCreate=state.editions.length===0;
- // Do not choose between ambiguous editions or alter special-edition artwork.
- const canCover=!!proposed.cover_id&&!state.hasCover&&(!!chosen||mayCreate)&&!!env.BOOK_FILES;
+ // Cover art from a work cannot establish a new edition's identity.
+ // Preserve special editions and skip cover attachment unless one standard
+ // edition can be selected without guessing.
+ const canCover=!options.tagsOnly&&!!proposed.cover_id&&!state.hasCover&&!!chosen&&!!env.BOOK_FILES;
  let bytes=null;
  if(canCover)try{
   await new Promise(resolve=>setTimeout(resolve,1100));
@@ -150,13 +165,13 @@ async function apply(db,env,id,expected,fetcher,options={}){
  if(!synopsis&&!tags.length&&!bytes)return json({status:'no_changes',
   reason:'No new synopsis, tags, or usable cover found'});
  const now=new Date().toISOString(),coverId=bytes?crypto.randomUUID():null,
-  editionId=bytes?(chosen?.id||crypto.randomUUID()):null,
-  created=!!bytes&&!chosen,coverKey=bytes?
+  editionId=bytes?chosen.id:null,
+  coverKey=bytes?
    'edition-covers/online-openlibrary/'+coverId+'.jpg':null,logId=crypto.randomUUID();
  const old={synopsis:b.synopsis,updated_at:b.updated_at};
  const after={synopsis:synopsis||b.synopsis,updated_at:now,
   added_tags:tags,cover_id:coverId,cover_key:coverKey,
-  edition_id:editionId,created_edition_id:created?editionId:null,
+  edition_id:editionId,created_edition_id:null,
   source_url,source:'Open Library'};
  const updates=[db.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=? '+
    'AND updated_at=? AND synopsis=? AND archived_at IS NULL')
@@ -171,10 +186,6 @@ async function apply(db,env,id,expected,fetcher,options={}){
    .bind(id,tag,id,now));
  }
  if(bytes){
-  if(created)updates.push(db.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) "+
-   "SELECT ?,?,'Online display','other',0 WHERE EXISTS(SELECT 1 FROM books "+
-   "WHERE id=? AND updated_at=?)")
-   .bind(editionId,id,id,now));
   updates.push(db.prepare("INSERT INTO edition_images(id,edition_id,origin,private_object_key,"+
    "role,match_status,display_cover,credit) SELECT ?,?,'publisher',?,"+
    "'cover','possible',1,'Open Library / original rights holder' "+
@@ -195,6 +206,7 @@ async function apply(db,env,id,expected,fetcher,options={}){
     if(bytes)try{await env.BOOK_FILES.delete(coverKey);}catch{}
     return json({status:'changed',reason:'Book or cover changed while saving'},409);
   }
+  if(tags.length)await syncCollections(db,id);
   return json({status:'applied',book_id:id,change_id:logId,
    synopsis_filled:!!synopsis,tags_added:tags.length,cover_saved:!!bytes,
    cover_skipped:!!proposed.cover_id&&!bytes},201);
@@ -250,8 +262,65 @@ async function undo(db,env,id){
  if(!response.at(-2)?.meta?.changes||!response.at(-1)?.meta?.changes)
   return fail('Repair changed during Undo',409);
  if(after.cover_key&&env.BOOK_FILES)try{await env.BOOK_FILES.delete(after.cover_key);}catch{}
+ if((after.added_tags||[]).length)await syncCollections(db,log.entity_id);
  return json({status:'undone',book_id:log.entity_id});
 }
+// Re-sort auto collections after tags change. Never fail the repair for it.
+async function syncCollections(db,bookId){
+ try{await refreshBookCollections(db,bookId);}catch{}
+}
+
+// Whole-library subject run: every book is looked up once (tracked in
+// online_subject_checks) so the run can pause, resume, and later only
+// check books added since.
+const SUBJECT_BATCH=2;
+const subjectsReady=new WeakMap();
+function ensureSubjectChecks(db){
+ let ready=subjectsReady.get(db);
+ if(!ready){
+  ready=db.prepare('CREATE TABLE IF NOT EXISTS online_subject_checks (book_id TEXT PRIMARY KEY '+
+   'REFERENCES books(id) ON DELETE CASCADE,status TEXT NOT NULL,tags_added INTEGER NOT NULL DEFAULT 0,'+
+   'checked_at TEXT NOT NULL)').bind().run();
+  subjectsReady.set(db,ready);
+  ready.catch(()=>subjectsReady.delete(db));
+ }
+ return ready;
+}
+const UNCHECKED='FROM books b WHERE b.archived_at IS NULL AND NOT EXISTS '+
+ '(SELECT 1 FROM online_subject_checks c WHERE c.book_id=b.id)';
+async function subjectStatus(db){
+ const [left,done,added]=await Promise.all([
+  read(db,'SELECT COUNT(*) AS n '+UNCHECKED),
+  read(db,'SELECT COUNT(*) AS n FROM online_subject_checks'),
+  read(db,'SELECT COALESCE(SUM(tags_added),0) AS n FROM online_subject_checks')
+ ]);
+ return {remaining:Number(left?.n)||0,checked:Number(done?.n)||0,tags_added:Number(added?.n)||0};
+}
+async function subjectBatch(db,env,fetcher){
+ const next=await rows(db,'SELECT b.id,b.title '+UNCHECKED+' ORDER BY b.id LIMIT ?',SUBJECT_BATCH);
+ const results=[];
+ for(const book of next){
+  let body;
+  try{
+   const response=await apply(db,env,book.id,null,fetcher,{tagsOnly:true});
+   body=await response.json();
+   // A concurrent edit is not a verdict on the book; retry it next run.
+   if(response.status===409){results.push({book_id:book.id,title:book.title,status:'changed'});continue;}
+  }catch(e){
+   // Rate limit or outage: stop without marking this book checked.
+   return {results,halt:true,reason:e.status===429?'Open Library rate limit reached; resume later':
+    'Open Library unavailable; resume later',...await subjectStatus(db)};
+  }
+  const added=body.status==='applied'?Number(body.tags_added||0):0;
+  await db.prepare('INSERT OR REPLACE INTO online_subject_checks (book_id,status,tags_added,checked_at) '+
+   'VALUES (?,?,?,?)').bind(book.id,String(body.status||'unknown').slice(0,30),added,new Date().toISOString()).run();
+  results.push({book_id:book.id,title:book.title,status:body.status,tags_added:added,
+   reason:body.reason||''});
+ }
+ const status=await subjectStatus(db);
+ return {results,done:!next.length||status.remaining===0,...status};
+}
+
 export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=pacedSourceFetch}={}){
  if(!path.startsWith('/api/online-enrich/'))return null;
  const end=path.slice('/api/online-enrich/'.length);
@@ -262,6 +331,16 @@ export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=pac
   return json({changes:history.map(x=>({change_id:x.id,book_id:x.entity_id,
    created_at:x.created_at,undone_at:x.undone_at,
    ...(JSON.parse(x.after_json||'{}')||{})}))});
+ }
+ if(end.startsWith('subjects')){
+  await ensureSubjectChecks(db);
+  if(end==='subjects-status'&&request.method==='GET')return json(await subjectStatus(db));
+  if(end==='subjects-batch'&&request.method==='POST')return json(await subjectBatch(db,env,sourceFetch));
+  if(end==='subjects-reset'&&request.method==='POST'){
+   await db.prepare('DELETE FROM online_subject_checks').bind().run();
+   return json(await subjectStatus(db));
+  }
+  return fail('Method not allowed',405);
  }
  if(end==='preview'&&request.method==='GET'){
   const id=new URL(request.url).searchParams.get('book_id');

@@ -1,6 +1,8 @@
 import {extractIsbn13} from './epub-isbn.mjs';
 import {scanShelfTextLocal,shelfTitleLines} from './shelf-photo-text.mjs';
+import {recognizeShelfPhotoLocally} from './shelf-photo-ocr.mjs';
 import {initShelfCoverComparison} from './shelf-cover-ui.mjs';
+import {initPhotoBookMatching} from './photo-match-book-ui.mjs';
 import {suggestShelfMatches,planPhotoMatch} from './shelf-photo-matcher.mjs';
 import {createPhotoReview,setReviewPhotos,assignPhotoMatch,addPhotoBookMatch,photoReviewRows,photoReviewCsv} from './shelf-photo-review.mjs';
 
@@ -38,13 +40,14 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
  let currentUrls=[],busy=false;
  const manualInput=get('photo-isbn-input'),manualButton=get('photo-isbn-search');
  const titleInput=get('photo-title-lines'),titleScan=get('photo-scan-text'),
+   ocrPhoto=get('photo-ocr-source'),ocrRotation=get('photo-ocr-rotation'),ocrStatus=get('photo-text-status'),
    titleMatch=get('photo-match-titles'),titleSuggestions=get('photo-title-suggestions'),
    titlePhoto=get('photo-title-photo');
  const review=createPhotoReview();
  const barcodeMatches=node('div',undefined,'photo-barcode-matches');
  isbnStatus?.after?.(barcodeMatches);
  let selectionGeneration=0;
- let coverComparison=null;
+ let coverComparison=null,bookPhotoMatch=null;
  const reviewArea=node('section',undefined,'photo-review-area');
  const reviewHeading=node('h3','Photo-by-photo review');
  const reviewText=node('p','A shelf photo can contain multiple books. Add as many reviewed matches as you can identify. These temporary links never create physical copies or edit the library.','muted');
@@ -375,11 +378,14 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    ['image/jpeg','image/png','image/webp'].includes(x.type)&&x.size<=8*1024*1024).slice(0,50);
   setReviewPhotos(review,files);renderReview();
   coverComparison?.refreshPhotos();
+  if(ocrStatus)ocrStatus.textContent=files.length?'Photo ready. Tap Read titles to detect text on this device.': 'Choose a shelf photo first.';
+  if(ocrPhoto)ocrPhoto.replaceChildren();
   if(titlePhoto){
    titlePhoto.replaceChildren();
-   for(const record of review.photos){
+   for(const [index,record] of review.photos.entries()){
     const option=node('option',record.name);option.value=record.id;
     titlePhoto.append(option);
+    if(ocrPhoto){const choice=node('option',record.name);choice.value=String(index);ocrPhoto.append(choice);}
    }
   }
   if(titleSuggestions)titleSuggestions.replaceChildren();
@@ -526,35 +532,72 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
 
  titleScan?.addEventListener('click',async()=>{
   if(busy||!input.files?.length)return;
+  const all=[...(input.files||[])].filter(f=>
+   ['image/jpeg','image/png','image/webp'].includes(f.type)&&f.size<=8*1024*1024).slice(0,50);
+  const index=Number.parseInt(ocrPhoto?.value||'0',10);
+  const file=all[index];
+  if(!file){if(ocrStatus)ocrStatus.textContent='Choose a valid shelf photo first.';return;}
   busy=true;titleScan.disabled=true;
   const token=selectionGeneration;
-  const file=[...(input.files||[])].find(f=>['image/jpeg','image/png','image/webp'].includes(f.type));
+  const report=message=>{
+   if(token===selectionGeneration&&ocrStatus)ocrStatus.textContent=message;
+  };
+  report('Preparing text recognition for '+file.name+'…');
   try{
-   if(!file)return;
-   const found=await scanShelfTextLocal(file);
+   const rotation=ocrRotation?.value||'auto';
+   let found={supported:false,lines:[]};
+   // Native recognition is fast when available, but iPhone Safari usually
+   // needs the WebAssembly OCR fallback.
+   if(rotation==='auto'||rotation==='upright')
+    found=await scanShelfTextLocal(file);
    if(token!==selectionGeneration)return;
-   if(found.supported&&found.lines.length){
-    titleInput.value=found.lines.join('\n');
-    tell('Detected '+found.lines.length+' possible text line(s) locally. Review and correct the titles before matching.');
-   }else{
-    tell(found.supported?'No readable text detected; type the titles shown in the photo.':
-     'This browser does not support local text detection. Type visible titles below. No image is uploaded.');
+   let lines=found.lines;
+   if(!lines.length){
+    const recognized=await recognizeShelfPhotoLocally(file,{rotation,onProgress:report});
+    if(token!==selectionGeneration)return;
+    lines=shelfTitleLines(recognized.text,40);
    }
-  }finally{busy=false;titleScan.disabled=false;}
+   if(lines.length){
+    titleInput.value=lines.join('\n').slice(0,6000);
+    if(titlePhoto&&review.photos[index])titlePhoto.value=review.photos[index].id;
+    const outcome='Found '+lines.length+' candidate text line(s) in '+file.name+
+      '. Check and combine titles split across lines, then tap Find these titles in My Library.';
+    report(outcome);tell(outcome+' No books or copies were changed.');
+   }else{
+    const info='No readable text was found. Try another Text direction or a closer, brighter photo. You can also copy from iPhone Photos → Live Text.';
+    report(info);tell(info);
+   }
+  }catch(error){
+   if(token!==selectionGeneration)return;
+   const info='Could not read this photo: '+(error?.message||'OCR failed')+
+    '. You can paste text from iPhone Photos → Live Text below.';
+   report(info);tell(info);
+  }finally{
+   busy=false;titleScan.disabled=false;
+  }
  });
  titleMatch?.addEventListener('click',async()=>{
   if(busy)return;
-  const titles=shelfTitleLines(titleInput?.value);
+  const titles=shelfTitleLines(titleInput?.value,40);
   if(!titles.length){tell('Enter at least one book title, one per line.');return;}
   busy=true;titleMatch.disabled=true;
   const token=selectionGeneration;
   titleSuggestions.replaceChildren();
   try{
-   // Up to 12 indexed bounded searches; never download the full library,
+   // Up to 40 bounded title searches; never download the full library,
    // automatically create a book, or infer edition/copy ownership.
    for(const title of titles){
     const box=node('article',undefined,'photo-match-result');
     box.append(node('strong','Possible title: '+title));
+    const useTitle=node('button','Match this title to a cover or create a book','btn subtle mini');
+    useTitle.type='button';
+    useTitle.addEventListener('click',()=>{
+     bookPhotoMatch?.prefill(title);
+     document.getElementById?.('photo-link-workflow')?.scrollIntoView?.({
+      block:'start',behavior:'smooth'
+     });
+     tell('Review "'+title+'" in the photo-to-book matching section below before saving.');
+    });
     titleSuggestions.append(box);
     try{
      const response=await api('/api/books?'+new URLSearchParams({q:title,limit:'20'}));
@@ -590,7 +633,7 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
      }
     }catch(error){
      box.append(node('p','Search unavailable: '+(error.message||'Try again'),'muted'));
-    }
+    }finally{box.append(useTitle);}
    }
    if(token===selectionGeneration)
     tell('Text suggestions checked against My Library. Review each title before linking; no photos were sent.');
@@ -673,6 +716,14 @@ export function initShelfPhotoAssistant(api,{onSelectBook=async()=>{}}={}){
    renderReview();
   },
   onSelectBook
+ });
+ bookPhotoMatch=initPhotoBookMatching(api,{
+  getPhotoCrop:()=>coverComparison?.croppedCover()||null,
+  onSelectBook
+ });
+ const olderHint=document.getElementById?.('photo-cover-hint');
+ olderHint?.addEventListener('change',()=>{
+  if(olderHint.value?.trim())bookPhotoMatch?.prefill(olderHint.value);
  });
  return {clear};
 }

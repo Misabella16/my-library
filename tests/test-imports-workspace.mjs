@@ -12,13 +12,14 @@ test('section navigation opens every containing disclosure',()=>{
 });
 test('main repair disables competing panels and restores access after pause',()=>{
  const old=globalThis.document;
- const nodes=new Map(['imports','online-enrich','add-library-books','repair-review','repair-advanced'].map(id=>[id,{inert:false,addEventListener(){},setAttribute(k,v){this[k]=v;}}]));
+ const nodes=new Map(['imports','online-enrich','edition-metadata-workflow','add-library-books','repair-review','repair-advanced'].map(id=>[id,{inert:false,addEventListener(){},setAttribute(k,v){this[k]=v;}}]));
  globalThis.document={getElementById:id=>nodes.get(id)};
  try{
   const ui=initImportsWorkspace();ui.setRepairBusy(true);
-  for(const id of ['add-library-books','repair-review','repair-advanced'])assert.equal(nodes.get(id).inert,true);
+  for(const id of ['edition-metadata-workflow','add-library-books','repair-review','repair-advanced'])assert.equal(nodes.get(id).inert,true);
   assert.equal(nodes.get('online-enrich').inert,false);
   ui.setRepairBusy(false);assert.equal(nodes.get('repair-advanced').inert,false);
+   assert.equal(nodes.get('edition-metadata-workflow').inert,false);
  }finally{globalThis.document=old;}
 });
 test('temporary database read retries preserve the same cursor and are bounded',async()=>{

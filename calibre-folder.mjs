@@ -31,8 +31,11 @@ function metadata(xml,id,available,folder){
  }
  const series=/<(?:[\w.-]+:)?meta\b[^>]*name=["']calibre:series["'][^>]*content=["']([^"']+)/i.exec(xml)?.[1]||'';
  const series_index=/<(?:[\w.-]+:)?meta\b[^>]*name=["']calibre:series_index["'][^>]*content=["']([^"']+)/i.exec(xml)?.[1]||'';
+ const publisher=values(xml,'publisher')[0]||'';
+ const publication_date=values(xml,'date')[0]||'';
  return {id,title,authors,tags,comments:description,identifiers:{isbn},
-  formats:available.formats,cover:!!available.cover,series,series_index};
+  formats:available.formats,cover:!!available.cover,series,series_index,
+  publisher,publication_date};
 }
 export function indexCalibreFolder(files){
  const covers=new Map(),epubs=new Map(),otherFiles=new Map(),ops=[],groups=new Map();

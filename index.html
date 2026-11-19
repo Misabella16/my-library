@@ -12,6 +12,8 @@
 <link rel="stylesheet" href="/cute.css">
 <link rel="stylesheet" href="/vintage.css">
 <link rel="stylesheet" href="/pastoral.css">
+<link rel="stylesheet" href="/collection-compact.css">
+<link rel="stylesheet" href="/virtual-shelves.css">
 <script type="module" src="/library.js"></script>
 </head>
 <body>
@@ -67,20 +69,91 @@
     </div>
     <div class="toolbar">
       <label class="search-label"><span class="visually-hidden">Search library</span><input id="search" type="search" placeholder="Find a treasured title or author…" autocomplete="off" maxlength="150"></label>
+      <label class="collection-tool-label" for="collection-sort">Sort <select id="collection-sort" aria-label="Sort collection"><option value="az">Title A–Z</option><option value="za">Title Z–A</option><option value="priority">Priority (1st first)</option><option value="custom">My arrangement</option></select></label>
+      <label class="collection-tool-label" for="collection-priority">Priority <select id="collection-priority" aria-label="Filter by priority"><option value="all">All books</option><option value="1">1st priority</option><option value="2">2nd priority</option><option value="3">3rd priority</option><option value="any">Any priority</option><option value="none">No priority</option></select></label>
+      <label class="collection-tool-label" for="collection-visibility-view">View <select id="collection-visibility-view" aria-label="Choose collection visibility"><option value="visible">My collection</option><option value="hidden">Hidden</option><option value="trash">Trash</option></select></label>
       <button class="btn subtle" type="button" id="refresh">Refresh</button>
     </div>
-    <div class="layout">
+    <div class="collection-arrange-tools" id="collection-arrange-tools">
+      <span class="small-status" id="collection-arrangement-status" role="status" aria-live="polite">Preparing collection layout…</span>
+      <button class="btn mini subtle" type="button" id="collection-undo" disabled>Undo arrangement</button>
+    </div>
+    <div class="layout" id="collection-active-layout">
       <div class="book-grid" id="book-grid" aria-live="polite">
         <div class="empty">Gathering your favorite stories… ♡</div>
       </div>
       <article class="detail" id="book-detail" aria-label="Selected book"><div class="empty"><h3>Choose a book</h3><p>Its synopsis, tags, editions and your notes will appear here.</p></div></article>
     </div>
-    <div class="loadmore"><button class="btn subtle" id="load-more" type="button" hidden>Load more books</button></div>
+    <div class="loadmore" id="visible-load-more"><button class="btn subtle" id="load-more" type="button" hidden>Load more books</button></div>
+    <section id="collection-private-list" class="surface collection-private-list" hidden aria-label="Hidden and trashed books"><h3 id="collection-private-heading">Hidden books</h3><p id="collection-private-summary" role="status" aria-live="polite"></p><div id="collection-private-rows"></div><div class="loadmore"><button id="collection-private-more" class="btn subtle" type="button" hidden>Load more</button></div></section>
   </section>
   <section class="tab-panel" id="shelves" hidden>
     <div class="site-section-artwork" data-site-section-image="shelvesBanner" hidden></div>
-    <div class="surface"><h2 data-site-text="shelvesTitle">My Shelves</h2><p data-site-text="shelvesDescription">Give every physical copy a room, bookcase, shelf and optional position. Manage those locations on each book page, under My Editions & Copies.</p><div class="tip" data-site-text="shelvesTip">Browse owned physical books by room, bookcase and shelf. Search by title, author or tag, filter special editions, switch between covers and spines, and hover or tap Details for summaries. Drag spines or use Move left / right, save your preferred display, and export the visible shelf inventory without changing physical-copy locations.</div></div>
-    <div class="surface visual-shelf-browser" aria-label="Physical library by location">
+    <div class="surface">
+  <h2 data-site-text="shelvesTitle">My Shelves</h2>
+  <p data-site-text="shelvesDescription">Virtual shelves by genre and tag, personal reading lists, plus a separate physical-location view.</p>
+  <div class="virtual-shelf-toolbar" role="tablist" aria-label="My Shelves views">
+    <button class="btn mini active" data-virtual-view="overview" role="tab" aria-selected="true" type="button">Virtual shelves</button>
+    <button class="btn mini" data-virtual-view="auto" role="tab" aria-selected="false" type="button">Auto collections</button>
+    <button class="btn mini" data-virtual-view="browse" role="tab" aria-selected="false" type="button">Browse all</button>
+    <button class="btn mini" data-virtual-view="physical" role="tab" aria-selected="false" type="button">Physical locations</button>
+  </div>
+  <div class="virtual-shelf-overview" id="virtual-overview" data-virtual-panel="overview">
+    <div class="virtual-section-heading"><h3>Genre master shelves</h3><button class="btn mini subtle" type="button" id="virtual-refresh">Refresh shelves</button></div>
+    <p class="muted">Expand a genre for a scrollable cover row, then open its tag sub-shelves.</p>
+    <p class="small-status" id="virtual-shelf-status" role="status" aria-live="polite">Open My Shelves to load your categories.</p>
+    <div id="virtual-genre-rows"></div>
+    <div class="virtual-section-heading"><h3>My reading lists</h3><button class="btn mini subtle" type="button" id="virtual-view-all">See every book</button></div>
+    <p class="muted">Named virtual shelves and existing Goodreads CSV reading lists. Your Goodreads profile is linked for navigation, not automatically scraped.</p>
+    <div class="goodreads-profile-panel" id="goodreads-profile-panel">
+      <form id="goodreads-profile-form" class="goodreads-profile-form">
+        <label for="goodreads-profile-url">My Goodreads profile or shelves URL
+          <input id="goodreads-profile-url" type="url" inputmode="url" autocomplete="url"
+           placeholder="Paste your Goodreads profile or My Books link" maxlength="2000">
+        </label>
+        <button type="submit" class="btn mini subtle">Save profile link</button>
+        <button type="button" id="goodreads-profile-clear" class="btn mini subtle">Clear</button>
+      </form>
+      <div class="goodreads-profile-links" id="goodreads-profile-links" hidden>
+        <a id="goodreads-profile-open" target="_blank" rel="noopener noreferrer">Open my Goodreads profile</a>
+        <a id="goodreads-shelves-open" target="_blank" rel="noopener noreferrer">Open my Goodreads shelves</a>
+      </div>
+      <p class="small-status" id="goodreads-profile-status" role="status" aria-live="polite">Connect your profile for quick links. Import your latest Goodreads CSV to update shelves.</p>
+    </div>
+    <div id="virtual-list-rows"></div>
+  </div>
+  <div id="virtual-auto" data-virtual-panel="auto" hidden>
+    <div class="virtual-section-heading"><h3>Auto collections</h3>
+      <div class="actions start"><button class="btn mini" type="button" id="auto-collection-new">＋ New collection</button>
+      <button class="btn mini subtle" type="button" id="auto-collection-refresh">Refresh all</button>
+      <button class="btn mini subtle" type="button" id="auto-collection-restore" hidden>Restore missing defaults</button></div></div>
+    <p class="muted">Books sort themselves into these collections from their genres, tags, shelves (including Goodreads shelves) and synopsis. Edit any collection’s keywords, delete the ones you don’t want, or make your own. On a book’s page you can add it to a collection or take it out, and that choice sticks. Author nationality isn’t stored in Goodreads or EPUB data, so the origin collections use tags, shelves and “translated from…” notes.</p>
+    <p class="small-status" id="auto-collection-status" role="status" aria-live="polite">Open Auto collections to sort your books.</p>
+    <details class="auto-online" id="auto-online">
+      <summary>Find more tags online (Open Library)</summary>
+      <p class="muted">Looks up each book on Open Library and adds the subjects it doesn’t have yet (like Witches, Time travel or Fairies), then re-sorts that book’s collections. Only books with a confident title-and-author or ISBN match are changed. Each book takes about 3 seconds, so a big library takes hours: keep this tab open, pause any time, and resume later without repeating finished books. Every change can be undone under Imports &amp; Undo.</p>
+      <div class="actions start">
+        <button class="btn mini" type="button" id="auto-online-run">Find tags online</button>
+        <button class="btn mini subtle" type="button" id="auto-online-pause" disabled>Pause</button>
+        <button class="btn mini subtle" type="button" id="auto-online-reset">Check every book again</button>
+      </div>
+      <p class="small-status" id="auto-online-status" role="status" aria-live="polite">Open this section to see how many books are left to check.</p>
+      <ul class="auto-online-log" id="auto-online-log"></ul>
+    </details>
+    <div id="auto-collection-new-form"></div>
+    <div id="auto-collection-groups"></div>
+  </div>
+  <div id="virtual-browse" data-virtual-panel="browse" hidden>
+    <h3 id="virtual-browse-title">All books</h3>
+    <p class="small-status" id="virtual-browse-status" aria-live="polite">Choose a shelf or Browse all.</p>
+    <div class="virtual-hover-description" id="virtual-book-description" hidden aria-live="polite"></div>
+    <div class="virtual-browse-grid" id="virtual-browse-books"></div>
+    <div class="virtual-browse-more"><button class="btn mini subtle" id="virtual-browse-more" type="button" hidden>Load more books</button></div>
+  </div>
+</div>
+<div id="virtual-physical" data-virtual-panel="physical" hidden>
+  <div class="surface"><h3>Physical book locations</h3><p class="muted" data-site-text="shelvesTip">Track the room, bookcase, shelf and position for your owned physical copies.</p></div>
+<div class="surface visual-shelf-browser" aria-label="Physical library by location">
       <div class="visual-shelf-toolbar">
         <div><p class="section-kicker">❦ THE PHYSICAL COLLECTION ❦</p><h3>Browse my bookcases</h3></div>
         <button class="btn subtle" id="shelf-inventory-refresh" type="button">Refresh shelves</button>
@@ -91,11 +164,12 @@
       <div id="shelf-location-contents" class="visual-shelf-contents" aria-live="polite"></div>
       <div class="loadmore"><button class="btn subtle" type="button" id="shelf-copies-more" hidden>Load more books on this shelf</button></div>
     </div>
-  </section>
+  </div>
+</section>
   <section class="tab-panel" id="photos" hidden>
     <div class="site-section-artwork" data-site-section-image="photosBanner" hidden></div>
     <div class="surface"><h2 data-site-text="photosTitle">Shelf Photos</h2><p data-site-text="photosDescription">Keep photos of book covers, spines, and entire bookcases on your device while you match them to your library. Find likely book records, then open their edition and copy details to record ownership, location, or special editions.</p>
-      <div class="tip"><strong>Privacy-first helper:</strong> <span data-site-text="photosTip">Selected photos stay on your Mac. If supported, your browser can read printed ISBN barcodes locally. Some browsers can detect visible text locally; others require typing the titles. Cover-art image matching is not yet supported. You can review multiple books found in one photo. No photo or copy information is saved automatically.</span></div>
+      <div class="tip"><strong>Privacy-first helper:</strong> <span data-site-text="photosTip">Photos stay on your device. Use on-device OCR to read printed titles, including from your iPhone, then review matches before linking books. No physical copies are created automatically.</span></div>
       <label class="upload">Choose shelf photos <input id="photo-files" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
       <p id="photo-status" class="small-status" role="status">Choose a shelf photo to preview privately.</p>
       <div id="photo-preview" class="preview-pictures"></div>
@@ -107,10 +181,23 @@
       </div>
       <div class="photo-search-controls">
         <h3>Recognize book titles on covers and spines</h3>
-        <p class="muted">Try local text detection when your browser supports it, or type the titles you can see, one per line. Images stay on this device. Each suggested book must be reviewed; no copies are created automatically.</p>
-        <button class="btn subtle" id="photo-scan-text" type="button">Read text from first shelf photo (if supported)</button>
-        <label for="photo-title-lines">Visible titles, one per line (up to 12)</label>
-        <textarea id="photo-title-lines" rows="5" maxlength="2200" placeholder="Title one&#10;Title two"></textarea>
+        <p class="muted">Read printed titles from a selected photo on iPhone or computer. The browser downloads its OCR language model once, then recognizes the image on this device. Check spelling and combine split-up spine words before searching. Nothing is added to your library automatically.</p>
+        <label for="photo-ocr-source">Photo to read
+          <select id="photo-ocr-source" aria-label="Choose which shelf photo to read"></select>
+        </label>
+        <label for="photo-ocr-rotation">Text direction
+          <select id="photo-ocr-rotation">
+            <option value="auto">Auto: upright, then sideways if needed</option>
+            <option value="upright">Upright only (fastest)</option>
+            <option value="right">Rotate 90° clockwise</option>
+            <option value="left">Rotate 90° counterclockwise</option>
+            <option value="upside-down">Rotate 180°</option>
+          </select>
+        </label>
+        <button class="btn subtle" id="photo-scan-text" type="button">Read titles from selected photo</button>
+        <p id="photo-text-status" class="small-status" role="status" aria-live="polite">Choose a photo above, then tap Read titles. Works on iPhone Safari with on-device OCR.</p>
+        <label for="photo-title-lines">Detected titles and text, one title per line (review before matching)</label>
+        <textarea id="photo-title-lines" rows="7" maxlength="6000" placeholder="Recognized titles will appear here. You can also paste text from iPhone Photos → Live Text."></textarea>
         <label for="photo-title-photo">Associate reviewed books with this photo</label>
         <select id="photo-title-photo"></select>
         <button class="btn" id="photo-match-titles" type="button">Find these titles in My Library</button>
@@ -127,6 +214,49 @@
         <button class="btn" id="photo-cover-compare" type="button">Compare with my saved covers</button>
         <p id="photo-cover-status" class="small-status" role="status"></p>
         <div id="photo-cover-results" class="photo-match-results" aria-live="polite"></div>
+      </div>
+      <div class="photo-search-controls photo-link-workflow" id="photo-link-workflow">
+        <h3>Match a photographed book or add a new one</h3>
+        <p class="muted">Use the title printed on your cover, or paste text from iPhone Live Text. Search your library first to prevent duplicates. You can then pick the exact edition and its artwork.</p>
+        <label for="photo-find-title">Book title from the photo</label>
+        <input id="photo-find-title" type="search" maxlength="250" placeholder="e.g. Bodies of Magic">
+        <label for="photo-find-author">Author (helps avoid duplicates)</label>
+        <input id="photo-find-author" type="text" maxlength="400" placeholder="e.g. Freya Marske">
+        <button class="btn" type="button" id="photo-find-book">Find in My Library</button>
+        <div id="photo-find-results" class="photo-match-results" aria-live="polite"></div>
+        <button class="btn subtle" type="button" id="photo-create-book">+ Create new book if missing</button>
+        <div id="photo-selected-book" class="photo-selected-book" aria-live="polite"></div>
+        <h4>Choose the exact edition</h4>
+        <label for="photo-edition-choice">Existing edition or new edition</label>
+        <select id="photo-edition-choice"></select>
+        <div class="photo-edition-fields">
+          <label>Edition name<input id="photo-edition-name" maxlength="240" placeholder="FairyLoot exclusive edition"></label>
+          <label>Publisher / special edition vendor<input id="photo-edition-vendor" maxlength="120" placeholder="FairyLoot, Illumicrate, OwlCrate…"></label>
+          <label>ISBN (if known)<input id="photo-edition-isbn" maxlength="32" inputmode="numeric" placeholder="Optional"></label>
+          <label>Format<select id="photo-edition-format"><option value="hardcover">Hardcover</option><option value="paperback">Paperback</option><option value="ebook">Ebook</option><option value="other">Other</option></select></label>
+        </div>
+        <label class="photo-special-check"><input type="checkbox" id="photo-edition-special"> Special or exclusive edition</label>
+        <h4>Choose the cover artwork</h4>
+        <p class="muted">Your actual cropped photograph is usually best for exclusive covers. Or search Google Books and Open Library by title and compare their candidate artwork locally. This is not a Google Lens reverse-image search.</p>
+        <label for="photo-artwork-rotate">Rotate your photographed cover when saving</label>
+        <select id="photo-artwork-rotate">
+          <option value="0">No rotation</option><option value="90">90° clockwise</option>
+          <option value="270">90° counterclockwise</option><option value="180">180°</option>
+        </select>
+        <a class="btn subtle" id="photo-google-images-link" href="#" target="_blank" rel="noopener noreferrer">Search Google Images for this exact edition</a>
+        <p class="muted photo-google-help">Opens real Google Images results in a new tab. Search uses your title, author, and special-edition details. Long-press the correct cover and save it to Photos, then return here to upload it. Nothing is saved automatically.</p>
+        <label for="photo-google-file">Upload a cover saved from Google Images (JPG, PNG, WebP)
+          <input id="photo-google-file" type="file" accept="image/jpeg,image/png,image/webp">
+        </label>
+        <a id="photo-google-lens-link" class="photo-source-link" href="#" target="_blank" rel="noopener noreferrer">Search your photograph using Google Lens</a>
+        <p class="muted photo-google-help">Google Lens requires you to choose or upload the photograph on Google's site. My Library does not share your private photo automatically.</p>
+        <button class="btn subtle" type="button" id="photo-find-covers">Find covers in Google Books and Open Library</button>
+        <p id="photo-online-status" class="small-status" role="status" aria-live="polite">Choose a title to search public cover sources.</p>
+        <div id="photo-online-covers" class="photo-online-covers" aria-live="polite"></div>
+        <div id="photo-cover-choice" hidden></div>
+        <button class="btn" id="photo-save-cover" type="button" disabled>Save chosen cover to selected edition</button>
+        <button class="btn subtle" id="photo-open-book" type="button" disabled>Open selected book</button>
+        <p id="photo-book-status" class="small-status" role="status" aria-live="polite">No book selected. Nothing has been saved.</p>
       </div>
       <div class="photo-search-controls">
         <label for="photo-book-search">Find a pictured book by title or author</label>
@@ -239,7 +369,7 @@
   </section>
   <section class="tab-panel" id="imports" hidden>
 <div class="site-section-artwork" data-site-section-image="importsBanner" hidden></div>
-<header class="surface"><h2 data-site-text="importsTitle">Imports &amp; repairs</h2><p data-site-text="importsDescription">Repair existing books, add new ones, or review previous changes.</p><nav class="collection-health-actions" aria-label="Import and repair sections"><a href="#online-enrich">Repair my library</a><a href="#add-library-books">Add books</a><a href="#repair-review">Review &amp; Undo</a><a href="#repair-advanced">Advanced tools</a></nav></header>
+<header class="surface"><h2 data-site-text="importsTitle">Imports &amp; repairs</h2><p data-site-text="importsDescription">Repair existing books, add new ones, or review previous changes.</p><nav class="collection-health-actions" aria-label="Import and repair sections"><a href="#online-enrich">Repair my library</a><a href="#edition-metadata-workflow">ISBNs &amp; covers</a><a href="#add-library-books">Add books</a><a href="#repair-review">Review &amp; Undo</a><a href="#repair-advanced">Advanced tools</a></nav></header>
 <section class="surface collection-health" id="online-enrich" aria-labelledby="online-enrich-heading">
       <p class="section-kicker">✧ START HERE</p>
       <h2 id="online-enrich-heading">Repair my library</h2>
@@ -258,6 +388,153 @@
       <p class="muted">The whole repair continues automatically in small batches. There is no 50-book stopping point or daily book cap. Keep this tab open. Pause finishes the current item safely; source or database errors stop the run with an explanation. Uncertain matches are left for review.</p>
     <details class="repair-options"><summary>Scan and restart options</summary><div class="collection-health-actions"><button class="btn subtle" id="online-scan" type="button">Scan gaps only</button><button class="btn subtle" id="online-reset" type="button">Restart scan from beginning</button></div></details>
 <p><a href="#repair-review">Review results &amp; Undo</a></p></section>
+<section class="surface" id="edition-metadata-workflow" aria-labelledby="edition-metadata-heading">
+  <p class="section-kicker">✧ ALL-IN-ONE EDITION RECOVERY</p>
+  <h2 id="edition-metadata-heading">Identify editions, verify ISBNs, and recover covers</h2>
+  <p>Use this single workflow for Goodreads, Calibre, saved EPUBs, Open Library, Google Books and missing covers. Start with a catalogue scan, verify the specific edition, then optionally restore missing artwork. You can review one record at a time even when a provider is rate-limiting. No missing ISBNs or covers are assigned without approval.</p>
+  <nav class="isbn-workflow-steps" aria-label="Edition recovery steps">
+    <a href="#isbn-recovery">1 · Find and review ISBNs</a>
+    <a href="#isbn-edition-enrich">2 · Missing covers and publishers</a>
+    <a href="#repair-review">History and Undo</a>
+  </nav>
+    <details class="imports-disclosure" open>
+      <summary>Step 1 · Match ISBNs and verify actual editions</summary>
+      <section class="surface collection-health" id="isbn-recovery" aria-labelledby="isbn-recovery-heading">
+        <p class="section-kicker">✧ ISBN IDENTITIES · PREVIEW BEFORE SAVING</p>
+        <h2 id="isbn-recovery-heading">Recover missing ISBNs for your existing editions</h2>
+        <p>Use your already-saved EPUB metadata, optionally add a Goodreads library CSV and Calibre export or folder. These files are parsed locally on your computer. The site scans its own book, edition and EPUB records in automatically advancing pages, with a Pause button and live progress. It does not download Open Library databases or invent owned editions.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="isbn-recovery-goodreads">Goodreads export CSV (optional)
+            <input id="isbn-recovery-goodreads" type="file" accept=".csv,text/csv">
+          </label>
+          <label class="goodreads-file-label" for="isbn-recovery-calibre">Calibre CSV/JSON (optional)
+            <input id="isbn-recovery-calibre" type="file" accept=".csv,.json,text/csv,application/json">
+          </label>
+          <label class="goodreads-file-label" for="isbn-recovery-folder">Or choose Calibre root folder
+            <input id="isbn-recovery-folder" type="file" webkitdirectory directory multiple>
+          </label>
+        </div>
+        <div class="collection-health-actions">
+          <button class="btn" id="isbn-recovery-scan" type="button">Scan all missing edition ISBNs</button>
+          <button class="btn subtle" id="isbn-recovery-pause" type="button" disabled>Pause after current page</button>
+          <button class="btn subtle" id="isbn-recovery-history" type="button">ISBN recovery history &amp; Undo</button>
+        </div>
+        <p id="isbn-recovery-status" class="small-status" role="status" aria-live="polite">Local files are optional. Scanning your saved EPUB and edition metadata requires no new downloads.</p>
+        <p id="isbn-recovery-metrics" class="small-status" aria-live="polite"></p>
+        <p class="muted">After the scan, use the cards below. Each ISBN has an individual <strong>Check online</strong> button, source links, and manual review for a genuinely verified owned edition. If Open Library reports HTTP 429, you can still inspect your own records and use the source links. Do not bulk-approve unverified matches.</p>
+        <section id="isbn-verification" aria-labelledby="isbn-verification-heading">
+          <h3 id="isbn-verification-heading">Step 1B · Check or manually review an ISBN</h3>
+          <p>Cross-check edition-level ISBNs with Open Library and Google Books. Goodreads CSV edition identifiers, publisher, binding and year, Calibre and linked EPUB metadata are shown as supporting evidence. Results are separated into verified, probable, needs review, mismatch and not found. A title-only match or a single source never authorizes bulk approval. This on-demand scan can be paused. No ISBN is saved during verification.</p>
+          <div class="collection-health-actions">
+            <button id="isbn-verification-start" class="btn" type="button" disabled>Verify / resume all ISBN candidates</button>
+            <button id="isbn-verification-pause" class="btn subtle" type="button" disabled>Pause verification or save</button>
+            <button id="isbn-verification-export" class="btn subtle" type="button" disabled>Export verification checkpoint</button>
+            <label class="goodreads-file-label" for="isbn-verification-import">Restore previous verification (optional)
+              <input id="isbn-verification-import" type="file" accept=".json,application/json" disabled>
+            </label>
+          </div>
+          <p id="isbn-verification-status" role="status" aria-live="polite" class="small-status">First run the full local ISBN Recovery scan above, then choose independent verification.</p>
+          <p id="isbn-verification-stats" class="small-status" aria-live="polite"></p>
+          <p class="muted">The bulk check is optional. If an online provider is rate limiting, use the cards below to compare the ISBN in Open Library, Google Books, or Goodreads and confirm the exact publication edition manually.</p>
+          <div class="collection-health-actions">
+            <label class="epub-filter-label" for="isbn-verification-search">Search ISBNs
+              <input id="isbn-verification-search" type="search" placeholder="Title, author, or ISBN" autocomplete="off" disabled>
+            </label>
+            <label class="epub-filter-label" for="isbn-verification-filter">Verification category
+              <select id="isbn-verification-filter" disabled>
+                <option value="all">All proposals</option>
+                <option value="verified">Verified ebook ISBNs</option>
+                <option value="probable">Probable edition matches (review only)</option>
+                <option value="needs_review">Needs edition review</option>
+                <option value="mismatch">Mismatched records</option>
+                <option value="not_found">No reliable match</option>
+                <option value="conflict">Conflicting ISBNs</option>
+                <option value="unchecked">Still unchecked</option>
+              </select>
+            </label>
+            <button id="isbn-verification-prev" class="btn subtle" type="button" disabled>Previous 12</button>
+            <button id="isbn-verification-next" class="btn subtle" type="button" disabled>Next 12</button>
+          </div>
+          <p class="small-status" id="isbn-verification-page"></p>
+          <div id="isbn-verification-results" class="epub-preview-list"></div>
+          <div class="collection-health-actions">
+            <button id="isbn-verification-select" class="btn subtle" type="button" disabled>Select all independently verified ebook ISBNs</button>
+            <button id="isbn-verification-apply" class="btn" type="button" disabled>Apply 0 selected verified ISBNs</button>
+          </div>
+          <p class="muted">Only matches independently corroborated by both providers, with exact ebook format evidence and a linked EPUB, qualify for bulk approval. All other books remain review-only. Each approved ISBN is checked again on the server before saving, with protected editions and Undo history. This process runs only while this page stays open.</p>
+        </section>
+        <details class="imports-disclosure" id="isbn-recovery-extra">
+          <summary>Additional catalogue tools and original ISBN proposal list</summary>
+          <p class="muted">The list below is the original preview and batch controls. Use the verification cards above for individual ISBN research and manual approval. You can still search books without a local ISBN here.</p>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="isbn-recovery-search">Filter recovered ISBN proposals
+            <input id="isbn-recovery-search" type="search" placeholder="Title, author or ISBN" autocomplete="off" disabled>
+          </label>
+          <button class="btn subtle" id="isbn-recovery-prev" type="button" disabled>Previous 20</button>
+          <button class="btn subtle" id="isbn-recovery-next" type="button" disabled>Next 20</button>
+          <button class="btn subtle" id="isbn-recovery-preview" type="button" disabled>Preview this page (no changes)</button>
+          <button class="btn subtle" id="isbn-recovery-select" type="button" disabled>Select reviewed, ready editions</button>
+          <button class="btn" id="isbn-recovery-apply" type="button" disabled>Apply selected approved ISBNs</button>
+        </div>
+        <p id="isbn-recovery-page" class="small-status" aria-live="polite"></p>
+        <div class="epub-preview-list" id="isbn-recovery-results"></div>
+        <h3>Research ISBNs for books without local identifiers</h3>
+        <p class="muted">Optional online research works one book at a time. You can browse the actual Open Library editions of a matching Work, including edition-level ISBNs, publishers and cover candidates. These remain research leads, never automatically owned copies or approved ISBNs.</p>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="isbn-recovery-online-search">Find book in scanned catalogue
+            <input id="isbn-recovery-online-search" type="search" placeholder="Book title or author" autocomplete="off">
+          </label>
+          <button class="btn subtle" id="isbn-recovery-online-find" type="button">Find books</button>
+        </div>
+        <div class="epub-preview-list" id="isbn-recovery-online"></div>
+        <p class="muted">An ISBN is edition-specific. Goodreads and Calibre title/author matches are candidate evidence, not proof that a particular edition carries that ISBN. No ISBN is added without explicit owner approval, a current edition check and checksum validation. Existing ISBNs, special editions, covers, copies, shelves, books and EPUBs remain untouched. Only approved additions can be undone.</p>
+        </details>
+        <div class="epub-preview-list" id="isbn-recovery-history-list"></div>
+      </section>
+    </details>
+    <details class="imports-disclosure">
+      <summary>Step 2 · Recover missing edition covers and publishers</summary>
+      <section class="surface collection-health" id="isbn-edition-enrich" aria-labelledby="isbn-edition-enrich-heading">
+        <p class="section-kicker">✧ EXACT EDITION ISBN · PREVIEW FIRST</p>
+        <h2 id="isbn-edition-enrich-heading">Find missing cover art and publisher information</h2>
+        <p>Scan your <strong>existing standard editions with valid ISBNs</strong> for missing publisher information or artwork. Research the corresponding Open Library edition using its ISBN, inspect the actual source, and explicitly approve only missing fields. Special editions, owner-selected artwork, copies, shelf locations, EPUBs, reviews and private notes are never changed. The scan uses a cursor to avoid expensive D1 counts. ISBN research runs only after you choose it and can be paused.</p>
+        <div class="collection-health-actions">
+          <button class="btn subtle" id="isbn-edition-enrich-scan" type="button">Scan all missing edition fields</button>
+          <button class="btn" id="isbn-edition-enrich-lookup" type="button" disabled>Check ISBN sources (continue automatically)</button>
+          <button class="btn subtle" id="isbn-edition-enrich-pause" type="button" disabled>Pause research</button>
+          <button class="btn subtle" id="isbn-edition-enrich-resume" type="button" disabled>Resume research</button>
+          <button class="btn subtle" id="isbn-edition-enrich-history" type="button">Recovery history &amp; Undo</button>
+        </div>
+        <p id="isbn-edition-enrich-status" class="small-status" role="status" aria-live="polite">First scan the existing ISBN editions. No website data changes until you approve a specific source cover or missing publisher.</p>
+        <p id="isbn-edition-enrich-stats" class="small-status" aria-live="polite"></p>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="isbn-edition-enrich-filter">Filter editions by title, author or ISBN
+            <input type="search" id="isbn-edition-enrich-filter" placeholder="Search eligible editions" autocomplete="off" disabled>
+          </label>
+        </div>
+        <div id="isbn-edition-enrich-results" class="epub-preview-list"></div>
+        <div class="health-result">
+          <h3>Review one edition</h3>
+          <div id="isbn-edition-enrich-details" class="epub-preview-list"></div>
+          <div class="collection-health-actions">
+            <button class="btn subtle" id="isbn-edition-enrich-preview" type="button" disabled>Recheck this edition (read-only)</button>
+          </div>
+          <label id="isbn-edition-enrich-cover-choice-label" class="collection-health-actions" hidden>
+            <input id="isbn-edition-enrich-cover-choice" type="checkbox" hidden disabled>
+            Include the previewed source cover (only when this edition has no artwork)
+          </label>
+          <label class="collection-health-actions">
+            <input id="isbn-edition-enrich-approve" type="checkbox" disabled>
+            I verified the exact edition ISBN, publisher, and any chosen cover artwork.
+          </label>
+          <button class="btn" id="isbn-edition-enrich-apply" type="button" disabled>Apply approved missing edition details</button>
+        </div>
+        <div id="isbn-edition-enrich-history-list" class="epub-preview-list"></div>
+        <p class="muted">This second step builds on the ISBNs recovered above. It only enriches the <em>existing</em> editions after a checksum-valid ISBN is present. Missing cover art is always previewed and labeled possible, not user-verified. If a save response is lost, consult history before trying again; Undo refuses to remove later owner edits.</p>
+      </section>
+    </details>
+</section>
+
 <section class="surface" id="add-library-books"><h2>Add books</h2><p>Choose what you want to bring in. Already uploaded your books? Use Repair my library above.</p><details class="imports-disclosure" id="add-epubs"><summary>EPUB files or folders</summary><section class="epub-tool surface" aria-labelledby="epub-heading">
       <p class="section-kicker">✧ PRIVATE EPUB LIBRARY</p>
       <h3 id="epub-heading">Import EPUB files or an entire folder</h3>
@@ -418,7 +695,7 @@
 <button type="button" class="btn subtle" id="epub-backfill-history">Recent repair history</button>
 <div id="epub-backfill-history-list" class="epub-preview-list" aria-live="polite"></div></details><details class="imports-disclosure"><summary>Recovered cover history</summary><button class="btn subtle" type="button" id="relink-existing-history">Cover repair history &amp; Undo</button>
 <div id="relink-existing-history-list" class="epub-preview-list" aria-live="polite"></div></details><details class="imports-disclosure"><summary>Goodreads import &amp; update history</summary><section id="goodreads-import-history" class="goodreads-history" aria-label="Previous Goodreads import batches"><p class="muted">Loading import history…</p></section>
-<section id="goodreads-sync-history" class="goodreads-history" aria-label="Goodreads metadata sync Undo history"></section></details></section><details class="imports-disclosure" id="repair-advanced"><summary>Advanced tools — optional scans and individual repair steps</summary><p>The main repair runs the saved-EPUB, cover-recovery and online steps for you. These tools are optional; run one operation at a time.</p><details class="imports-disclosure"><summary>Inspect library health (no changes)</summary><section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
+<section id="goodreads-sync-history" class="goodreads-history" aria-label="Goodreads metadata sync Undo history"></section></details></section><details class="imports-disclosure" id="repair-advanced"><summary>Advanced tools — optional scans and individual repair steps</summary><p>The main repair runs the saved-EPUB, cover-recovery and online steps for you. These tools are optional; run one operation at a time.</p><details class="imports-disclosure"><summary>Health, EPUB, existing covers, and title cleanup</summary><details class="imports-disclosure"><summary>Inspect library health (no changes)</summary><section class="surface collection-health" id="collection-health" aria-label="Collection health dashboard">
       <p class="section-kicker">✧ CATALOGUE HEALTH</p>
       <h2>Find books that need attention</h2>
       <p class="muted">Scan your entire catalogue in one click to find missing covers, summaries, tags, editions, and possible duplicates. The scan uses small, low-cost requests automatically and never edits book records. For repairs, use Repair my library at the top of this tab.</p>
@@ -500,7 +777,7 @@
         <p class="small-status" id="epub-title-auto-status" role="status" aria-live="polite">The automatic repair checks verified ISBN and saved EPUB matches, preserves edits, and leaves uncertain books for review. Undo is saved permanently.</p>
         <div id="epub-title-auto-history-list" class="epub-preview-list" aria-live="polite"></div>
         <div class="epub-preview-list" id="epub-title-results" aria-live="polite"></div>
-      </section></details><details class="imports-disclosure"><summary>Local-first Open Library Works repair (no Editions download)</summary><section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
+      </section></details></details><details class="imports-disclosure"><summary>Offline Open Library Works and text matching</summary><details class="imports-disclosure"><summary>Local-first Open Library Works repair (no Editions download)</summary><section class="surface collection-health" id="offline-bulk" aria-labelledby="offline-bulk-heading">
       <p class="section-kicker">✧ OPTIONAL · ADVANCED</p>
       <h2 id="offline-bulk-heading">Repair missing metadata locally using Open Library Works</h2>
       <p>When Cloudflare D1 is busy or online checks are slow, use the Works + Authors dumps locally to match your whole collection by verified title and author. You do <strong>not</strong> need the large Editions dump. Local matching uses no D1 reads; only safe missing-field proposals are uploaded back to this private site. Existing covers, notes and special editions stay protected.</p>
@@ -509,6 +786,7 @@
         <label class="goodreads-file-label" for="offline-file">3. Choose offline matches JSON
           <input id="offline-file" type="file" accept=".json,application/json">
         </label>
+        <button class="btn subtle" id="offline-check-connection" type="button">Check connection (no changes)</button>
         <button class="btn" id="offline-apply" type="button" disabled>Apply ALL verified matches</button>
         <button class="btn subtle" id="offline-pause" type="button" disabled>Pause</button>
         <button class="btn subtle" id="offline-history" type="button">Repair history &amp; Undo</button>
@@ -520,7 +798,95 @@
       <div id="offline-results" class="collection-health-results"></div>
       <div id="offline-history-list" class="epub-preview-list"></div>
       <p class="muted">Existing descriptions, tags, notes, ratings, special-edition images, copies and EPUBs are preserved. New standard artwork uses Open Library's public cover-ID image links when displayed, not thousands of bulk image downloads. All proposed covers are unverified until reviewed and may be unavailable if Open Library lacks the image. You can pause and resume the import in the same browser tab.</p>
-    </section></details></details></section>
+    </section></details>
+    <details class="imports-disclosure"><summary>Review second-pass Open Library text repairs (no covers or editions)</summary>
+      <section class="surface collection-health" id="offline-text-review" aria-labelledby="offline-text-heading">
+        <p class="section-kicker">✧ REVIEW BEFORE APPLYING</p>
+        <h2 id="offline-text-heading">Preview missing synopses and tags from second-pass matches</h2>
+        <p>Use the Mac helper <code>local-mac/prepare_second_pass_text.py</code> with the saved <code>second-pass-review.json</code> and a fresh catalogue export. The resulting <code>second-pass-text-proposals.json</code> is a review file, not an automatic import. You choose exactly which text changes to approve. No editions, copy records, private EPUBs or covers are written here.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="offline-text-file">Choose text-only proposals JSON
+            <input id="offline-text-file" type="file" accept=".json,application/json">
+          </label>
+          <button class="btn subtle" id="offline-text-preview" type="button" disabled>Preview 20 (read-only)</button>
+          <button class="btn subtle" id="offline-text-next" type="button" disabled>Next 20</button>
+          <button class="btn subtle" id="offline-text-select" type="button" disabled>Select ready on this page</button>
+          <button class="btn" id="offline-text-approve" type="button" disabled>Apply selected text repairs</button>
+          <button class="btn subtle" id="offline-text-history" type="button">Text repair history &amp; Undo</button>
+        </div>
+        <p class="small-status" id="offline-text-status" role="status" aria-live="polite">Select your review-only proposals JSON to preview the current gaps. No changes until you approve.</p>
+        <p class="small-status" id="offline-text-metrics" aria-live="polite"></p>
+        <div id="offline-text-results" class="collection-health-results"></div>
+        <div id="offline-text-history-list" class="epub-preview-list"></div>
+        <p class="muted">The original title and author are checked against the current book, source title variants must agree, and any record edited since export is held for review. Imported text can be undone unless you subsequently edit the book. Generic Open Library covers never become special editions.</p>
+      </section>
+    </details>
+    </details><details class="imports-disclosure"><summary>Alternative edition and Calibre cover research</summary>
+    <details class="imports-disclosure">
+      <summary>Edition &amp; Cover Recovery (Open Library, exact ISBN only)</summary>
+      <section class="surface collection-health" id="edition-recovery" aria-labelledby="edition-recovery-heading">
+        <p class="section-kicker">✧ PRIVATE · PREVIEW FIRST</p>
+        <h2 id="edition-recovery-heading">Find actual editions and their covers</h2>
+        <p>Use your saved <strong>first-pass verified matches JSON</strong> to research editions of known works. Open Library's Editions API is queried only for a book you select. We never download the full Editions or cover dumps. Publishers, dates, ISBNs, and cover candidates appear for comparison, but unknown editions are not added as owned books or copies.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="edition-recovery-file">Choose original verified matches JSON
+            <input id="edition-recovery-file" type="file" accept=".json,application/json">
+          </label>
+          <label class="epub-filter-label" for="edition-recovery-search">Find a book in the report
+            <input id="edition-recovery-search" type="search" placeholder="Search title or author" autocomplete="off">
+          </label>
+          <button class="btn subtle" id="edition-recovery-next" type="button" disabled>Next 25 source editions</button>
+          <button class="btn subtle" id="edition-recovery-undo" type="button">Edition recovery history &amp; Undo</button>
+        </div>
+        <p class="small-status" id="edition-recovery-status" aria-live="polite">Load your first-pass verified match report and choose a book to retrieve its available editions.</p>
+        <div class="epub-preview-list" id="edition-recovery-choices"></div>
+        <div class="collection-health-results" id="edition-recovery-results"></div>
+        <div class="health-result" id="edition-recovery-proposal"></div>
+        <label class="collection-health-actions"><input id="edition-recovery-ack" type="checkbox" disabled> I verified this exact ISBN and the proposed edition cover or publisher.</label>
+        <div class="collection-health-actions">
+          <button class="btn" id="edition-recovery-apply" type="button" disabled>Apply approved missing edition details</button>
+        </div>
+        <div class="epub-preview-list" id="edition-recovery-history"></div>
+        <p class="muted">The site adds metadata or artwork only to an existing standard edition whose ISBN matches exactly. FairyLoot, Illumicrate, OwlCrate, signed editions, manually selected covers, notes and copies stay unchanged. Books with no editions or ISBN are shown as research candidates, never silently turned into owned editions or fake “Online display” records. You can add a real edition manually after identifying it.</p>
+      </section>
+    </details>
+    <details class="imports-disclosure">
+      <summary>Local Calibre &amp; EPUB edition evidence (without ISBN)</summary>
+      <section class="surface collection-health" id="edition-local" aria-labelledby="edition-local-heading">
+        <p class="section-kicker">✧ LOCAL-FIRST · PRIVATE · COVER PREVIEW</p>
+        <h2 id="edition-local-heading">Compare local book evidence and recover a missing ebook cover</h2>
+        <p>Use an existing Calibre folder or a Calibre CSV/JSON export. Its titles, authors, series and identifiers are read <strong>on your device</strong>; the original files are not uploaded. Search your live My Library one book at a time to inspect linked EPUB metadata and edition records. A book-level title and author match is not proof of a particular printed or collector edition.</p>
+        <div class="collection-health-actions">
+          <label class="goodreads-file-label" for="edition-local-folder">Choose your Calibre folder (includes cover.jpg)
+            <input id="edition-local-folder" type="file" webkitdirectory directory multiple>
+          </label>
+          <label class="goodreads-file-label" for="edition-local-export">Or select Calibre CSV / JSON (metadata only)
+            <input id="edition-local-export" type="file" accept=".json,.csv,application/json,text/csv">
+          </label>
+          <button class="btn subtle" id="edition-local-load" type="button">Read local Calibre metadata</button>
+        </div>
+        <div class="collection-health-actions">
+          <label class="epub-filter-label" for="edition-local-search">Find a book already in My Library
+            <input id="edition-local-search" type="search" placeholder="Title or author, at least 3 letters" autocomplete="off">
+          </label>
+          <button class="btn subtle" id="edition-local-find" type="button">Find book</button>
+          <button class="btn subtle" id="edition-local-history" type="button">Local cover history &amp; Undo</button>
+        </div>
+        <p class="small-status" role="status" aria-live="polite" id="edition-local-status">Read your Calibre folder (or export), then search My Library to compare edition evidence. Nothing is changed without your approval.</p>
+        <div class="epub-preview-list" id="edition-local-results"></div>
+        <div class="epub-preview-list" id="edition-local-evidence"></div>
+        <div class="epub-preview-list" id="edition-local-source"></div>
+        <div class="health-result" id="edition-local-preview"></div>
+        <label class="collection-health-actions">
+          <input id="edition-local-approve" type="checkbox" disabled>
+          I compared this actual Calibre cover to my selected standard ebook and approve linking it as a possible cover.
+        </label>
+        <div id="edition-local-history-list" class="epub-preview-list"></div>
+        <p class="muted">Only an existing standard ebook with no attached image may receive a selected local cover, after your explicit approval. No book, edition, copy, or fake Online display entry is created. No collector's cover, owner photo, review, note or EPUB is replaced. Saved local covers remain marked possible until separately verified. Undo is available unless you edit the image afterward.</p>
+      </section>
+    </details>
+    </details>
+</details></section>
 </main>
 <footer><span aria-hidden="true">❀</span> <span data-site-text="footer">My Library · every beloved story deserves a place to bloom</span> <span aria-hidden="true">❀</span></footer>
 <dialog id="add-book-dialog" aria-labelledby="add-book-title">
@@ -530,6 +896,10 @@
     <label>Author <input name="author" maxlength="400" autocomplete="off"></label>
     <label>Synopsis <textarea name="synopsis" rows="4" maxlength="25000"></textarea></label>
     <label>Reading status <select name="reading_status"><option value="unread">Want to read</option><option value="reading">Reading</option><option value="read">Read</option><option value="paused">Paused</option><option value="dnf">Did not finish</option></select></label>
+    <label>Priority <select name="priority"><option value="">No priority</option><option value="1">1st priority</option><option value="2">2nd priority</option><option value="3">3rd priority</option></select></label>
+    <label>Cover image URL (optional) <input name="cover_url" type="url" inputmode="url" maxlength="2000" placeholder="Paste an image link (https)" autocomplete="off"></label>
+    <label>Genres (comma-separated) <input name="genres" maxlength="600" placeholder="Fantasy, Romance, Xianxia" autocomplete="off"></label>
+    <label>Tags (comma-separated) <input name="tags" maxlength="600" placeholder="Female lead, Slow burn, Revenge" autocomplete="off"></label>
     <label>Private notes (optional) <textarea name="private_notes" rows="3" maxlength="120000"></textarea></label>
     <div class="actions"><button class="btn subtle" type="button" data-close-dialog>Cancel</button><button class="btn" type="submit">Add to library</button></div>
   </form>

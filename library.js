@@ -8,30 +8,52 @@ import {initEpubBackfill} from './epub-backfill-ui.mjs';
 import {initShelfPhotoAssistant} from './shelf-photo-ui.mjs';
 import {initSiteStudio} from './site-studio-ui.mjs';
 import {initVisualShelves} from './visual-shelves-ui.mjs';
+import {initVirtualShelves} from './virtual-shelves-ui.mjs';
+import {initAutoCollections,mountBookCollections} from './auto-collections-ui.mjs';
+import {initBookReferenceUI} from './book-reference-ui.mjs';
+import {initCollectionGrid} from './collection-grid-ui.mjs';
+import {initCollectionManagement} from './collection-management-ui.mjs';
+import {synopsisToSafeHtml,synopsisPlainText} from './synopsis-format.mjs';
 import {initCollectionHealth} from './collection-health-ui.mjs';
 import {initOnlineEnrich} from './online-enrich-ui.mjs';
 import {preferredDetailCoverId} from './cover-priority.mjs';
 import {initOfflineBulk} from './offline-bulk-ui.mjs';
+import {initOfflineTextReview} from './offline-text-review-ui.mjs';
+import {initEditionRecovery} from './edition-recovery-ui.mjs';
+import {initLocalEditionRecovery} from './edition-local-ui.mjs';
+import {initIsbnRecovery} from './isbn-recovery-ui.mjs';
+import {initIsbnEditionEnrich} from './isbn-edition-enrich-ui.mjs';
 import {initExistingCoverRelink} from './existing-cover-relink-ui.mjs';
 import {initCalibreCompare} from './calibre-compare-ui.mjs';
 import {editionCoverSearches} from './edition-cover-discovery.mjs';
+import {PRIORITY_LABELS} from './book-extras.mjs';
 // My Library Phase 2 UI: no sample records, no local storage for private data.
 // All real writes go to the owner-authenticated, same-origin /api routes.
 'use strict';
 const state = {
-  books:[], total:0, selectedId:null, detail:null, query:'', offset:0,
+  books:[], total:0, selectedId:null, detail:null, query:'', sort:'az',priority:'all',offset:0,
   busy:false, activeEdition:null, urls:[], refreshToken:0
 };
 const $ = s => document.querySelector(s);
+let collectionGrid=null;
+let bookReference=null;
 const safe = x => String(x??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'' :'&#39;'}[ch]));
 const safeId = x => /^[0-9a-f-]{36}$/i.test(x||'') ? x : '';
 const statuses = {unread:'Want to read',reading:'Reading',read:'Read',paused:'Paused',dnf:'Did not finish'};
 const label = (value,defaultText='Not set') => safe(value||defaultText);
 const options = (values,value) => values.map(([id,text])=>'<option value="'+safe(id)+'" '+(id===value?'selected':'')+'>'+safe(text)+'</option>').join('');
-const bookCover = (title,imgId='') => '<div class="book-cover"><b>'+
+// A pasted cover URL (https only, checked by the server) wins over saved edition covers.
+const httpsUrl = x => /^https:\/\//i.test(x||'') ? x : '';
+const bookCover = (title,imgId='',coverUrl='') => '<div class="book-cover"><b>'+
  safe(machineTitleReason(title)?'Title needs review':title)+'</b>'+
- (safeId(imgId)?'<img loading="lazy" src="/api/images/'+imgId+
+ (httpsUrl(coverUrl)?'<img loading="lazy" referrerpolicy="no-referrer" src="'+safe(coverUrl)+
+ '" alt="Cover of '+safe(title)+'">':
+ safeId(imgId)?'<img loading="lazy" src="/api/images/'+imgId+
  '" alt="Cover of '+safe(title)+'">':'')+'</div>';
+const priorityBadge = p => PRIORITY_LABELS[p]?'<span class="badge priority-badge priority-'+Number(p)+'">'+
+ PRIORITY_LABELS[p]+'</span>':'';
+const priorityOptions = p => options([['','No priority'],['1','1st priority'],['2','2nd priority'],['3','3rd priority']],
+ p===null||p===undefined?'':String(p));
 const bookTags = tags => (tags||[]).map(t=>'<span class="badge">'+safe(t.label)+' <button class="tag-remove" type="button" data-remove-tag="'+safe(t.id)+'" aria-label="Remove '+safe(t.label)+'">×</button></span>').join('');
 const isbnMaybe = s => s?'<span class="muted">ISBN '+safe(s)+'</span>':'';
 function showMessage(msg,isError=false){
@@ -80,24 +102,41 @@ function currentCover(book) {
 }
 function renderGrid(){
   const grid=$('#book-grid');
-  const books=state.books;
-  $('#count').textContent=state.total+' '+(state.total===1?'book':'books')+(state.query?' matching “'+state.query+'”':'');
+  const books=collectionGrid?collectionGrid.arranged(state.books):state.books;
+  const movable=collectionGrid?.canMove()||false;
+  const priorityText={1:' · 1st priority',2:' · 2nd priority',3:' · 3rd priority',none:' · no priority set'}[state.priority]||'';
+  $('#count').textContent=state.total+' '+(state.total===1?'book':'books')+(state.query?' matching “'+state.query+'”':'')+priorityText;
   if(!books.length){
     grid.innerHTML='<div class="empty"><h3>'+(state.query?'No matching titles':'Your library is ready')+'</h3><p>'+(state.query?'Try another search.':'Add your first book, then give it editions, copies, tags and private notes.')+'</p></div>';
   } else {
-    grid.innerHTML=books.map(b=>'<button class="book-card '+(state.selectedId===b.id?'selected':'')+'" type="button" data-select-book="'+safe(b.id)+'">'+
-      bookCover(b.title,b.cover_id)+'<div class="book-data"><strong>'+
-      (machineTitleReason(b.title)?'Title needs review':safe(b.title))+'</strong><small>'+
-      (machineTitleReason(b.title)?'Imported label: '+safe(b.title)+' · ':'')+
-      label(b.author,'Unknown author')+'</small><br><span class="badge">'+
-      (statuses[b.reading_status]||'Unread')+'</span></div></button>').join('');
+    grid.innerHTML=books.map(b=>{
+      const title=machineTitleReason(b.title)?'Title needs review':safe(b.title);
+      const author=label(b.author,'Unknown author');
+      const synopsis=synopsisToSafeHtml(b.synopsis||'No synopsis added yet. Open this book to add one.');
+      return '<article class="book-card '+(state.selectedId===b.id?'selected':'')+
+       '" data-book-id="'+safe(b.id)+'" draggable="'+(movable?'true':'false')+'">'+
+       '<button class="book-card-open" type="button" data-select-book="'+safe(b.id)+'" aria-label="Open '+safe(b.title)+'">'+
+       bookCover(b.title,b.cover_id,b.cover_url)+'<div class="book-data"><strong>'+
+       title+'</strong><small>'+author+'</small><span class="badge">'+
+       (statuses[b.reading_status]||'Unread')+'</span>'+priorityBadge(b.priority)+'</div></button>'+
+       '<div class="book-card-move" aria-label="Book arrangement controls">'+
+       '<button type="button" data-move-book="-1" '+(movable?'':'disabled')+' aria-label="Move '+safe(b.title)+' left" title="Move left">◀</button>'+
+       '<button type="button" data-toggle-preview aria-expanded="false" aria-label="Show synopsis for '+safe(b.title)+'" title="Read synopsis">ⓘ</button>'+
+       '<button type="button" data-move-book="1" '+(movable?'':'disabled')+' aria-label="Move '+safe(b.title)+' right" title="Move right">▶</button></div>'+
+       '<details class="book-card-actions"><summary aria-label="Manage '+safe(b.title)+'" title="Manage book">⋯</summary>'+
+       '<div><button type="button" data-visibility-action="hide" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Hide book</button>'+
+       '<button type="button" data-visibility-action="trash" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Move to Trash</button></div></details>'+
+       '<aside class="book-card-preview" aria-label="Synopsis for '+safe(b.title)+'">'+
+       '<strong>'+title+'</strong><p class="muted">'+author+'</p><div class="synopsis-body">'+synopsis+'</div></aside></article>';
+    }).join('');
   }
   $('#load-more').hidden=state.books.length>=state.total;
 }
+
 async function listBooks({append=false}={}){
   const token=++state.refreshToken;
   const offset=append?state.books.length:0;
-  const q=new URLSearchParams({q:state.query,offset:String(offset),limit:'60'});
+  const q=new URLSearchParams({q:state.query,offset:String(offset),limit:'60',sort:state.sort,priority:state.priority});
   // Reuse first-page count for Load more; no extra D1 COUNT scan.
   if(append)q.set('include_total','0');
   const result=await api('/api/books?'+q);
@@ -165,17 +204,40 @@ function editionBlock(e){
 function renderDetail(){
   const target=$('#book-detail'), b=state.detail;
   if(!b){target.innerHTML='<div class="empty"><h3>Choose a book</h3><p>Its synopsis, tags, editions, shelf locations and your private notes will appear here.</p></div>';return;}
+  const linkedGoodreadsId=/^\d{1,36}$/.test(String(b.goodreads_id||''))?String(b.goodreads_id):'';
   const editionContent=(b.editions||[]).map(editionBlock).join('');
   const genreTags=bookTags(b.tags), shelves=(b.shelves||[]).map(s=>'<span class="badge">'+safe(s.name)+
     '<button class="tag-remove" type="button" data-remove-shelf="'+safe(s.id)+'" aria-label="Remove shelf '+safe(s.name)+'">×</button></span>').join('');
-  target.innerHTML='<div class="detail-head">'+bookCover(b.title,currentCover(b))+
-    '<div><h2 class="detail-title">'+safe(b.title)+'</h2><div class="byline">'+label(b.author,'Unknown author')+'</div>'+
-      '<div class="badges"><span class="badge">'+(statuses[b.reading_status]||'Unread')+'</span>'+
-      (b.rating!==null&&b.rating!==undefined?'<span class="badge">'+safe(b.rating)+' ★</span>':'')+
-      '</div></div></div>'+
-    '<section class="detail-section"><h3>Synopsis</h3><p class="detail-text">'+safe(b.synopsis||'No synopsis added yet.')+'</p></section>'+
+  target.innerHTML='<div class="detail-head">'+
+    '<div class="detail-cover-action">'+bookCover(b.title,currentCover(b),b.cover_url)+
+    '<button class="btn mini subtle detail-cover-edit-button" id="book-edit-cover-btn" type="button" aria-expanded="false" aria-controls="book-cover-editor">✎ Edit cover</button></div>'+
+    '<form class="edit-form detail-inline-form" data-form="edit-book" aria-label="Edit book information">'+
+      '<h3 class="detail-inline-label">Edit book information</h3>'+
+      '<label>Title<input name="title" value="'+safe(b.title)+'" required maxlength="300"></label>'+
+      '<label>Author<input name="author" value="'+safe(b.author)+'" maxlength="400"></label>'+
+      '<label>Reading status<select name="reading_status">'+options(Object.entries(statuses),b.reading_status)+'</select></label>'+
+      '<label>Priority<select name="priority">'+priorityOptions(b.priority)+'</select></label>'+
+      '<label>Cover image URL<input name="cover_url" type="url" inputmode="url" placeholder="https://… (paste an image link)" value="'+safe(b.cover_url)+'" maxlength="2000"></label>'+
+      (linkedGoodreadsId?'<a class="book-goodreads-link" href="https://www.goodreads.com/book/show/'+linkedGoodreadsId+'" target="_blank" rel="noopener noreferrer">↗ Open this book on Goodreads</a>':'')+
+      '<div class="actions"><button class="btn mini" type="submit">Save book information</button>'+ 
+      '<span class="small-status" id="book-info-state" role="status">Edit directly, then save.</span></div>'+
+    '</form></div>'+
+    '<div id="book-cover-editor" class="book-cover-editor" hidden></div>'+
+    '<section class="detail-section editable-synopsis"><h3>Synopsis</h3>'+
+      '<form data-form="edit-synopsis" class="edit-form">'+
+      '<label for="book-synopsis" class="visually-hidden">Write or edit synopsis</label>'+
+      '<textarea id="book-synopsis" name="synopsis" rows="7" maxlength="25000" placeholder="Write the book synopsis here…">'+safe(synopsisPlainText(b.synopsis))+'</textarea>'+
+      '<div class="actions"><span class="small-status" id="synopsis-state" role="status">Edit directly, then save.</span>'+
+      '<button class="btn mini" type="submit">Save synopsis</button></div></form>'+
+      '<details class="synopsis-preview-toggle"><summary>Preview formatted synopsis</summary>'+
+      '<div class="detail-text">'+synopsisToSafeHtml(b.synopsis)+'</div></details></section>'+
+    '<section class="detail-section book-visibility-actions"><h3>Collection visibility</h3>'+
+      '<div class="actions start"><button class="btn mini subtle" type="button" data-visibility-action="hide" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Hide from collection</button>'+
+      '<button class="btn mini subtle" type="button" data-visibility-action="trash" data-book-id="'+safe(b.id)+'" data-book-title="'+safe(b.title)+'">Move to Trash (recoverable)</button></div></section>'+
+    '<section class="detail-section"><h3>Metadata sources & physical locations</h3><div id="book-reference-tools"></div></section>'+
     '<section class="detail-section"><h3>Genres & Tags</h3><div class="tag-row">'+(genreTags||'<span class="muted">No tags yet.</span>')+'</div>'+
       '<form class="inline-form" data-form="add-tag"><input name="label" placeholder="Add tag" required maxlength="90" aria-label="New tag"><select name="kind" aria-label="Tag type"><option value="personal">My tag</option><option value="genre">Genre</option></select><button class="btn mini" type="submit">Add</button></form></section>'+
+    '<section class="detail-section"><h3>Auto collections</h3><div id="book-auto-collections"></div></section>'+
     '<section class="detail-section"><h3>My shelves</h3><div class="tag-row">'+(shelves||'<span class="muted">No personal shelves yet.</span>')+'</div>'+
       '<form class="inline-form" data-form="add-shelf"><input name="name" placeholder="Add reading shelf" required maxlength="100" aria-label="New shelf"><button class="btn mini" type="submit">Add shelf</button></form></section>'+
     '<div class="divider"></div>'+
@@ -200,12 +262,7 @@ function renderDetail(){
       '<form class="edit-form" data-form="review"><label>Rating (0–5)<input type="number" step="0.5" min="0" max="5" name="rating" value="'+safe(b.rating??'')+'"></label>'+
       '<label>My review<textarea name="review" rows="5" maxlength="50000">'+safe(b.review)+'</textarea></label>'+
       '<div class="actions"><button class="btn mini" type="submit">Save review</button></div></form></details>'+
-    '<details class="collapse"><summary>Edit book information</summary>'+
-      '<form class="edit-form" data-form="edit-book"><label>Title<input name="title" value="'+safe(b.title)+'" required maxlength="300"></label>'+
-      '<label>Author<input name="author" value="'+safe(b.author)+'" maxlength="400"></label>'+
-      '<label>Synopsis<textarea name="synopsis" rows="5" maxlength="25000">'+safe(b.synopsis)+'</textarea></label>'+
-      '<label>Reading status<select name="reading_status">'+options(Object.entries(statuses),b.reading_status)+'</select></label>'+
-      '<div class="actions"><button class="btn mini" type="submit">Save book</button></div></form></details>';
+    '';
   const loadDigital=target.querySelector('#load-private-digital');
   loadDigital?.addEventListener('click',async()=>{
     const dest=target.querySelector('#private-digital-list');
@@ -323,6 +380,9 @@ function renderDetail(){
     }catch(error){dest.textContent='Could not load EPUBs: '+(error.message||'Request failed');}
     finally{load.disabled=false;}
   });
+  bookReference?.mount(b);
+  mountBookCollections(api,target.querySelector('#book-auto-collections'),b.id,
+    {isCurrent:()=>state.selectedId===b.id});
 }
 async function refreshCurrent({list=true}={}){
   if(list) await listBooks();
@@ -346,10 +406,36 @@ async function submitForm(form,button){
     await api('/api/books/'+bookId,{method:'PATCH',data:{review:formValue(form,'review'),rating:formValue(form,'rating')===''?null:Number(formValue(form,'rating')),expected_updated_at:detail.updated_at}});
     await refreshCurrent();
   },'Your review is saved');
-  if(mode==='edit-book') return perform(button,async()=>{
-    await api('/api/books/'+bookId,{method:'PATCH',data:{title:formValue(form,'title'),author:formValue(form,'author'),synopsis:formValue(form,'synopsis'),reading_status:formValue(form,'reading_status'),expected_updated_at:detail.updated_at}});
-    await refreshCurrent();
-  },'Book information updated');
+  // Keep editing in place rather than scrolling the page to a global notice.
+  if(mode==='edit-book'||mode==='edit-synopsis'){
+    if(button?.disabled)return;
+    const status=form.querySelector('[role="status"]');
+    setBusy(button,true);
+    if(status)status.textContent='Saving…';
+    try{
+      const data=mode==='edit-book'?{
+        title:formValue(form,'title'),author:formValue(form,'author'),
+        reading_status:formValue(form,'reading_status')
+      }:{synopsis:formValue(form,'synopsis')};
+      // Priority and cover link are validated first so a bad link
+      // doesn't leave the title/author half-saved.
+      const extras=mode==='edit-book'?(await api('/api/books/'+bookId+'/extras',{method:'PATCH',data:{
+        priority:formValue(form,'priority'),cover_url:formValue(form,'cover_url')}})).extras:{};
+      const result=await api('/api/books/'+bookId,{
+        method:'PATCH',data:{...data,expected_updated_at:detail.updated_at}
+      });
+      state.detail={...detail,...result.item,...extras};
+      await listBooks();
+      renderDetail();
+      const dest=$('#'+(mode==='edit-book'?'book-info-state':'synopsis-state'));
+      if(dest)dest.textContent='Saved just now.';
+    }catch(error){
+      if(status)status.textContent=error.status===409?
+        'This book changed elsewhere. Copy unsaved edits before refreshing.':
+        'Could not save: '+(error.message||'Request failed');
+    }finally{setBusy(button,false);}
+    return;
+  }
   if(mode==='add-tag') return perform(button,async()=>{
     await api('/api/books/'+bookId+'/tags',{method:'POST',data:{label:formValue(form,'label'),kind:formValue(form,'kind')}});
     await selectBook(bookId);
@@ -384,11 +470,11 @@ async function submitForm(form,button){
   }
 }
 document.addEventListener('DOMContentLoaded',async()=>{
-  let visualShelves=null;
+  let visualShelves=null,virtualShelves=null;
   document.querySelectorAll('[data-tab]').forEach(tab=>tab.addEventListener('click',()=>{
     document.querySelectorAll('[data-tab]').forEach(t=>{t.classList.toggle('active',t===tab);t.setAttribute('aria-current',t===tab?'page':'false');});
     document.querySelectorAll('.tab-panel').forEach(p=>{p.hidden=p.id!==tab.dataset.tab;p.classList.toggle('active',p.id===tab.dataset.tab);});
-    if(tab.dataset.tab==='shelves')visualShelves?.activate();
+    if(tab.dataset.tab==='shelves')virtualShelves?.activate();
   }));
   $('#add-book').addEventListener('click',()=>showDialog('add-book-dialog'));
   $('#refresh').addEventListener('click',async()=>{
@@ -402,6 +488,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }
   });
   $('#load-more').addEventListener('click',async()=>{try{await listBooks({append:true})}catch(e){showMessage(e.message,true)}});
+  $('#collection-sort').addEventListener('change',async event=>{
+    state.sort=event.target.value;
+    try{await listBooks();}catch(error){showMessage(error.message||'Unable to sort books',true);}
+  });
+  $('#collection-priority').addEventListener('change',async event=>{
+    state.priority=event.target.value;
+    try{await listBooks();}catch(error){showMessage(error.message||'Unable to filter books',true);}
+  });
   $('#search').addEventListener('input',()=>{
     state.query=$('#search').value.trim();
     clearTimeout(window.bookQueryTimer);
@@ -432,7 +526,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       await perform(btn,async()=>{await api('/api/books/'+state.selectedId+'/shelves/'+btn.dataset.removeShelf,{method:'DELETE'});await selectBook(state.selectedId)},'Shelf removed');
     }
     if(btn.dataset.displayCover){
-      await perform(btn,async()=>{await api('/api/editions/'+btn.dataset.editionId+'/display-cover',{method:'PATCH',data:{image_id:btn.dataset.displayCover}});await selectBook(state.selectedId)},'Display cover updated');
+      await perform(btn,async()=>{await api('/api/editions/'+btn.dataset.editionId+'/display-cover',{method:'PATCH',data:{image_id:btn.dataset.displayCover}});await api('/api/books/'+state.selectedId+'/display-edition',{method:'POST',data:{edition_id:btn.dataset.editionId}});await listBooks();await selectBook(state.selectedId)},'Display cover updated');
     }
     if(btn.dataset.lookupIsbnCover){
       const editionId=safeId(btn.dataset.lookupIsbnCover);
@@ -487,7 +581,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
     const form=e.target,btn=e.submitter;
     await perform(btn,async()=>{
       const result=await api('/api/books',{method:'POST',data:{title:formValue(form,'title'),author:formValue(form,'author'),
-        synopsis:formValue(form,'synopsis'),reading_status:formValue(form,'reading_status'),private_notes:formValue(form,'private_notes')}});
+        synopsis:formValue(form,'synopsis'),reading_status:formValue(form,'reading_status'),private_notes:formValue(form,'private_notes'),
+        priority:formValue(form,'priority'),cover_url:formValue(form,'cover_url')}});
+      // Comma-separated genres and tags. Genres group the book into
+      // collections automatically on the My Shelves tab.
+      const split=v=>[...new Set(v.split(',').map(x=>x.trim()).filter(Boolean))];
+      for(const [field,kind] of [['genres','genre'],['tags','personal']])
+        for(const label of split(formValue(form,field)))
+          await api('/api/books/'+result.book.id+'/tags',{method:'POST',data:{label,kind}});
       form.reset();$('#add-book-dialog').close();await listBooks();await selectBook(result.book.id);
     },'Book added');
   });
@@ -525,6 +626,17 @@ document.addEventListener('DOMContentLoaded',async()=>{
   }
   // Authentication is independent of D1 health. Keep import history and Refresh
   // reachable even if the database is temporarily out of daily allowance.
+  collectionGrid=initCollectionGrid(api,{
+    grid:$('#book-grid'),render:renderGrid,getQuery:()=>state.query,getMode:()=>state.sort,
+    status:$('#collection-arrangement-status'),undo:$('#collection-undo')
+  });
+  await collectionGrid.load();
+  initCollectionManagement(api,{notify:showMessage,onVisibleChanged:async()=>{
+    state.selectedId=null;state.detail=null;renderDetail();await listBooks();
+  }});
+  bookReference=initBookReferenceUI(api,{onUpdated:async bookId=>{
+    await listBooks();await selectBook(bookId);
+  },message:showMessage});
   try{
     initGoodreadsPreview(api,{onImported:async()=>{await listBooks();if(state.selectedId)await selectBook(state.selectedId).catch(()=>{});}});
     const digitalImporter=initDigitalImport(api,{onImported:async()=>{
@@ -595,6 +707,11 @@ document.addEventListener('DOMContentLoaded',async()=>{
       }
     });
     initOfflineBulk(api,{onUpdated:()=>refreshCurrent()});
+    initOfflineTextReview(api,{onUpdated:()=>refreshCurrent()});
+    initEditionRecovery(api,{onUpdated:()=>refreshCurrent()});
+    initLocalEditionRecovery(api,{onUpdated:()=>refreshCurrent()});
+    initIsbnRecovery(api,{onUpdated:()=>refreshCurrent()});
+    initIsbnEditionEnrich(api,{onUpdated:()=>refreshCurrent()});
     const combined=document.getElementById('collection-health-smart-repair');
     const combinedStatus=document.getElementById('collection-health-smart-status');
     combined?.addEventListener('click',async()=>{
@@ -633,6 +750,20 @@ document.addEventListener('DOMContentLoaded',async()=>{
       await selectBook(bookId);
       document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
     }});
+    const autoCollections=initAutoCollections(api,{onSelectBook:async bookId=>{
+      document.querySelector('[data-tab="library"]')?.click();
+      await selectBook(bookId);
+      document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
+    }});
+    virtualShelves=initVirtualShelves(api,{
+      activatePhysical:()=>visualShelves?.activate(),
+      activateAuto:()=>autoCollections?.activate(),
+      onSelectBook:async bookId=>{
+        document.querySelector('[data-tab="library"]')?.click();
+        await selectBook(bookId);
+        document.querySelector('#book-detail')?.scrollIntoView({block:'start',behavior:'smooth'});
+      }
+    });
     initShelfPhotoAssistant(api,{onSelectBook:async bookId=>{
       document.querySelector('[data-tab="library"]')?.click();
       await selectBook(bookId);

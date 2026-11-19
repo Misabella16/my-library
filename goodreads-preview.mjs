@@ -87,6 +87,12 @@ export function parseGoodreadsExport(text) {
       title, author,
       isbn: safeISBN(get(cells, 'isbn')),
       isbn13: safeISBN(get(cells, 'isbn13')),
+      // Edition hints are optional in exports. Preserve them as evidence
+      // rather than treating publication year or binding as an exact match.
+      publisher: get(cells, 'publisher'),
+      binding: get(cells, 'binding'),
+      yearPublished: get(cells, 'year published'),
+      originalPublicationYear: get(cells, 'original publication year'),
       myRating: numericRating(get(cells, 'my rating')),
       exclusiveShelf: get(cells, 'exclusive shelf'),
       shelves: [...shelves],

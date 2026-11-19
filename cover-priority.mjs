@@ -7,7 +7,8 @@ const verifiedSpecialSql="e.is_special=1 AND im.role='cover' "+
 export const PREFERRED_BOOK_COVER_SQL=
  '(SELECT im.id FROM edition_images im JOIN editions e ON e.id=im.edition_id '+
  'WHERE e.book_id=b.id AND (im.display_cover=1 OR ('+verifiedSpecialSql+')) '+
- 'ORDER BY CASE WHEN ('+verifiedSpecialSql+') AND EXISTS('+
+ 'ORDER BY CASE WHEN e.id=b.preferred_edition_id AND im.display_cover=1 THEN -1 '+
+ 'WHEN ('+verifiedSpecialSql+') AND EXISTS('+
  "SELECT 1 FROM copies c WHERE c.edition_id=e.id AND c.medium='physical' "+
  "AND c.ownership='owned') THEN 0 "+
  'WHEN ('+verifiedSpecialSql+') THEN 1 ELSE 2 END, '+
@@ -32,8 +33,11 @@ export function preferredDetailCoverId(book){
     imageCreated:image.created_at||''});
   }
  }
- records.sort((a,b)=>a.priority-b.priority||a.preferred-b.preferred||
-  a.selected-b.selected||b.editionCreated.localeCompare(a.editionCreated)||
+ records.sort((a,b)=>
+  (a.preferred===0&&a.selected===0?-1:a.priority)-
+  (b.preferred===0&&b.selected===0?-1:b.priority)||
+  a.preferred-b.preferred||a.selected-b.selected||
+  b.editionCreated.localeCompare(a.editionCreated)||
   b.imageCreated.localeCompare(a.imageCreated)||a.id.localeCompare(b.id));
  return records[0]?.id||null;
 }
