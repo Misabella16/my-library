@@ -33,7 +33,17 @@ Run this once from the **my-library** folder:
 npm run local:app
 ```
 
-It creates **My Library** and **Stop My Library** in your user Applications folder (`~/Applications`, also searchable in Spotlight and Launchpad) and a **My Library** shortcut on your Desktop. Double-click My Library: it starts the private local site in the background if needed and opens it in your browser. Closing the browser tab leaves the server running quietly; use **Stop My Library** to shut it down (restarting the Mac also stops it). If you move the my-library folder, run `npm run local:app` again. Server messages go to `.my-library-local/server.log`.
+It creates **My Library** and **Stop My Library** in your user Applications folder (`~/Applications`, also searchable in Spotlight and Launchpad) and a **My Library** shortcut on your Desktop. Double-click My Library: it starts the private local site in the background if needed and opens it in its own app-style window (Chrome, Brave or Edge), or in your default browser if none is installed. Closing the browser tab leaves the server running quietly; use **Stop My Library** to shut it down (restarting the Mac also stops it). If you move the my-library folder, run `npm run local:app` again. Server messages go to `.my-library-local/server.log`.
+
+### Find duplicate EPUB files before importing
+
+```sh
+npm run local:epub-dupes -- estimate "/path/to/your EPUB folder"
+npm run local:epub-dupes -- scan "/path/to/your EPUB folder"
+npm run local:epub-dupes -- trash "/path/to/your EPUB folder"
+```
+
+`estimate` compares only file names and sizes, so it downloads nothing from iCloud. `scan` reads just those suspected duplicates in full (iCloud downloads them) and writes a report listing the copy it keeps and the extras. Duplicates are byte-identical files, or the same title and author inside the EPUB. A copy filed in a subfolder beats a loose one. Copies in different subfolders, or with different ISBNs (possible editions or translations), are only listed for review. `trash` moves exactly the extras from the last scan to the macOS Trash (Finder's Put Back restores them), after re-checking that each file is unchanged. Copies whose names and sizes both differ are not caught.
 
 ### Where are my local books saved?
 
