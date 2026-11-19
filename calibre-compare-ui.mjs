@@ -21,6 +21,8 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
   historyList=root.querySelector('#calibre-undo-list'),
   repairStatus=root.querySelector('#calibre-repair-status'),
   run=root.querySelector('#calibre-compare-run'),
+  syncButton=root.querySelector('#calibre-sync'),
+  syncStatus=root.querySelector('#calibre-sync-status'),
   pause=root.querySelector('#calibre-compare-pause'),
   filter=root.querySelector('#calibre-compare-filter'),
   exportBtn=root.querySelector('#calibre-compare-export'),
@@ -31,15 +33,17 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
  if([file,run,pause,filter,exportBtn,status,metrics,results,more].some(x=>!x))
   return null;
  let busy=false,stop=false,comp=null,visible=80,catalogue=[],folderData=null,siteEpubs=[];
+ let syncBusy=false;
  let saving=false,saveStop=false,saveOffset=0,saveOrder=null,saveFailures=0;
  const say=s=>{status.textContent=s;};
  const update=()=>{
-  run.disabled=busy||saving||(!file.files?.length&&!folder?.files?.length);
-  if(apply)apply.disabled=busy||saving||!comp;
+  run.disabled=busy||saving||syncBusy||(!file.files?.length&&!folder?.files?.length);
+  if(syncButton)syncButton.disabled=busy||saving||syncBusy||!folder?.files?.length;
+  if(apply)apply.disabled=busy||saving||syncBusy||!comp;
   if(applyPause)applyPause.disabled=!saving||saveStop;
-  if(bridge)bridge.disabled=busy||saving||!comp||!folderData;
-  if(otherBridge)otherBridge.disabled=busy||saving||!comp||!folderData;
-  if(undoHistory)undoHistory.disabled=busy||saving;
+  if(bridge)bridge.disabled=busy||saving||syncBusy||!comp||!folderData;
+  if(otherBridge)otherBridge.disabled=busy||saving||syncBusy||!comp||!folderData;
+  if(undoHistory)undoHistory.disabled=busy||saving||syncBusy;
   pause.disabled=!busy||stop;
   filter.disabled=!comp;
   exportBtn.disabled=!comp;
@@ -144,7 +148,7 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
   }
   return out;
  };
- run.addEventListener('click',async()=>{
+ const compareSelected=async()=>{
   if(busy||(!file.files?.length&&!folder?.files?.length))return;
   busy=true;stop=false;comp=null;visible=80;filter.value='all';update();
   try{
@@ -180,7 +184,8 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
    say('Comparison stopped: '+(error.message||'Unexpected error')+
     '. Nothing in either library was changed. You can retry.');
   }finally{busy=false;stop=false;update();}
- });
+ };
+ run.addEventListener('click',compareSelected);
  pause.addEventListener('click',()=>{stop=true;pause.disabled=true;
   say('Stopping after the current catalogue page. No changes made.');});
  filter.addEventListener('change',()=>{visible=80;render();});
@@ -213,11 +218,13 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
   repairStatus.textContent='Pausing after the current Calibre repair batch…';
   update();
  });
- apply?.addEventListener('click',async()=>{
+ const repairMatched=async()=>{
   if(busy||saving||!comp)return;
   saving=true;saveStop=false;update();
   if(!saveOrder)saveOrder=repairCandidates();
   let fixed=0,covers=0,skipped=0,errors=0;
+  const reviewReasons=new Map();
+  const noteReason=reason=>{if(reason){const key=String(reason).slice(0,130);reviewReasons.set(key,(reviewReasons.get(key)||0)+1);}};
   try{
    while(saveOffset<saveOrder.length&&!saveStop){
     const batch=saveOrder.slice(saveOffset,saveOffset+6);
@@ -247,7 +254,7 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
        entry.book.has_cover=1;
        entry.issues=entry.issues.filter(x=>
         x!=='Calibre has a cover; My Library does not display one');
-      }else if(result.status!=='already_has_artwork')errors++;
+      }else if(result.status!=='already_has_artwork'){errors++;noteReason(result.reason||result.status);}
      }catch(error){
       errors++;
       if(['database_read_quota','database_write_quota',
@@ -269,13 +276,17 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
        entry.repaired=true;
        entry.book.updated_at=null; // prevent retry with a stale stamp
       }
-     }else if(result.status==='review'||result.status==='changed')errors++;
+     }else if(result.status==='review'||result.status==='changed'){
+      errors++;noteReason(result.reason||result.status);
+     }
      else skipped++;
     }
     saveOffset+=batch.length;
     repairStatus.textContent='Processed '+saveOffset+' of '+saveOrder.length+
      ' matched books · '+fixed+' metadata repairs · '+covers+' actual covers saved · '+
-     skipped+' already complete · '+errors+' need review. Undo is saved.';
+     skipped+' skipped or already complete · '+errors+' need review. '+
+     [...reviewReasons.entries()].sort((a,b)=>b[1]-a[1]).slice(0,3)
+      .map(([reason,count])=>count+' × '+reason).join(' · ')+'. Undo is saved.';
     if(saveOffset<saveOrder.length)
      await new Promise(resolve=>setTimeout(resolve,0));
    }
@@ -283,13 +294,17 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
     ' Paused. Choose Repair matched books to resume.':
     ' Repair pass complete. Run Compare again to refresh missing-data counts.');
    if(fixed||covers)try{await onUpdated();}catch{}
+   return {complete:!saveStop,processed:saveOffset,total:saveOrder.length,
+    fixed,covers,skipped,errors,reasons:[...reviewReasons]};
   }catch(error){
    repairStatus.textContent='Repair paused after '+saveOffset+' books: '+
     (error.message||'Request failed')+
     '. Successful edits are retained with Undo; retry to resume.';
+   return {complete:false,processed:saveOffset,total:saveOrder.length,error:error.message||'Request failed'};
   }finally{saving=false;saveStop=false;update();}
- });
- bridge?.addEventListener('click',()=>{
+ };
+ apply?.addEventListener('click',repairMatched);
+ const prepareEpubs=()=>{
   if(saving||busy||!folderData||!comp)return;
   const siteHasEpub=new Set(siteEpubs.map(x=>x.book_id));
   const files=[],seen=new Set();
@@ -314,6 +329,41 @@ export function initCalibreCompare(api,{onImportEpubs=()=>{},onImportDigitalFile
    'private importer. Review matches, then select Save all eligible EPUBs. '+
    'The importer checks file hashes and duplicates before upload.'+
    (files.length>10000?' More than 10,000 candidates; import another selection later.':'');
+  return selected.length;
+ };
+ bridge?.addEventListener('click',prepareEpubs);
+ // One click starts an explicitly selected local Calibre sync. All uploaded EPUB
+ // files still require the owner's separate confirmation in the importer.
+ syncButton?.addEventListener('click',async()=>{
+  if(syncBusy||busy||saving||!folder?.files?.length)return;
+  syncBusy=true;update();
+  const tell=message=>{if(syncStatus)syncStatus.textContent=message;};
+  try{
+   tell('Step 1/3: comparing the selected Calibre folder with My Library…');
+   await compareSelected();
+   if(!comp){tell('Comparison did not finish. Nothing was uploaded. Check the comparison message before retrying.');return;}
+   tell('Step 2/3: safely checking '+comp.counts.metadata_gaps+
+    ' matched books for missing metadata and covers…');
+   const repaired=await repairMatched();
+   if(!repaired?.complete){
+    tell('Repair stopped after '+(repaired?.processed||0)+
+     ' matched books. Saved changes have Undo. No EPUBs were uploaded. '+
+     (repaired?.error||'Use Repair matched books to resume.'));return;
+   }
+   // No second full D1 scan: metadata/cover repair does not add EPUB files.
+   // The private EPUB importer independently rechecks each SHA and identity
+   // against current D1 records before any user-approved upload.
+   tell('Step 3/3: preparing missing EPUBs for fresh duplicate checks…');
+   const count=prepareEpubs()||0;
+   tell('Calibre sync: '+repaired.fixed+' metadata repairs, '+
+    repaired.covers+' covers saved, '+repaired.errors+' items held for review. '+
+    (count?count+' candidate EPUBs sent for duplicate preview. Review the importer and choose Save all eligible EPUBs when ready.':
+     'No eligible missing EPUBs were found. Review ambiguous matches separately.')+
+    ' No EPUBs were automatically uploaded. Select Compare again later to refresh report totals.');
+  }catch(error){
+   tell('Sync stopped safely: '+(error.message||'Unexpected error')+
+    '. Completed repairs retain Undo. No EPUBs were automatically uploaded.');
+  }finally{syncBusy=false;update();}
  });
  otherBridge?.addEventListener('click',()=>{
   if(busy||saving||!comp||!folderData)return;
