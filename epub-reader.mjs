@@ -1,7 +1,8 @@
 import {extractIsbn13} from './epub-isbn.mjs';
 // Local EPUB (ZIP + OPF) inspection for private My Library imports.
 // Does not contact a server, fetch external XML, or execute book contents.
-export const MAX_EPUB_BYTES=24*1024*1024;
+// Large files travel in 8 MiB chunks through R2 multipart upload.
+export const MAX_EPUB_BYTES=96*1024*1024;
 const MAX_ZIP_ENTRIES=4000;
 const MAX_XML_BYTES=2*1024*1024;
 const MAX_COVER_BYTES=5*1024*1024;
@@ -127,7 +128,30 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
   if(opfPath!==packagePath)throw Error('EPUB package path is inconsistent');
   const title=tagValue(packageXml,'title',300);
   const author=tagValue(packageXml,'creator',400);
-  const description=tagValue(packageXml,'description',3000);
+  let description=tagValue(packageXml,'description',3000);
+  // Some EPUB2/EPUB3 publishers put the source description into a metadata
+  // attribute rather than dc:description. Only accept explicit OPF fields:
+  // never infer a synopsis from prose chapters or a cover.
+  if(!description){
+    for(const match of packageXml.matchAll(/<(?:[\w.-]+:)?meta\b[^>]*>/gi)){
+      const attributes=attrs(match[0]);
+      if(['description','dcterms:description','dc:description'].includes(
+        String(attributes.name||attributes.property||'').toLowerCase())){
+        description=cleanText(attributes.content||'',3000);
+        if(description)break;
+      }
+    }
+  }
+  if(!description){
+    for(const match of packageXml.matchAll(/<(?:[\w.-]+:)?meta\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?meta\s*>/gi)){
+      const attributes=attrs(match[0].slice(0,match[0].indexOf('>')+1));
+      if(['description','dcterms:description','dc:description'].includes(
+        String(attributes.name||attributes.property||'').toLowerCase())){
+        description=cleanText(match[1],3000);
+        if(description)break;
+      }
+    }
+  }
   // OPF packages often list a UUID as the primary identifier, followed
   // by a real ISBN. Prefer any validated ISBN-13 for safe edition matching.
   const identifiers=[...packageXml.matchAll(/<(?:[\w.-]+:)?identifier\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?identifier\s*>/gi)]
@@ -148,16 +172,22 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
       .map(match=>attrs(match[0])).find(a=>a.name?.toLowerCase()==='cover');
     if(coverMeta)coverItem=manifest.get(coverMeta.content);
   }
-  // EPUB2 occasionally places the cover reference in a <guide> section.
-  if(!coverItem){
-    const guide=[...packageXml.matchAll(/<(?:[\w.-]+:)?reference\b[^>]*>/gi)]
-      .map(match=>attrs(match[0])).find(a=>a.type==='cover' && /\.(png|jpe?g|webp)(?:$|[?#])/i.test(a.href||''));
-    if(guide)coverItem=guide;
+  // EPUB2 often stores the cover in an explicitly labeled XHTML guide page.
+  // Do not treat the first ordinary XHTML file as a cover.
+  let coverDocument='';
+  const coverGuide=[...packageXml.matchAll(/<(?:[\w.-]+:)?reference\b[^>]*>/gi)]
+    .map(match=>attrs(match[0])).find(a=>a.type?.toLowerCase()==='cover'&&
+      (/\.(?:xhtml|html|htm)(?:$|[?#])/i.test(a.href||'')||
+       /\.(?:png|jpe?g|webp)(?:$|[?#])/i.test(a.href||'')));
+  if(!coverItem&&coverGuide){
+   if(/\.(?:xhtml|html|htm)(?:$|[?#])/i.test(coverGuide.href))
+    coverDocument=coverGuide.href;
+   else coverItem=coverGuide;
   }
-  // Some EPUB2 files omit both the cover meta tag and guide. Only use a
-  // clearly identified *single* manifest cover image, never an arbitrary
-  // illustration or the first image in the EPUB.
-  if(!coverItem){
+  // Use manifest-name fallback only when an explicit EPUB2 cover guide
+  // doesn't already point to XHTML. The guided page may be ambiguous or
+  // intentionally contain no usable image.
+  if(!coverItem&&!coverDocument){
     const matches=[...manifest.values()].filter(a=>{
       const type=(a['media-type']||'').toLowerCase();
       if(!['image/png','image/jpeg','image/webp'].includes(type))return false;
@@ -173,16 +203,27 @@ export function parsePackageXml(containerXml,packageXml,packagePath){
     });
     if(matches.length===1)coverItem=matches[0];
   }
-  let coverPath='';
+  if(!coverItem&&!coverDocument){
+   const docs=[...manifest.values()].filter(item=>
+    /^(?:cover|frontcover|cover-page)$/i.test(item.id||'') &&
+    /^(?:application\/xhtml\+xml|text\/html)$/i.test(item['media-type']||'') &&
+    /(?:^|\/)(?:front[-_]?cover|cover(?:[-_]?page)?)\.x?html?$/i.test(item.href||''));
+   if(docs.length===1)coverDocument=docs[0].href;
+  }
+  let coverPath='',coverDocumentPath='';
   if(coverItem?.href&&!/^[a-z]+:/i.test(coverItem.href)){
     const path=coverItem.href.split(/[?#]/)[0];
     coverPath=joinPath(packagePath,decodeURIComponent(path));
   }
-  return {title,author,description,identifier,subjects,coverPath};
+  if(!coverPath&&coverDocument&&!/^[a-z]+:/i.test(coverDocument)){
+    const path=coverDocument.split(/[?#]/)[0];
+    coverDocumentPath=joinPath(packagePath,decodeURIComponent(path));
+  }
+  return {title,author,description,identifier,subjects,coverPath,coverDocumentPath};
 }
 export async function inspectEpub(file,{includeCover=true}={}){
   if(!file||!/\.epub$/i.test(file.name||''))throw Error('Choose an .epub file');
-  if(file.size===0||file.size>MAX_EPUB_BYTES)throw Error('EPUB must be smaller than 24 MB');
+  if(file.size===0||file.size>MAX_EPUB_BYTES)throw Error('EPUB must be no larger than 96 MB');
   const bytes=new Uint8Array(await file.arrayBuffer());
   const archive=zipEntries(bytes);
   const container=await readZipEntry(archive,'META-INF/container.xml');
@@ -195,6 +236,27 @@ export async function inspectEpub(file,{includeCover=true}={}){
   if(!packageBytes)throw Error('EPUB package manifest could not be found');
   const metadata=parsePackageXml(containerText,decoder.decode(packageBytes),packagePath);
   let cover=null,coverType=null;
+  // A guide-marked EPUB2 XHTML page may contain one explicit image reference.
+  // Only accept a single local image in the marked page; ambiguity stays unset.
+  if(includeCover&&!metadata.coverPath&&metadata.coverDocumentPath&&
+     archive.entries.has(metadata.coverDocumentPath)){
+    try{
+      const document=decoder.decode(await readZipEntry(archive,metadata.coverDocumentPath));
+      const refs=[
+       ...[...document.matchAll(/<(?:[\w.-]+:)?img\b[^>]*>/gi)]
+         .map(x=>attrs(x[0]).src),
+       ...[...document.matchAll(/<(?:[\w.-]+:)?image\b[^>]*>/gi)]
+         .map(x=>attrs(x[0]).href||attrs(x[0])['xlink:href'])
+      ].filter(Boolean);
+      if(refs.length===1&&!/^[a-z][\w+.-]*:/i.test(refs[0])&&!refs[0].startsWith('//')){
+        const local=refs[0].split(/[?#]/)[0];
+        const candidate=joinPath(metadata.coverDocumentPath,decodeURIComponent(local));
+        if(archive.entries.has(candidate))metadata.coverPath=candidate;
+      }
+    }catch{
+      // Unsafe, missing, or malformed cover XHTML is not a cover candidate.
+    }
+  }
   if(includeCover&&metadata.coverPath&&archive.entries.has(metadata.coverPath)){
     try{
       const image=await readZipEntry(archive,metadata.coverPath,MAX_COVER_BYTES);

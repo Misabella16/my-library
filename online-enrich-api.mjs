@@ -1,0 +1,430 @@
+// Owner-only on-demand internet metadata enrichment from Open Library.
+// We never crawl Goodreads, copy Google Books API descriptions into persistent
+// storage, or alter any existing note, review, cover, or special edition.
+import {extractIsbn13} from './epub-isbn.mjs';
+import {machineTitleReason} from './epub-metadata.mjs';
+import {createPacedFetch} from './source-pacing.mjs';
+import {refreshBookCollections} from './auto-collections-api.mjs';
+const pacedSourceFetch=createPacedFetch((...args)=>fetch(...args));
+const HEAD={'content-type':'application/json; charset=utf-8','cache-control':'private, no-store'};
+const json=(o,status=200)=>new Response(JSON.stringify(o),{status,headers:HEAD});
+const fail=(error,status=400)=>json({error},status);
+const uuid=s=>typeof s==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(s);
+const norm=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
+ .toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+const normalizeAuthor=s=>norm(s).replace(/^by /,'');
+const validAuthor=s=>!!normalizeAuthor(s)&&!['unknown','unknown author','n a','not set'].includes(normalizeAuthor(s));
+const text=s=>typeof s==='string'?s.trim():'';
+const description=value=>{
+ const raw=typeof value==='object'&&value?value.value:value;
+ return text(String(raw||'').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ')
+ .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ')
+ .replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ')
+ .replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;/gi,"'")
+ .replace(/\s+/g,' ')).slice(0,12000);
+};
+// Open Library subjects include library bookkeeping ("Accessible book",
+// "nyt:..." lists, "Fiction"); skip those so tags stay meaningful.
+const JUNK_SUBJECT=/^(?:accessible book|protected daisy|in library|lending library|large type books|overdrive|open library staff picks|internet archive wishlist|long now manifesto commonplace book|fiction|general|fiction,? general|novels?|english fiction|literature|readers|reading level.*|[a-z_]+:.*|new york times.*)$/i;
+// Open Library often files YA and adult books under "Juvenile fiction" or
+// "Children's ...", so age-range subjects are left to the owner's own shelves.
+const AGE_SUBJECT=/\b(?:juvenile|children'?s?|childrens|young adult|picture books?|teen)\b/i;
+const tagList=input=>(Array.isArray(input)?[...new Set(input.filter(s=>
+ typeof s==='string'&&s.trim().length>=3&&s.trim().length<=75&&!JUNK_SUBJECT.test(s.trim())&&
+ !AGE_SUBJECT.test(s.trim()))
+  .map(s=>s.trim()))].slice(0,12):[]);
+const workKey=key=>/^(?:\/works\/)?OL\d+W$/.test(key||'')?('/works/'+String(key).replace(/^\/works\//,'')):'';
+const read=async(db,sql,...args)=>db.prepare(sql).bind(...args).first();
+const rows=async(db,sql,...args)=>(await db.prepare(sql).bind(...args).all()).results||[];
+// Cache only public Open Library responses. A Worker cache is best-effort and
+// per location, not a durable database. Never cache a 429/5xx or user data.
+const sourceCache=()=>{try{return typeof caches!=='undefined'?caches.default:null;}catch{return null;}};
+const requestData=async(fetcher,url)=>{
+ const cache=sourceCache();
+ if(cache)try{
+  const stored=await cache.match(url);
+  if(stored)return await stored.json();
+ }catch{}
+ const response=await fetcher(url,{method:'GET',redirect:'manual',headers:{
+  accept:'application/json','user-agent':'MyLibraryPersonalCatalogue/1.0 (manual book lookup)'
+ }});
+ if(response.status===429||response.status===403)throw Object.assign(Error('Source rate limit reached; try later'),{status:429});
+ if(response.status===404)return null;
+ if(response.status!==200)throw Object.assign(Error('Source temporarily unavailable'),{status:503});
+ if(Number(response.headers.get('content-length')||0)>550000)throw Error('Metadata response too large');
+ const body=await response.text();
+ if(body.length>550000)throw Error('Metadata response too large');
+ const parsed=JSON.parse(body);
+ if(cache)try{
+  const ttl=url.includes('/works/')?604800:86400;
+  await cache.put(url,new Response(body,{headers:{
+   'content-type':'application/json','cache-control':'public, max-age='+ttl
+  }}));
+ }catch{}
+ return parsed;
+};
+async function record(db,id){
+ const book=await read(db,'SELECT id,title,author,synopsis,updated_at,archived_at '+
+  'FROM books WHERE id=? AND archived_at IS NULL',id);
+ if(!book)return null;
+ const ed=await rows(db,'SELECT id,format,is_special,isbn,edition_name FROM editions '+
+  'WHERE book_id=? ORDER BY created_at LIMIT 40',id);
+ const isbnSet=[...new Set(ed.map(x=>extractIsbn13(x.isbn)).filter(Boolean))];
+ const source=await rows(db,'SELECT metadata_json FROM epub_files WHERE book_id=? LIMIT 10',id);
+ for(const f of source){
+  try{const n=extractIsbn13(JSON.parse(f.metadata_json||'{}').identifier);
+   if(n&&!isbnSet.includes(n))isbnSet.push(n);
+  }catch{}
+ }
+ const hasCover=!!await read(db,'SELECT i.id FROM edition_images i JOIN editions e '+
+  'ON e.id=i.edition_id WHERE e.book_id=? LIMIT 1',id);
+ const tagLabels=(await rows(db,'SELECT t.label FROM book_tags bt JOIN tags t ON t.id=bt.tag_id '+
+  'WHERE bt.book_id=? LIMIT 200',id)).map(r=>String(r.label).toLocaleLowerCase());
+ return {book,editions:ed,isbn:isbnSet.length===1?isbnSet[0]:'',hasCover,
+  hasTags:tagLabels.length>0,tagLabels};
+}
+export function verifiedOpenLibraryDoc(book,doc,isbn=''){
+ if(!doc||!workKey(doc.key)||!validAuthor(book.author))return false;
+ const authors=Array.isArray(doc.author_name)?doc.author_name:[];
+ if(!authors.some(a=>normalizeAuthor(a)===normalizeAuthor(book.author)))return false;
+ const exactTitle=norm(doc.title)===norm(book.title)&&!machineTitleReason(book.title);
+ const exactIsbn=!!isbn&&Array.isArray(doc.isbn)&&doc.isbn.some(i=>
+  extractIsbn13(i)===isbn);
+ return exactTitle||exactIsbn;
+}
+async function lookup(db,id,fetcher,options={}){
+ const state=options.state||await record(db,id);
+ if(!state)return {status:'missing'};
+ const {book,isbn}=state;
+ if(!validAuthor(book.author)||(!isbn&&machineTitleReason(book.title)))
+  return {status:'review',reason:'Missing a trusted title/author or ISBN',state};
+ const params=new URLSearchParams({limit:'5',
+  fields:'key,title,author_name,isbn,cover_i,first_sentence,subject'});
+ if(isbn)params.set('isbn',isbn);
+ else{params.set('title',book.title.slice(0,180));params.set('author',book.author.slice(0,130));}
+ const search=options.docs?{docs:options.docs}:
+  await requestData(fetcher,'https://openlibrary.org/search.json?'+params);
+ const docs=Array.isArray(search?.docs)?search.docs:[];
+ // Batch results must contain the actual requested ISBN. Do not accidentally
+ // choose an unrelated edition with the same title and author.
+ const exact=docs.filter(d=>verifiedOpenLibraryDoc(book,d,isbn)&&
+  (!options.docs||!isbn||(Array.isArray(d.isbn)&&
+   d.isbn.some(value=>extractIsbn13(value)===isbn))));
+ if(exact.length!==1)return {status:'review',
+  reason:exact.length?'Multiple possible Open Library matches':'No verified Open Library match',state};
+ const doc=exact[0],key=workKey(doc.key);
+ await new Promise(resolve=>setTimeout(resolve,1100));
+ const work=await requestData(fetcher,'https://openlibrary.org'+key+'.json');
+ if(!work||workKey(work.key)!==key)return {status:'review',reason:'Work record could not be verified',state};
+ const summary=description(work.description);
+ // Subjects the book doesn't already have, so tagged books still gain the
+ // missing ones (e.g. "Witches") without duplicating existing tags.
+ const have=new Set(state.tagLabels||[]);
+ const subjects=tagList(work.subjects||doc.subject).filter(s=>!have.has(s.toLocaleLowerCase()));
+ const coverId=(Array.isArray(work.covers)?work.covers.find(Number.isSafeInteger):null)||
+  (Number.isSafeInteger(doc.cover_i)?doc.cover_i:null);
+ const eligibleCover=!state.hasCover&&Number.isSafeInteger(coverId)&&coverId>0;
+ return {status:'verified',state,source:'Open Library',source_url:'https://openlibrary.org'+key,
+  proposed:{synopsis:!text(book.synopsis)?summary:'',tags:!options.noTags?subjects:[],
+   cover_id:eligibleCover?coverId:null},
+  match:isbn?'isbn_and_author':'title_and_author'};
+}
+async function imageBytes(fetcher,id){
+ const url='https://covers.openlibrary.org/b/id/'+id+'-L.jpg?default=false';
+ const response=await fetcher(url,{method:'GET',redirect:'manual',headers:{accept:'image/jpeg'}});
+ if(response.status!==200)return null;
+ if(Number(response.headers.get('content-length')||0)>5*1024*1024)return null;
+ const data=new Uint8Array(await response.arrayBuffer());
+ if(data.length<20||data.length>5*1024*1024||
+  data[0]!==255||data[1]!==216||data[2]!==255)return null;
+ return data;
+}
+async function apply(db,env,id,expected,fetcher,options={}){
+ const found=await lookup(db,id,fetcher,options);
+ if(found.status!=='verified')return json({status:found.status,reason:found.reason||''});
+ const {state,proposed,source_url}=found;
+ const b=state.book;
+ // Auto repair reads the current timestamp on the server. The conditional D1
+ // UPDATE below still refuses to overwrite a concurrent owner edit.
+ const safeExpected=expected===null?b.updated_at:expected;
+ if(b.updated_at!==safeExpected)return json({status:'changed',reason:'The book changed since scanning'},409);
+ // tagsOnly: the whole-library subject run adds tags and nothing else.
+ const synopsis=options.tagsOnly?'':proposed.synopsis||'',tags=proposed.tags;
+ const alternatives=state.editions.filter(e=>e.is_special===0);
+ const ebook=alternatives.filter(e=>e.format==='ebook');
+ const chosen=ebook.length===1?ebook[0]:alternatives.length===1?alternatives[0]:null;
+ // Cover art from a work cannot establish a new edition's identity.
+ // Preserve special editions and skip cover attachment unless one standard
+ // edition can be selected without guessing.
+ const canCover=!options.tagsOnly&&!!proposed.cover_id&&!state.hasCover&&!!chosen&&!!env.BOOK_FILES;
+ let bytes=null;
+ if(canCover)try{
+  await new Promise(resolve=>setTimeout(resolve,1100));
+  bytes=await imageBytes(fetcher,proposed.cover_id);
+ }catch{}
+ if(!synopsis&&!tags.length&&!bytes)return json({status:'no_changes',
+  reason:'No new synopsis, tags, or usable cover found'});
+ const now=new Date().toISOString(),coverId=bytes?crypto.randomUUID():null,
+  editionId=bytes?chosen.id:null,
+  coverKey=bytes?
+   'edition-covers/online-openlibrary/'+coverId+'.jpg':null,logId=crypto.randomUUID();
+ const old={synopsis:b.synopsis,updated_at:b.updated_at};
+ const after={synopsis:synopsis||b.synopsis,updated_at:now,
+  added_tags:tags,cover_id:coverId,cover_key:coverKey,
+  edition_id:editionId,created_edition_id:null,
+  source_url,source:'Open Library'};
+ const updates=[db.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=? '+
+   'AND updated_at=? AND synopsis=? AND archived_at IS NULL')
+   .bind(after.synopsis,now,id,safeExpected,b.synopsis)];
+ for(const tag of tags){
+  updates.push(db.prepare("INSERT OR IGNORE INTO tags(id,label,kind) "+
+   "SELECT ?,?,'imported' WHERE EXISTS(SELECT 1 FROM books WHERE id=? AND updated_at=?)")
+   .bind(crypto.randomUUID(),tag,id,now));
+  updates.push(db.prepare("INSERT OR IGNORE INTO book_tags(book_id,tag_id,source) "+
+   "SELECT ?,t.id,'open_library' FROM tags t WHERE t.label=? COLLATE NOCASE "+
+   "AND EXISTS(SELECT 1 FROM books WHERE id=? AND updated_at=?)")
+   .bind(id,tag,id,now));
+ }
+ if(bytes){
+  updates.push(db.prepare("INSERT INTO edition_images(id,edition_id,origin,private_object_key,"+
+   "role,match_status,display_cover,credit) SELECT ?,?,'publisher',?,"+
+   "'cover','possible',1,'Open Library / original rights holder' "+
+   "WHERE EXISTS(SELECT 1 FROM books WHERE id=? AND updated_at=?) "+
+   "AND NOT EXISTS(SELECT 1 FROM edition_images i JOIN editions e "+
+   "ON e.id=i.edition_id WHERE e.book_id=?)")
+   .bind(coverId,editionId,coverKey,id,now,id));
+ }
+ updates.push(db.prepare('INSERT INTO change_log(id,action,entity_type,entity_id,before_json,'+
+  "after_json) SELECT ?,'online_enrich','books',?,?,? WHERE EXISTS"+
+  '(SELECT 1 FROM books WHERE id=? AND updated_at=?)')
+  .bind(logId,id,JSON.stringify(old),JSON.stringify(after),id,now));
+ if(bytes)await env.BOOK_FILES.put(coverKey,bytes,{httpMetadata:{contentType:'image/jpeg'}});
+ try{
+  const results=await db.batch(updates);
+  if(!results[0]?.meta?.changes||!results.at(-1)?.meta?.changes||
+   (bytes&&!results.at(-2)?.meta?.changes)){
+    if(bytes)try{await env.BOOK_FILES.delete(coverKey);}catch{}
+    return json({status:'changed',reason:'Book or cover changed while saving'},409);
+  }
+  if(tags.length)await syncCollections(db,id);
+  return json({status:'applied',book_id:id,change_id:logId,
+   synopsis_filled:!!synopsis,tags_added:tags.length,cover_saved:!!bytes,
+   cover_skipped:!!proposed.cover_id&&!bytes},201);
+ }catch(e){
+  if(bytes)try{await env.BOOK_FILES.delete(coverKey);}catch{}
+  if(/UNIQUE|constraint/i.test(String(e)))
+   return json({status:'changed',reason:'A different edition or cover was saved concurrently'},409);
+  throw e;
+ }
+}
+async function undo(db,env,id){
+ const log=await read(db,"SELECT * FROM change_log WHERE id=? AND action='online_enrich'",id);
+ if(!log||log.undone_at)return fail('Repair not found or already undone',404);
+ let before,after;try{before=JSON.parse(log.before_json);after=JSON.parse(log.after_json);}
+ catch{return fail('Repair history is unreadable',409);}
+ const book=await read(db,'SELECT updated_at,synopsis FROM books WHERE id=? AND archived_at IS NULL',
+  log.entity_id);
+ if(!book||book.updated_at!==after.updated_at||book.synopsis!==after.synopsis)
+  return fail('Book was edited since this repair. Undo would overwrite newer changes',409);
+ if(after.cover_id){
+  const image=await read(db,'SELECT id,edition_id,private_object_key,match_status,display_cover '+
+   'FROM edition_images WHERE id=?',after.cover_id);
+  if(!image||image.edition_id!==after.edition_id||image.private_object_key!==after.cover_key||
+   image.match_status!=='possible'||image.display_cover!==1)
+   return fail('Cover was edited or verified since repair; Undo blocked',409);
+ }
+ const time=new Date().toISOString(),sql=[];
+ for(const tag of after.added_tags||[]){
+  sql.push(db.prepare("DELETE FROM book_tags WHERE book_id=? AND source='open_library' "+
+   'AND tag_id IN (SELECT id FROM tags WHERE label=? COLLATE NOCASE)')
+   .bind(log.entity_id,tag));
+ }
+ if(after.cover_id){
+  sql.push(db.prepare("DELETE FROM edition_images WHERE id=? AND edition_id=? "+
+   "AND private_object_key=? AND match_status='possible' AND display_cover=1")
+   .bind(after.cover_id,after.edition_id,after.cover_key));
+  if(after.created_edition_id)
+   sql.push(db.prepare('DELETE FROM editions WHERE id=? AND book_id=? '+
+    'AND NOT EXISTS(SELECT 1 FROM edition_images WHERE edition_id=?) '+
+    'AND NOT EXISTS(SELECT 1 FROM copies WHERE edition_id=?) '+
+    'AND NOT EXISTS(SELECT 1 FROM epub_files WHERE edition_id=?) '+
+    'AND NOT EXISTS(SELECT 1 FROM digital_files WHERE edition_id=?)')
+    .bind(after.edition_id,log.entity_id,after.edition_id,after.edition_id,
+     after.edition_id,after.edition_id));
+ }
+ sql.push(db.prepare('UPDATE books SET synopsis=?,updated_at=? WHERE id=? AND '+
+  'updated_at=? AND synopsis=?')
+  .bind(before.synopsis,time,log.entity_id,after.updated_at,after.synopsis));
+ sql.push(db.prepare('UPDATE change_log SET undone_at=? WHERE id=? AND undone_at IS NULL '+
+  'AND EXISTS(SELECT 1 FROM books WHERE id=? AND updated_at=?)')
+  .bind(time,id,log.entity_id,time));
+ const response=await db.batch(sql);
+ if(!response.at(-2)?.meta?.changes||!response.at(-1)?.meta?.changes)
+  return fail('Repair changed during Undo',409);
+ if(after.cover_key&&env.BOOK_FILES)try{await env.BOOK_FILES.delete(after.cover_key);}catch{}
+ if((after.added_tags||[]).length)await syncCollections(db,log.entity_id);
+ return json({status:'undone',book_id:log.entity_id});
+}
+// Re-sort auto collections after tags change. Never fail the repair for it.
+async function syncCollections(db,bookId){
+ try{await refreshBookCollections(db,bookId);}catch{}
+}
+
+// Whole-library subject run: every book is looked up once (tracked in
+// online_subject_checks) so the run can pause, resume, and later only
+// check books added since.
+const SUBJECT_BATCH=2;
+const subjectsReady=new WeakMap();
+function ensureSubjectChecks(db){
+ let ready=subjectsReady.get(db);
+ if(!ready){
+  ready=db.prepare('CREATE TABLE IF NOT EXISTS online_subject_checks (book_id TEXT PRIMARY KEY '+
+   'REFERENCES books(id) ON DELETE CASCADE,status TEXT NOT NULL,tags_added INTEGER NOT NULL DEFAULT 0,'+
+   'checked_at TEXT NOT NULL)').bind().run();
+  subjectsReady.set(db,ready);
+  ready.catch(()=>subjectsReady.delete(db));
+ }
+ return ready;
+}
+const UNCHECKED='FROM books b WHERE b.archived_at IS NULL AND NOT EXISTS '+
+ '(SELECT 1 FROM online_subject_checks c WHERE c.book_id=b.id)';
+async function subjectStatus(db){
+ const [left,done,added]=await Promise.all([
+  read(db,'SELECT COUNT(*) AS n '+UNCHECKED),
+  read(db,'SELECT COUNT(*) AS n FROM online_subject_checks'),
+  read(db,'SELECT COALESCE(SUM(tags_added),0) AS n FROM online_subject_checks')
+ ]);
+ return {remaining:Number(left?.n)||0,checked:Number(done?.n)||0,tags_added:Number(added?.n)||0};
+}
+async function subjectBatch(db,env,fetcher){
+ const next=await rows(db,'SELECT b.id,b.title '+UNCHECKED+' ORDER BY b.id LIMIT ?',SUBJECT_BATCH);
+ const results=[];
+ for(const book of next){
+  let body;
+  try{
+   const response=await apply(db,env,book.id,null,fetcher,{tagsOnly:true});
+   body=await response.json();
+   // A concurrent edit is not a verdict on the book; retry it next run.
+   if(response.status===409){results.push({book_id:book.id,title:book.title,status:'changed'});continue;}
+  }catch(e){
+   // Rate limit or outage: stop without marking this book checked.
+   return {results,halt:true,reason:e.status===429?'Open Library rate limit reached; resume later':
+    'Open Library unavailable; resume later',...await subjectStatus(db)};
+  }
+  const added=body.status==='applied'?Number(body.tags_added||0):0;
+  await db.prepare('INSERT OR REPLACE INTO online_subject_checks (book_id,status,tags_added,checked_at) '+
+   'VALUES (?,?,?,?)').bind(book.id,String(body.status||'unknown').slice(0,30),added,new Date().toISOString()).run();
+  results.push({book_id:book.id,title:book.title,status:body.status,tags_added:added,
+   reason:body.reason||''});
+ }
+ const status=await subjectStatus(db);
+ return {results,done:!next.length||status.remaining===0,...status};
+}
+
+export async function handleOnlineEnrichApi(request,db,env,path,{sourceFetch=pacedSourceFetch}={}){
+ if(!path.startsWith('/api/online-enrich/'))return null;
+ const end=path.slice('/api/online-enrich/'.length);
+ if(end==='history'&&request.method==='GET'){
+  const history=await rows(db,
+   "SELECT id,entity_id,after_json,created_at,undone_at FROM change_log "+
+   "WHERE action='online_enrich' ORDER BY created_at DESC LIMIT 60");
+  return json({changes:history.map(x=>({change_id:x.id,book_id:x.entity_id,
+   created_at:x.created_at,undone_at:x.undone_at,
+   ...(JSON.parse(x.after_json||'{}')||{})}))});
+ }
+ if(end.startsWith('subjects')){
+  await ensureSubjectChecks(db);
+  if(end==='subjects-status'&&request.method==='GET')return json(await subjectStatus(db));
+  if(end==='subjects-batch'&&request.method==='POST')return json(await subjectBatch(db,env,sourceFetch));
+  if(end==='subjects-reset'&&request.method==='POST'){
+   await db.prepare('DELETE FROM online_subject_checks').bind().run();
+   return json(await subjectStatus(db));
+  }
+  return fail('Method not allowed',405);
+ }
+ if(end==='preview'&&request.method==='GET'){
+  const id=new URL(request.url).searchParams.get('book_id');
+  if(!uuid(id))return fail('Invalid book ID');
+  try{
+   const result=await lookup(db,id,sourceFetch);
+   if(result.state){
+    const {book,hasCover,hasTags}=result.state;
+    delete result.state;result.book={id:book.id,title:book.title,
+     author:book.author,updated_at:book.updated_at,
+     missing_synopsis:!text(book.synopsis),missing_cover:!hasCover,missing_tags:!hasTags};
+   }
+   return json(result);
+  }catch(e){return fail(e.status===429?'Open Library rate limit. Try again later.':
+   'Open Library metadata unavailable',e.status||503);}
+ }
+ if(end==='repair-batch'&&request.method==='POST'){
+  let data;
+  try{
+   const raw=await request.text();
+   if(raw.length>1200)return fail('Batch too large',413);
+   data=JSON.parse(raw);
+  }catch{return fail('Invalid batch request');}
+  const ids=data?.book_ids;
+  if(!Array.isArray(ids)||ids.length<1||ids.length>4||
+   ids.some(x=>!uuid(x))||new Set(ids).size!==ids.length)
+   return fail('Provide one to four unique book IDs');
+  try{
+   // A single search can retrieve works for several ISBNs, reducing requests.
+   // Title-only books retain individual queries and all decisions are checked
+   // against each book's current D1 record before writing.
+   const states=await Promise.all(ids.map(id=>record(db,id)));
+   const isbns=[...new Set(states.map(x=>x?.isbn).filter(Boolean))];
+   let docs=null;
+   if(isbns.length>=2){
+    const params=new URLSearchParams({
+     q:'isbn:('+isbns.join(' OR ')+')',
+     fields:'key,title,author_name,isbn,cover_i,first_sentence,subject',
+     limit:'50'
+    });
+    const search=await requestData(sourceFetch,
+     'https://openlibrary.org/search.json?'+params);
+    docs=Array.isArray(search?.docs)?search.docs:[];
+   }
+   const results=[];
+   for(let i=0;i<ids.length;i++){
+    const state=states[i];
+    if(!state){results.push({book_id:ids[i],status:'missing'});continue;}
+    // Reuse batched search only for books whose ISBN was included. Fall back
+    // to normal title/author matching when the book has no reliable ISBN.
+    const options={state,noTags:true,...(docs&&state.isbn?{docs}:{})};
+    let result;
+    try{result=await apply(db,env,ids[i],null,sourceFetch,options);}
+    catch(e){return json({results,halt:true,reason:e.status===429?
+     'Open Library rate limit reached':'Source unavailable; resume later'});}
+    const body=await result.json();
+    if(result.status===429||result.status===503)
+     return json({results,halt:true,reason:body.error||'Source unavailable'});
+    results.push({book_id:ids[i],...body});
+   }
+   return json({results,batched_isbns:docs?isbns.length:0});
+  }catch(e){return fail(e.status===429?'Open Library rate limit. Try later.':
+   'Online batch unavailable; completed repairs remain saved',e.status||503);}
+ }
+ if(['repair','repair-auto','undo'].includes(end)&&request.method==='POST'){
+  let data;try{
+   const input=await request.text();if(input.length>3000)return fail('Request too large',413);
+   data=JSON.parse(input);
+  }catch{return fail('Invalid request');}
+  if(end==='undo'){
+   if(!uuid(data?.change_id))return fail('Invalid history ID');
+   return undo(db,env,data.change_id);
+  }
+  if(!uuid(data?.book_id))return fail('Invalid book selection');
+  // One owner-triggered request now performs lookup + safe repair, avoiding
+  // the redundant preview-and-lookup pair for every book. The older repair
+  // route retains its explicit optimistic-concurrency contract.
+  if(end==='repair'&&(typeof data.expected_updated_at!=='string'||
+   data.expected_updated_at.length>100))return fail('Invalid book timestamp');
+  try{return await apply(db,env,data.book_id,
+   end==='repair-auto'?null:data.expected_updated_at,sourceFetch);}
+  catch(e){return fail(e.status===429?'Open Library rate limit. Try again later.':
+   'Online metadata lookup unavailable; no new changes saved',e.status||503);}
+ }
+ return fail('Method not allowed',405);
+}
+

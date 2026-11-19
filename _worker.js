@@ -1,8 +1,42 @@
 import {handleGoodreadsApi} from './goodreads-import-api.mjs';
 import {handleGoodreadsSyncApi} from './goodreads-sync-api.mjs';
+import {handleGoodreadsProfileApi} from './goodreads-profile-api.mjs';
 import {handleEpubApi} from './epub-import-api.mjs';
+import {handleDigitalFilesApi} from './digital-files-api.mjs';
+import {handleEpubTitleCleanupApi} from './epub-title-cleanup-api.mjs';
+import {handleIsbnTitleLookup} from './isbn-title-lookup-api.mjs';
+import {handleAutoTitleRepairApi} from './auto-title-repair-api.mjs';
 import {handleEpubBackfillApi} from './epub-backfill-api.mjs';
+import {handleEbookCoverLookup} from './ebook-cover-lookup-api.mjs';
+import {handleShelfIsbnApi} from './shelf-photo-isbn-api.mjs';
+import {handleShelfInventoryApi} from './shelf-photo-inventory-api.mjs';
+import {handleShelfPlacementApi} from './shelf-photo-placement-api.mjs';
+import {handleShelfBulkLocationApi} from './shelf-photo-bulk-location-api.mjs';
+import {handleVisualShelvesApi} from './visual-shelves-api.mjs';
+import {handleVirtualShelvesApi} from './virtual-shelves-api.mjs';
+import {handleBookReferenceApi} from './book-reference-api.mjs';
+import {handlePhotoOnlineCoverApi} from './photo-online-cover-api.mjs';
+import {handlePhotoOcrAssetsApi} from './photo-ocr-assets-api.mjs';
+import {handleCollectionHealthApi} from './collection-health-api.mjs';
+import {handleOnlineEnrichApi} from './online-enrich-api.mjs';
+import {PREFERRED_BOOK_COVER_SQL} from './cover-priority.mjs';
+import {handleOfflineBulkApi} from './offline-bulk-api.mjs';
+import {handleOfflineTextReviewApi} from './offline-text-review-api.mjs';
+import {handleEditionRecoveryApi} from './edition-recovery-api.mjs';
+import {handleLocalEditionApi} from './edition-local-api.mjs';
+import {handleIsbnRecoveryApi} from './isbn-recovery-api.mjs';
+import {handleIsbnEditionEnrichApi} from './isbn-edition-enrich-api.mjs';
+import {handleExistingCoverRelinkApi} from './existing-cover-relink-api.mjs';
+import {handleCalibreCompareApi} from './calibre-compare-api.mjs';
+import {handleCalibreRepairApi} from './calibre-repair-api.mjs';
+import {handleShelfLayoutApi} from './visual-shelf-layout-api.mjs';
+import {handleCollectionLayoutApi} from './collection-layout-api.mjs';
+import {handleCollectionVisibilityApi,ensureBookVisibilitySchema} from './collection-visibility-api.mjs';
+import {handleSiteContentApi} from './site-content-api.mjs';
+import {handleShelfSavedReviewApi} from './shelf-saved-review-api.mjs';
 import {classifyDatabaseError} from './database-errors.mjs';
+import {handleAutoCollectionsApi,refreshBookCollections} from './auto-collections-api.mjs';
+import {ensureBookExtrasSchema,readBookExtras,saveBookExtras,priorityFilter,priorityValue,coverUrlValue} from './book-extras.mjs';
 export {classifyDatabaseError} from './database-errors.mjs';
 // My Library Phase 2: private, independent Cloudflare Pages advanced-mode Worker.
 // All requests, including static assets, REQUIRE verified Cloudflare Access identity.
@@ -156,7 +190,7 @@ function secureHeaders(response,api=false){
   out.headers.set('referrer-policy','no-referrer');
   out.headers.set('x-frame-options','DENY');
   out.headers.set('permissions-policy','camera=(), microphone=(), geolocation=()');
-  if(!api) out.headers.set('content-security-policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  if(!api) out.headers.set('content-security-policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   return out;
 }
 function checkWriteOrigin(request){
@@ -200,9 +234,19 @@ async function bookDetail(db,bookId){
     getAll(db,'SELECT s.id,s.name,s.origin FROM shelves s JOIN book_shelves bs ON bs.shelf_id=s.id WHERE bs.book_id=? ORDER BY s.name',[bookId]),
     getAll(db,'SELECT * FROM editions WHERE book_id=? ORDER BY is_special DESC,edition_name',[bookId]),
     getAll(db,'SELECT c.* FROM copies c JOIN editions e ON e.id=c.edition_id WHERE e.book_id=? ORDER BY c.created_at',[bookId]),
-    getAll(db,'SELECT im.id,im.edition_id,im.copy_id,im.role,im.origin,im.credit,im.match_status,im.display_cover FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=? ORDER BY im.created_at',[bookId])
+    getAll(db,'SELECT im.id,im.edition_id,im.copy_id,im.role,im.origin,im.credit,im.match_status,im.display_cover,'+
+     'CASE WHEN im.private_object_key IS NOT NULL THEN 1 ELSE 0 END AS has_saved_asset,'+
+     'im.created_at FROM edition_images im JOIN editions e ON e.id=im.edition_id '+
+     'WHERE e.book_id=? ORDER BY im.created_at',[bookId])
   ]);
-  return {...book,tags,shelves,editions:editions.map(e=>({...e,copies:copies.filter(c=>c.edition_id===e.id),images:images.filter(i=>i.edition_id===e.id)}))};
+  const extras=await readBookExtras(db,bookId);
+  return {...book,...extras,tags,shelves,editions:editions.map(e=>({...e,copies:copies.filter(c=>c.edition_id===e.id),images:images.filter(i=>i.edition_id===e.id)}))};
+}
+// Keep auto collections current after a single-book edit. A failure here
+// must never undo or block the edit itself; "Refresh all" repairs it later.
+async function syncCollections(db,bookId){
+  try{await refreshBookCollections(db,bookId);}
+  catch(error){console.error('Auto collection refresh skipped:',error?.name||'Error');}
 }
 async function addAudit(db,action,entityType,entityId,before,after){
   await run(db,'INSERT INTO change_log (id,action,entity_type,entity_id,before_json,after_json) VALUES (?,?,?,?,?,?)',
@@ -253,34 +297,105 @@ async function serveApi(request,env,path){
   }
   const goodreadsSyncResponse=await handleGoodreadsSyncApi(request,db,path);
   if(goodreadsSyncResponse)return goodreadsSyncResponse;
+  const profileResponse=await handleGoodreadsProfileApi(request,env,path);
+  if(profileResponse)return profileResponse;
   const goodreadsResponse=await handleGoodreadsApi(request,db,path);
   if(goodreadsResponse) return goodreadsResponse;
+  const visibilityResponse=await handleCollectionVisibilityApi(request,db,path);
+  if(visibilityResponse)return visibilityResponse;
+  const ocrAssetResponse=await handlePhotoOcrAssetsApi(request,path);
+  if(ocrAssetResponse)return ocrAssetResponse;
+  const onlinePhotoResponse=await handlePhotoOnlineCoverApi(request,path);
+  if(onlinePhotoResponse)return onlinePhotoResponse;
+  const referenceResponse=await handleBookReferenceApi(request,db,env,path);
+  if(referenceResponse)return referenceResponse;
+  const autoCollectionsResponse=await handleAutoCollectionsApi(request,db,path);
+  if(autoCollectionsResponse)return autoCollectionsResponse;
+  const virtualShelfResponse=await handleVirtualShelvesApi(request,db,path);
+  if(virtualShelfResponse)return virtualShelfResponse;
+  const savedReviewResponse=await handleShelfSavedReviewApi(request,env,path);
+  if(savedReviewResponse)return savedReviewResponse;
+  const siteContentResponse=await handleSiteContentApi(request,env,path);
+  if(siteContentResponse)return siteContentResponse;
+  const collectionLayoutResponse=await handleCollectionLayoutApi(request,env,path);
+  if(collectionLayoutResponse)return collectionLayoutResponse;
+  const shelfLayoutResponse=await handleShelfLayoutApi(request,db,env,path);
+  if(shelfLayoutResponse)return shelfLayoutResponse;
+  const calibreRepairResponse=await handleCalibreRepairApi(request,db,env,path);
+  if(calibreRepairResponse)return calibreRepairResponse;
+  const calibreResponse=await handleCalibreCompareApi(request,db,path);
+  if(calibreResponse)return calibreResponse;
+  const isbnEditionResponse=await handleIsbnEditionEnrichApi(request,db,path);
+  if(isbnEditionResponse)return isbnEditionResponse;
+  const isbnRecoveryResponse=await handleIsbnRecoveryApi(request,db,path);
+  if(isbnRecoveryResponse)return isbnRecoveryResponse;
+  const localEditionResponse=await handleLocalEditionApi(request,db,env,path);
+  if(localEditionResponse)return localEditionResponse;
+  const editionRecoveryResponse=await handleEditionRecoveryApi(request,db,path);
+  if(editionRecoveryResponse)return editionRecoveryResponse;
+  const offlineTextResponse=await handleOfflineTextReviewApi(request,db,path);
+  if(offlineTextResponse)return offlineTextResponse;
+  const offlineBulkResponse=await handleOfflineBulkApi(request,db,env,path);
+  if(offlineBulkResponse)return offlineBulkResponse;
+  const onlineEnrichResponse=await handleOnlineEnrichApi(request,db,env,path);
+  if(onlineEnrichResponse)return onlineEnrichResponse;
+  const existingCoverRelink=await handleExistingCoverRelinkApi(request,db,env,path);
+  if(existingCoverRelink)return existingCoverRelink;
+  const catalogueHealthResponse=await handleCollectionHealthApi(request,db,path);
+  if(catalogueHealthResponse)return catalogueHealthResponse;
+  const visualShelvesResponse=await handleVisualShelvesApi(request,db,path);
+  if(visualShelvesResponse)return visualShelvesResponse;
+  const bulkShelfLocationResponse=await handleShelfBulkLocationApi(request,db,path);
+  if(bulkShelfLocationResponse)return bulkShelfLocationResponse;
+  const shelfPlacementResponse=await handleShelfPlacementApi(request,db,path);
+  if(shelfPlacementResponse)return shelfPlacementResponse;
+  const inventoryResponse=await handleShelfInventoryApi(request,db,path);
+  if(inventoryResponse)return inventoryResponse;
+  const shelfIsbnResponse=await handleShelfIsbnApi(request,db,path);
+  if(shelfIsbnResponse)return shelfIsbnResponse;
+  const isbnCoverResponse=await handleEbookCoverLookup(request,db,env,path);
+  if(isbnCoverResponse)return isbnCoverResponse;
   const backfillResponse=await handleEpubBackfillApi(request,db,path,env);
   if(backfillResponse)return backfillResponse;
+  const autoRepairResponse=await handleAutoTitleRepairApi(request,db,path);
+  if(autoRepairResponse)return autoRepairResponse;
+  const isbnTitleResponse=await handleIsbnTitleLookup(request,db,path);
+  if(isbnTitleResponse)return isbnTitleResponse;
+  const titleCleanupResponse=await handleEpubTitleCleanupApi(request,db,path);
+  if(titleCleanupResponse)return titleCleanupResponse;
+  const digitalFilesResponse=await handleDigitalFilesApi(request,db,env,path);
+  if(digitalFilesResponse)return digitalFilesResponse;
   const epubResponse=await handleEpubApi(request,db,env,path);
   if(epubResponse)return epubResponse;
   if(path==='/api/books'&&method==='GET') {
     const url=new URL(request.url);
     const q=string(url.searchParams.get('q'),150);
+    const sort=url.searchParams.get('sort')==='za'?'za':
+      url.searchParams.get('sort')==='priority'?'priority':'az';
+    await ensureBookVisibilitySchema(db);
+    await ensureBookExtrasSchema(db);
+    const byPriority=priorityFilter(url.searchParams.get('priority'));
     const limit=Math.max(1,Math.min(100,parseInt(url.searchParams.get('limit')||'60',10)||60));
     const offset=Math.max(0,Math.min(1000000,parseInt(url.searchParams.get('offset')||'0',10)||0));
     const search='%'+q.replace(/[%_\\]/g,c=>'\\'+c)+'%';
-    const where=" FROM books b WHERE b.archived_at IS NULL"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"");
-    const args=q?[search,search]:[];
+    const where=" FROM books b LEFT JOIN book_extras x ON x.book_id=b.id WHERE b.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM book_visibility v WHERE v.book_id=b.id AND (v.hidden_at IS NOT NULL OR v.trashed_at IS NOT NULL))"+(q?" AND (b.title LIKE ? ESCAPE '\\' OR b.author LIKE ? ESCAPE '\\')":"")+(byPriority?byPriority.sql:'');
+    const args=[...(q?[search,search]:[]),...(byPriority?byPriority.args:[])];
     // The frontend already knows the total when fetching subsequent pages.
     // Skip scanning the full active book index on every Load more request.
     const includeTotal=url.searchParams.get('include_total')!=='0';
     const count=includeTotal?await getOne(db,'SELECT COUNT(*) AS total'+where,args):null;
     const books=await getAll(db,
       'SELECT b.id,b.title,b.author,b.goodreads_id,b.reading_status,b.rating,b.synopsis,b.updated_at,'+
-      '(SELECT im.id FROM edition_images im JOIN editions e ON e.id=im.edition_id WHERE e.book_id=b.id AND im.display_cover=1 ORDER BY e.is_special DESC,e.created_at LIMIT 1) AS cover_id'+
+      "x.priority,COALESCE(x.cover_url,'') AS cover_url,"+
+      PREFERRED_BOOK_COVER_SQL+' AS cover_id'+
       // Use the active identity index for paging instead of a full
       // title COLLATE NOCASE sort of thousands of imported books.
-      where+' ORDER BY b.normalized_title,b.normalized_author,b.id LIMIT ? OFFSET ?',[...args,limit,offset]);
+      where+(sort==='priority'?' ORDER BY COALESCE(x.priority,4),b.normalized_title ':' ORDER BY b.normalized_title ')+(sort==='za'?'DESC':'ASC')+',b.normalized_author '+(sort==='za'?'DESC':'ASC')+',b.id '+(sort==='za'?'DESC':'ASC')+' LIMIT ? OFFSET ?',[...args,limit,offset]);
     return json({books,...(includeTotal?{total:count?.total||0}:{}),offset,limit});
   }
   if(path==='/api/books'&&method==='POST') {
     const b=await body(request), title=requiredText(b.title,'Title'), author=string(b.author,400);
+    const extras={priority:priorityValue(b.priority),cover_url:coverUrlValue(b.cover_url)};
     const existing=await getOne(db,'SELECT id FROM books WHERE normalized_title=? AND normalized_author=? AND archived_at IS NULL LIMIT 1',
       [normalize(title),normalize(author)]);
     if(existing) return json({error:'This title and author are already in your library. Add an edition or copy to the existing book instead.',existing_book_id:existing.id},409);
@@ -298,6 +413,8 @@ async function serveApi(request,env,path){
       throw error;
     }
     await addAudit(db,'create','books',bookId,null,{id:bookId,title});
+    if(extras.priority!==null||extras.cover_url)await saveBookExtras(db,bookId,extras);
+    await syncCollections(db,bookId);
     return json({book:await bookDetail(db,bookId)},201);
   }
   const bookMatch=/^\/api\/books\/([0-9a-f-]{36})$/.exec(path);
@@ -306,13 +423,23 @@ async function serveApi(request,env,path){
     if(method==='GET') {const found=await bookDetail(db,bookId);return found?json({book:found}):fail('Book not found',404);}
     if(method==='PATCH') {
       const data=await body(request);
-      return patchRecord(db,'books',bookId,data,{
+      const patched=await patchRecord(db,'books',bookId,data,{
         title:x=>requiredText(x,'Title'),author:x=>string(x,400),synopsis:x=>rawString(x,25000),
         private_notes:x=>rawString(x),review:x=>rawString(x,50000),
         reading_status:x=>requireEnum(x,STATUS,'unread'),rating:ratingValue,
         date_started:x=>x?string(x,20):null,date_finished:x=>x?string(x,20):null
       });
+      if(patched.ok&&('title' in data||'synopsis' in data))await syncCollections(db,bookId);
+      return patched;
     }
+  }
+  const extrasMatch=/^\/api\/books\/([0-9a-f-]{36})\/extras$/.exec(path);
+  if(extrasMatch&&method==='PATCH'){
+    const exists=await getOne(db,'SELECT id FROM books WHERE id=? AND archived_at IS NULL',[extrasMatch[1]]);
+    if(!exists)return fail('Book not found',404);
+    const {before,after}=await saveBookExtras(db,extrasMatch[1],await body(request));
+    await addAudit(db,'update_extras','book_extras',extrasMatch[1],before,after);
+    return json({extras:after});
   }
   const tagMatch=/^\/api\/books\/([0-9a-f-]{36})\/tags$/.exec(path);
   if(tagMatch&&method==='POST'){
@@ -324,6 +451,7 @@ async function serveApi(request,env,path){
     const tag=await getOne(db,'SELECT id,label,kind FROM tags WHERE label=? COLLATE NOCASE',[label]);
     await run(db,'INSERT OR IGNORE INTO book_tags (book_id,tag_id,source) VALUES (?,?,?)',[tagMatch[1],tag.id,'manual']);
     await addAudit(db,'attach_tag','book_tags',tagMatch[1],null,{tag_id:tag.id});
+    await syncCollections(db,tagMatch[1]);
     return json({tag},201);
   }
   const removeTag=/^\/api\/books\/([0-9a-f-]{36})\/tags\/([0-9a-f-]{36})$/.exec(path);
@@ -331,6 +459,7 @@ async function serveApi(request,env,path){
     const r=await run(db,'DELETE FROM book_tags WHERE book_id=? AND tag_id=?',[removeTag[1],removeTag[2]]);
     if(!r.meta?.changes) return fail('Tag assignment not found',404);
     await addAudit(db,'remove_tag','book_tags',removeTag[1],{tag_id:removeTag[2]},null);
+    await syncCollections(db,removeTag[1]);
     return json({removed:true});
   }
   const shelfMatch=/^\/api\/books\/([0-9a-f-]{36})\/shelves$/.exec(path);
@@ -341,6 +470,7 @@ async function serveApi(request,env,path){
     const shelf=await getOne(db,'SELECT id,name,origin FROM shelves WHERE name=? COLLATE NOCASE',[name]);
     await run(db,'INSERT OR IGNORE INTO book_shelves (book_id,shelf_id) VALUES (?,?)',[shelfMatch[1],shelf.id]);
     await addAudit(db,'attach_shelf','book_shelves',shelfMatch[1],null,{shelf_id:shelf.id});
+    await syncCollections(db,shelfMatch[1]);
     return json({shelf},201);
   }
   const shelfRemove=/^\/api\/books\/([0-9a-f-]{36})\/shelves\/([0-9a-f-]{36})$/.exec(path);
@@ -348,6 +478,7 @@ async function serveApi(request,env,path){
     const r=await run(db,'DELETE FROM book_shelves WHERE book_id=? AND shelf_id=?',[shelfRemove[1],shelfRemove[2]]);
     if(!r.meta?.changes) return fail('Shelf assignment not found',404);
     await addAudit(db,'remove_shelf','book_shelves',shelfRemove[1],{shelf_id:shelfRemove[2]},null);
+    await syncCollections(db,shelfRemove[1]);
     return json({removed:true});
   }
   const newEdition=/^\/api\/books\/([0-9a-f-]{36})\/editions$/.exec(path);
@@ -454,7 +585,14 @@ async function serveApi(request,env,path){
   const imageMatch=/^\/api\/images\/([0-9a-f-]{36})$/.exec(path);
   if(imageMatch&&method==='GET'){
     if(!env.BOOK_FILES) return fail('Private image storage is not configured',503);
-    const image=await getOne(db,'SELECT private_object_key FROM edition_images WHERE id=?',[imageMatch[1]]);
+    const image=await getOne(db,
+      'SELECT private_object_key,image_url FROM edition_images WHERE id=?',[imageMatch[1]]);
+    // Only an Open Library ID-based URL created by the authenticated dump
+    // import may redirect the browser. No user-controlled URL is ever fetched.
+    if(image?.image_url&&/^https:\/\/covers\.openlibrary\.org\/b\/id\/[1-9][0-9]{0,9}-M\.jpg\?default=false$/.test(image.image_url))
+      return new Response(null,{status:302,headers:{
+        location:image.image_url,'cache-control':'private, no-store','referrer-policy':'no-referrer'
+      }});
     if(!image?.private_object_key) return fail('Image not found',404);
     const object=await env.BOOK_FILES.get(image.private_object_key);
     if(!object) return fail('Image not found',404);
@@ -505,7 +643,7 @@ export default {
     } catch (err) {
       // Do not leak SQL errors, private data, Access secrets or storage paths.
       if(err instanceof SyntaxError) return secureHeaders(fail('Invalid JSON',400),true);
-      if(err instanceof Error && (/required|Invalid|selection|Rating|Content-Type|large|Expected|price|No recognized/.test(err.message)))
+      if(err instanceof Error && (/required|Invalid|selection|Rating|Content-Type|large|Expected|price|No recognized|Priority|Cover image URL|Collection|Invalid action/.test(err.message)))
         return secureHeaders(fail(err.message,400),true);
       const quota=classifyDatabaseError(err);
       if(quota)return secureHeaders(json(quota,503),true);

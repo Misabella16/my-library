@@ -180,6 +180,26 @@ CREATE TABLE IF NOT EXISTS epub_files (
   batch_id TEXT REFERENCES import_batches(id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Additional private ebook formats from Calibre, kept separate from EPUB
+-- backfill/indexing so PDF/MOBI/AZW3 are never parsed as EPUB archives.
+-- A guarded owner-only endpoint also lazily applies this CREATE IF NOT EXISTS
+-- to existing My Library D1 installations.
+CREATE TABLE IF NOT EXISTS digital_files (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL REFERENCES books(id) ON DELETE RESTRICT,
+  edition_id TEXT NOT NULL REFERENCES editions(id) ON DELETE RESTRICT,
+  format TEXT NOT NULL CHECK(format IN ('PDF','AZW3','MOBI')),
+  sha256 TEXT NOT NULL UNIQUE,
+  original_filename TEXT NOT NULL,
+  private_object_key TEXT NOT NULL UNIQUE,
+  file_size INTEGER NOT NULL CHECK(file_size > 0),
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  undone_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_digital_files_book ON digital_files(book_id,created_at);
+CREATE INDEX IF NOT EXISTS idx_digital_files_edition ON digital_files(edition_id);
+
 CREATE TABLE IF NOT EXISTS change_log (
   id TEXT PRIMARY KEY,
   batch_id TEXT REFERENCES import_batches(id),

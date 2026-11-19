@@ -1,15 +1,19 @@
 import {inspectEpub,MAX_EPUB_BYTES} from './epub-reader.mjs';
-import {suggestEpubMetadata} from './epub-metadata.mjs';
+import {suggestEpubMetadata,cleanEpubTitle} from './epub-metadata.mjs';
 import {bulkEpubReport,flagPossibleEpubDuplicates} from './epub-bulk.mjs';
 
 const PREVIEW_BATCH=50;
-const MAX_SELECTION=3000;
+const MAX_SELECTION=10000;
+// Limit each save action to a reasonable number of network writes. The
+// already-inspected selection remains available for the next save click.
+const SAVE_RUN_LIMIT=500;
 const PAGE_SIZE=80;
 const labels={
  new:'New book',match:'Matches existing book',
  already_uploaded:'Already uploaded',needs_review:'Needs review',
  same_file:'Duplicate in this selection',uploaded:'Saved',
- upload_failed:'Upload failed',possible_duplicate:'Possible duplicate EPUB'
+ upload_failed:'Upload failed',possible_duplicate:'Possible duplicate EPUB',
+ oversized:'Too large (over 96 MB)',unreadable:'Could not inspect EPUB'
 };
 const canImport=x=>!x?.excluded&&['new','match','upload_failed'].includes(x?.match?.status);
 const create=(tag,className,text)=>{
@@ -26,10 +30,14 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    progress=get('epub-import-progress'),summary=get('epub-import-summary'),
    exportButton=get('epub-download-report'),
    reviewFilter=get('epub-review-filter'),
-   pauseButton=get('pause-epub-upload');
+   pauseButton=get('pause-epub-upload'),
+   saveAllButton=get('epub-save-all'),
+   recheckButton=get('epub-recheck-failures'),
+   issuesReportButton=get('epub-issues-report'),
+   previewPauseButton=get('pause-epub-preview');
  if(!fileInput||!previewButton||!uploadButton||!list||!status||!progress)return;
  let files=[],items=[],running=false,previewComplete=false,visible=PAGE_SIZE;
- let uploadActive=false,pauseRequested=false;
+ let uploadActive=false,pauseRequested=false,previewPauseRequested=false;
  const localCoverUrls=new Set();
  function clearCoverPreviews(){
   for(const url of localCoverUrls)URL.revokeObjectURL(url);
@@ -63,6 +71,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      ' · '+(entry.file.webkitRelativePath||entry.file.name)));
    card.append(create('span','epub-preview-label',labels[entry.match?.status]||'Not checked'));
    const notes=[];
+   if(entry.cleanedFromName)notes.push('Removed download-site label from the displayed title. The original file remains unchanged.');
    if(meta.description)notes.push('Description extracted');
    if(meta.coverPath)notes.push('Embedded cover detected (extracted on upload)');
    if(meta.subjects?.length)notes.push(meta.subjects.length+' EPUB subject tags');
@@ -235,15 +244,22 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
    list.append(more);
   }
   if(exportButton)exportButton.disabled=!items.length||running;
+  if(issuesReportButton)issuesReportButton.disabled=!items.some(x=>needsAttention(x))||running;
+  if(recheckButton)recheckButton.disabled=running||!items.some(x=>x.match?.status==='upload_failed');
+  if(previewPauseButton)previewPauseButton.disabled=!running||previewComplete||previewPauseRequested||uploadActive;
   if(pauseButton)pauseButton.disabled=!uploadActive||pauseRequested;
   uploadButton.disabled=running||!previewComplete||eligible===0;
-  uploadButton.textContent='Save '+eligible+' eligible EPUB'+(eligible===1?'':'s')+' privately';
+  if(saveAllButton)saveAllButton.disabled=running||!previewComplete||eligible===0;
+  if(saveAllButton)saveAllButton.textContent=eligible?'Save all '+eligible+' eligible EPUBs':'No eligible EPUBs to save';
+  uploadButton.textContent='Save '+Math.min(eligible,SAVE_RUN_LIMIT)+
+   ' eligible EPUB'+(eligible===1?'':'s')+' privately'+
+   (eligible>SAVE_RUN_LIMIT?' (next group of '+eligible+' remaining)':'');
  }
  function selectFiles(selection){
   clearCoverPreviews();
   if(running){inform('A batch is in progress. Finish or resume it before selecting another folder.');return;}
   files=[...(selection||[])].filter(f=>/\.epub$/i.test(f.name));
-  items=[];previewComplete=false;visible=PAGE_SIZE;lastPreviewCount=0;
+  items=[];previewComplete=false;previewPauseRequested=false;visible=PAGE_SIZE;lastPreviewCount=0;
   list.replaceChildren();progress.hidden=true;progress.value=0;
   previewButton.disabled=files.length===0||files.length>MAX_SELECTION;
   uploadButton.disabled=true;
@@ -257,6 +273,7 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   }
   if(summary)summary.textContent='No files have been uploaded.';
  }
+ const needsAttention=entry=>['needs_review','possible_duplicate','upload_failed'].includes(entry.match?.status)||!!entry.error;
  if(exportButton)exportButton.addEventListener('click',()=>{
   if(!items.length)return;
   const text=bulkEpubReport(items);
@@ -266,6 +283,15 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   anchor.href=url;anchor.download='my-library-epub-review.csv';
   document.body.append(anchor);
   anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
+ if(issuesReportButton)issuesReportButton.addEventListener('click',()=>{
+  const issues=items.filter(needsAttention);
+  if(!issues.length)return;
+  const url=URL.createObjectURL(new Blob([bulkEpubReport(issues)],{type:'text/csv;charset=utf-8'}));
+  const anchor=document.createElement('a');
+  anchor.href=url;anchor.download='my-library-epubs-needing-review.csv';
+  document.body.append(anchor);anchor.click();anchor.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  });
  if(reviewFilter)reviewFilter.addEventListener('change',()=>{
@@ -279,9 +305,17 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
  });
  fileInput.addEventListener('change',()=>selectFiles(fileInput.files));
  if(folderInput)folderInput.addEventListener('change',()=>selectFiles(folderInput.files));
+ previewPauseButton?.addEventListener('click',()=>{
+  if(!running||previewComplete||uploadActive)return;
+  previewPauseRequested=true;previewPauseButton.disabled=true;
+  inform('Finishing the current preview group before pausing. No EPUBs are uploaded.');
+ });
  previewButton.addEventListener('click',async()=>{
   if(running||!files.length||files.length>MAX_SELECTION)return;
-  running=true;previewComplete=false;previewButton.disabled=true;uploadButton.disabled=true;
+  running=true;previewComplete=false;previewPauseRequested=false;
+  previewButton.disabled=true;uploadButton.disabled=true;
+  if(saveAllButton)saveAllButton.disabled=true;
+  if(previewPauseButton)previewPauseButton.disabled=false;
   // A failed preview resumes at the last fully matched batch, rather than
   // repeating SHA hashing and D1 lookups for previously completed chunks.
   const completed=items.length;
@@ -290,16 +324,31 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   progress.hidden=false;progress.max=files.length;progress.value=completed;
   try{
    for(let start=completed;start<files.length;start+=PREVIEW_BATCH){
+    if(previewPauseRequested)break;
     const batch=files.slice(start,start+PREVIEW_BATCH),toMatch=[],pending=[];
     for(const file of batch){
-     const entry={file,metadata:null,match:{status:'needs_review'},error:null};
+     // Show a safe title suggestion even when file bytes cannot be inspected
+    // (for example the file exceeds the upload limit).
+    const fileTitle=cleanEpubTitle(file.name);
+    const entry={file,metadata:{title:fileTitle,author:''},
+     match:{status:'needs_review'},error:null,
+     cleanedFromName:fileTitle!==file.name.replace(/\.epub$/i,'').trim()};
      try{
-      if(!file.size||file.size>MAX_EPUB_BYTES)throw Error('EPUB must be smaller than 24 MB');
+      if(!file.size){
+       entry.match={status:'unreadable'};
+       throw Error('The file is empty and cannot be imported.');
+      }
+      if(file.size>MAX_EPUB_BYTES){
+       entry.match={status:'oversized'};
+       throw Error('This EPUB is '+(file.size/1048576).toFixed(1)+
+        ' MB. Current upload limit: 96 MB. Name cleanup is preview-only.');
+      }
       // Inspect sequentially: no persistent file bytes or cover blobs
       // held in memory during thousand-book previews.
       const raw=await inspectEpub(file,{includeCover:false});
       const suggested=suggestEpubMetadata(raw,file.name);
       entry.metadata={...raw,cover:null,...suggested};
+      entry.cleanedFromName=!!suggested.cleanedSourceStamp||entry.cleanedFromName;
       if(seen.has(raw.sha256)){
        entry.match={status:'same_file'};
       }else{
@@ -311,7 +360,11 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
        entry.reviewReason=suggested.reviewReason||'';
        toMatch.push(entry);
       }
-     }catch(error){entry.error=error.message||'Could not inspect EPUB';}
+     }catch(error){
+      entry.error=error.message||'Could not inspect EPUB';
+      if(entry.match?.status==='needs_review'&&!entry.metadata?.sha256)
+       entry.match={status:'unreadable'};
+     }
      pending.push(entry);
     }
     if(toMatch.length){
@@ -347,18 +400,69 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     await Promise.resolve();
    }
    flagPossibleEpubDuplicates(items);
-   previewComplete=true;render();
-   inform('Preview complete. '+items.filter(canImport).length+
-    ' EPUBs eligible. Similar-title files with different hashes are held for optional review.');
+   previewComplete=lastPreviewCount===files.length;
+   render();
+   if(previewComplete){
+    inform('Preview complete. '+items.filter(canImport).length+
+     ' EPUBs eligible. Similar-title files with different hashes are held for optional review.');
+   }else{
+    inform('Preview paused after '+lastPreviewCount+' of '+files.length+
+     ' EPUBs. Click Preview again to resume without repeating completed matches.');
+   }
   }catch(error){
    previewComplete=false;render();
    inform('Preview interrupted after '+lastPreviewCount+' files: '+
     (error.message||'Request failed')+'. No EPUBs were uploaded. Click Preview again to resume from the last completed batch.');
-  }finally{running=false;previewButton.disabled=false;render();}
+  }finally{running=false;previewPauseRequested=false;
+   if(previewPauseButton)previewPauseButton.disabled=true;
+   previewButton.disabled=false;render();}
  });
- uploadButton.addEventListener('click',async()=>{
+
+ // Books above 24 MiB are transferred privately to R2 in uniform 8 MiB
+ // chunks, so no Worker request needs to buffer the entire EPUB.
+ const uploadLargeEpub=async(entry,fresh,metadata)=>{
+  const partSize=8*1024*1024;
+  const start=await api('/api/epubs/multipart/start',{method:'POST',data:{
+   filename:entry.file.name,size:entry.file.size,sha256:metadata.sha256,
+   title:metadata.title,author:metadata.author,identifier:metadata.identifier
+  }});
+  if(start.status==='already_uploaded'||start.status==='needs_review')return start;
+  if(!start.key||!start.upload_id||start.part_size!==partSize)
+   throw Error('Chunked EPUB transfer could not start');
+  const parts=[];
+  try{
+   for(let offset=0,number=1;offset<entry.file.size;offset+=partSize,number++){
+    if(pauseRequested)throw Error('Paused during this EPUB. The file was not saved. Resume to retry.');
+    const chunk=entry.file.slice(offset,offset+partSize);
+    const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',await chunk.arrayBuffer()));
+    const sha256=Array.from(hash,x=>x.toString(16).padStart(2,'0')).join('');
+    const query=new URLSearchParams({
+     key:start.key,upload_id:start.upload_id,part_number:String(number),
+     size:String(entry.file.size),sha256
+    });
+    const uploaded=await api('/api/epubs/multipart/part?'+query,{method:'POST',
+     raw:chunk,contentType:'application/octet-stream'});
+    parts.push({partNumber:uploaded.part_number,etag:uploaded.etag});
+    inform('Uploading '+entry.file.name+' · part '+number+' of '+
+     Math.ceil(entry.file.size/partSize)+' (8 MB chunks)');
+   }
+   const form=new FormData();
+   form.set('key',start.key);form.set('upload_id',start.upload_id);
+   form.set('size',String(entry.file.size));form.set('filename',entry.file.name);
+   form.set('metadata',JSON.stringify(metadata));form.set('parts',JSON.stringify(parts));
+   if(fresh.cover)form.set('cover',fresh.cover,'embedded-cover'+
+     (fresh.coverType==='image/png'?'.png':
+      fresh.coverType==='image/webp'?'.webp':'.jpg'));
+   return await api('/api/epubs/multipart/complete',{method:'POST',formData:form});
+  }catch(error){
+   try{await api('/api/epubs/multipart/abort',{method:'POST',
+    data:{key:start.key,upload_id:start.upload_id}});}catch{}
+   throw error;
+  }
+ };
+ const saveEligible=async(saveAll=false)=>{
   if(running||!previewComplete)return;
-  const eligible=items.filter(canImport);
+  const eligible=items.filter(canImport).slice(0,saveAll?MAX_SELECTION:SAVE_RUN_LIMIT);
   if(!eligible.length)return;
   running=true;uploadActive=true;pauseRequested=false;
   previewButton.disabled=true;uploadButton.disabled=true;
@@ -387,7 +491,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
      sha256:fresh.sha256,
      ...(entry.match.book_id?{book_id:entry.match.book_id}:{})
     }));
-    const result=await api('/api/epubs/upload',{method:'POST',formData:form});
+    const result=entry.file.size>24*1024*1024
+     ?await uploadLargeEpub(entry,fresh,JSON.parse(form.get('metadata')))
+     :await api('/api/epubs/upload',{method:'POST',formData:form});
     // Retain canonical book and EPUB identifiers for the review CSV.
     if(result.uploaded){
       entry.uploadResult=result;
@@ -413,7 +519,9 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
     }
    }
    progress.value=saved+skipped+failed;
-   if((saved+skipped+failed)%10===0)render();
+   if((saved+skipped+failed)%(saveAll?50:10)===0)render();
+   if(saveAll&&(saved+skipped+failed)%SAVE_RUN_LIMIT===0)
+    await new Promise(resolve=>setTimeout(resolve,0));
   }
   running=false;uploadActive=false;
   if(pauseButton)pauseButton.disabled=true;
@@ -423,7 +531,51 @@ export function initEpubImport(api,{onImported=async()=>{}}={}){
   inform((pauseRequested?'Paused at your request. Click Save to resume remaining files. ':'' )+
    (pausedReason?pausedReason+' ':'')+'Batch update: '+saved+' uploaded, '+skipped+' skipped, '+
    failed+' failed or needing retry. '+remaining+' eligible files remain. '+
-   'Your original EPUBs were not modified.');
+   'Your original EPUBs were not modified.'+
+   (remaining?' Click Save again to resume the remaining eligible EPUBs.':''));
+ };
+ recheckButton?.addEventListener('click',async()=>{
+  if(running||!previewComplete)return;
+  const failures=items.filter(x=>x.match?.status==='upload_failed'&&x.metadata?.sha256);
+  if(!failures.length)return;
+  running=true;recheckButton.disabled=true;
+  let rechecked=0,alreadySaved=0,review=0;
+  try{
+   for(let i=0;i<failures.length;i+=PREVIEW_BATCH){
+    const batch=failures.slice(i,i+PREVIEW_BATCH);
+    const result=await api('/api/epubs/preview',{method:'POST',data:{items:batch.map(x=>({
+     title:x.metadata.title,author:x.metadata.author,
+     identifier:x.metadata.identifier,sha256:x.metadata.sha256
+    }))}});
+    if(!Array.isArray(result.results)||result.results.length!==batch.length)
+     throw Error('Incomplete retry preview. No files were changed.');
+    for(let j=0;j<batch.length;j++){
+     const entry=batch[j],matched=result.results[j];
+     // A retry may have succeeded on the server before the connection
+     // failed. The trusted SHA lookup detects it and blocks reupload.
+     const safeExisting=matched.status==='match'&&matched.book_id&&
+      matched.matched_title&&matched.matched_author;
+     entry.match=entry.reviewReason&&matched.status!=='already_uploaded'&&!safeExisting?
+      {status:'needs_review',reason:entry.reviewReason}:matched;
+     entry.error=null;rechecked++;
+     if(entry.match.status==='already_uploaded')alreadySaved++;
+     if(entry.match.status==='needs_review')review++;
+    }
+    flagPossibleEpubDuplicates(items);
+   }
+   inform('Rechecked '+rechecked+' failed EPUBs · '+alreadySaved+
+    ' already saved on the server · '+review+
+    ' need review. Retry only the remaining eligible EPUBs.');
+  }catch(error){
+   inform('Recheck interrupted: '+(error.message||'Request failed')+
+    '. Completed rechecks remain available; no EPUBs were uploaded.');
+  }finally{running=false;render();}
  });
+ uploadButton.addEventListener('click',()=>saveEligible(false));
+ saveAllButton?.addEventListener('click',()=>saveEligible(true));
  render();
+ // Allows a selected Calibre folder to reuse every existing SHA/identity,
+ // duplicate, private-R2 and guarded-upload check instead of inventing a
+ // second EPUB importer. The owner still reviews before Save all.
+ return {selectFiles};
 }

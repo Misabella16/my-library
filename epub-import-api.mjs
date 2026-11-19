@@ -1,5 +1,7 @@
+import {handleMultipartEpubApi} from './epub-multipart-api.mjs';
 import {cleanEpubTitle,cleanEpubAuthor,normalizeEpubTitle} from './epub-metadata.mjs';
 import {extractIsbn13} from './epub-isbn.mjs';
+import {refreshBookCollections} from './auto-collections-api.mjs';
 // Owner-only private EPUB intake. The enclosing Worker already verifies Access
 // and write origin. One file per request keeps D1/R2 usage predictable.
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store'};
@@ -210,6 +212,8 @@ export async function handleEpubApi(request,db,env,path){
       'content-security-policy':"default-src 'none'; sandbox"
     }});
   }
+  const staged=await handleMultipartEpubApi(request,db,env,path,{match:matchEpub,persist:savePreparedEpub});
+  if(staged)return staged;
   if(path==='/api/epubs/preview'&&method==='POST'){
     let body;
     try{body=await request.json();}catch{return bad('EPUB preview requires valid JSON');}
@@ -254,6 +258,20 @@ export async function handleEpubApi(request,db,env,path){
       ctype=coverType(coverBytes);
       if(!ctype)return bad('EPUB cover must be JPEG, PNG, or WebP');
     }
+    return savePreparedEpub(db,env,{
+      metadata,originalFilename:file.name,actual,coverBytes,ctype,bytes
+    });
+  }
+  return null;
+}
+
+async function savePreparedEpub(db,env,{metadata,originalFilename,actual,coverBytes=null,ctype=null,preuploadedKey=null,bytes=null}){
+  const title=cleanEpubTitle(metadata.title),author=cleanEpubAuthor(metadata.author);
+  const subjectList=Array.isArray(metadata.subjects)?metadata.subjects.slice(0,8):[];
+  if(subjectList.some(tag=>typeof tag!=='string'||!tag.trim()||tag.trim().length>90))
+    return bad('Invalid EPUB subject tags');
+  const subjects=[...new Map(subjectList.map(tag=>[tag.trim().toLocaleLowerCase(),tag.trim()])).values()];
+  if(!/^[a-f0-9]{64}$/.test(actual))return bad('Invalid EPUB hash');
     const matched=await matchEpub(db,{title,author,sha256:actual,identifier:metadata.identifier});
     if(matched.status==='already_uploaded')return json({...matched,uploaded:false});
     if(matched.status==='needs_review')return json(matched,409);
@@ -265,16 +283,18 @@ export async function handleEpubApi(request,db,env,path){
     // A unique R2 key per attempted import prevents failed concurrent requests
     // from deleting a successful import's file when cleanup runs.
     const fileId=uuid();
-    const key='epubs/'+actual.slice(0,2)+'/'+fileId+'.epub';
+    const key=preuploadedKey||'epubs/'+actual.slice(0,2)+'/'+fileId+'.epub';
     const coverId=coverBytes?uuid():null;
     const coverKey=coverBytes?'epub-covers/'+actual.slice(0,2)+'/'+actual+'-'+coverId+
       (ctype==='image/png'?'.png':ctype==='image/webp'?'.webp':'.jpg'):null;
-    const uploaded=[];
+    const uploaded=preuploadedKey?[key]:[];
     try{
       // R2 blobs are saved before the atomic SQL batch. If SQL rejects the
       // file for any reason, the newly written blobs are removed.
-      await env.BOOK_FILES.put(key,bytes,{httpMetadata:{contentType:'application/epub+zip'}});
-      uploaded.push(key);
+      if(!preuploadedKey){
+        await env.BOOK_FILES.put(key,bytes,{httpMetadata:{contentType:'application/epub+zip'}});
+        uploaded.push(key);
+      }
       if(coverBytes){
         await env.BOOK_FILES.put(coverKey,coverBytes,{httpMetadata:{contentType:ctype}});
         uploaded.push(coverKey);
@@ -320,7 +340,7 @@ export async function handleEpubApi(request,db,env,path){
           "VALUES (?,?,'Standard','ebook',0,?,?)"
         ).bind(editionId,bookId,ts,ts));
       }
-      const titleSafe=clean(file.name,500);
+      const titleSafe=clean(originalFilename,500);
       statements.push(db.prepare(
         'INSERT INTO import_batches(id,source,status,report,created_at) VALUES '+
         "(?,'epub','complete',?,?)"
@@ -346,6 +366,8 @@ export async function handleEpubApi(request,db,env,path){
       ).bind(uuid(),batchId,fileId,JSON.stringify({book_id:bookId,edition_id:targetEdition,
         cover_id:coverId,sha256:actual}),ts));
       await db.batch(statements);
+      // Sort the book into auto collections now (its EPUB subjects are tags).
+      try{await refreshBookCollections(db,bookId);}catch{}
       return json({status:'uploaded',uploaded:true,book_id:bookId,
         book_created:matched.status==='new',edition_id:targetEdition,
         cover_extracted:!!coverBytes,file_id:fileId,batch_id:batchId},201);
@@ -357,6 +379,5 @@ export async function handleEpubApi(request,db,env,path){
         return bad('EPUB was already imported or the matching book changed. Re-preview to continue.',409);
       throw error;
     }
-  }
-  return null;
+
 }

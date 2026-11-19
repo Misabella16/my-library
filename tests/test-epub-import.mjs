@@ -437,12 +437,13 @@ test('Stored EPUB repairs cannot overwrite edited synopses and reject stale prev
  }finally{f.sqlite.close();}
 });
 
-function epubArchiveWithCover(){
+function epubArchiveWithCover(withCover=true){
  const container='<container><rootfiles><rootfile full-path="OPS/content.opf"/></rootfiles></container>';
  const opf='<package><metadata><dc:title>A Novel</dc:title><dc:creator>Writer</dc:creator></metadata>'+
-  '<manifest><item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/></manifest></package>';
+  (withCover?'<manifest><item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/></manifest>':'<manifest></manifest>')+'</package>';
  const files={'mimetype':'application/epub+zip','META-INF/container.xml':container,
-  'OPS/content.opf':opf,'OPS/cover.png':Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0])};
+  'OPS/content.opf':opf};
+ if(withCover)files['OPS/cover.png']=Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]);
  const chunks=[],directory=[];let offset=0;
  for(const [name,data] of Object.entries(files)){
   const path=Buffer.from(name),bytes=Buffer.from(data),local=Buffer.alloc(30);
@@ -688,37 +689,234 @@ test('Recovering ebook cover keeps an existing manually chosen jacket as display
  }finally{f.sqlite.close();}
 });
 
-test('Single-file retry preview refreshes edit timestamp and only missing EPUB fields',async()=>{
+test('Verified missing EPUB covers are recorded once and future repairs skip the R2 download',async()=>{
+ const f=fixture();
+ try{
+  const bytes=epubArchiveWithCover(false);
+  const hash=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis) VALUES(?,?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer','Keep my existing synopsis');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(editionId,bookId,'Standard');
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(fileId,hash,'novel.epub','epubs/private/no-cover.epub',
+    JSON.stringify({description:'Source synopsis',subjects:['Fantasy']}),bookId,editionId);
+  await f.env.BOOK_FILES.put('epubs/private/no-cover.epub',bytes);
+  let reads=0;
+  const get=f.env.BOOK_FILES.get;
+  f.env.BOOK_FILES.get=async key=>{reads++;return get(key);};
+  const preview=()=>handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/preview'),
+   f.db,'/api/epubs/backfill/preview',f.env);
+  const first=(await (await preview()).json()).files[0];
+  assert.equal(first.cover_missing,true);
+  const request=()=>new Request('https://books.example.com/api/epubs/backfill/apply',{method:'POST',
+   body:JSON.stringify({file_id:fileId,expected_updated_at:first.expected_updated_at})});
+  const applied=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(applied.status,200,await applied.clone().text());
+  const appliedResult=await applied.json();
+  assert.equal(appliedResult.status,'applied');
+  assert.equal(appliedResult.tags_added,1);
+  assert.equal(reads,1);
+  const metadata=JSON.parse(f.sqlite.prepare('SELECT metadata_json FROM epub_files WHERE id=?').get(fileId).metadata_json);
+  assert.equal(metadata.cover_repair_checked_version,2);
+  assert.equal(metadata.cover_repair_checked_sha256,hash);
+  assert.equal(metadata.description,'Source synopsis');
+  assert.deepEqual(metadata.subjects,['Fantasy']);
+  const second=(await (await preview()).json()).files[0];
+  assert.equal(second.cover_missing,false);
+  assert.equal(second.cover_unavailable,true);
+  const repeated=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(repeated.status,200);
+  assert.equal((await repeated.json()).status,'already_processed');
+  assert.equal(reads,1,'No repeat R2 request');
+  assert.equal(count(f.sqlite,'edition_images'),0);
+ }finally{f.sqlite.close();}
+});
+
+test('Single EPUB repair preview identifies missing saved cover and metadata without writes',async()=>{
+ const f=fixture();
+ try{
+  const meta={...(await validMeta()),subjects:['Fantasy','Romance']};
+  const uploaded=await post(f.db,f.env,'/api/epubs/upload',form(meta));
+  assert.equal(uploaded.status,201);
+  const file=(await uploaded.json()).file_id;
+  const book=f.sqlite.prepare('SELECT book_id FROM epub_files WHERE id=?').get(file).book_id;
+  f.sqlite.prepare('UPDATE books SET synopsis=? WHERE id=?').run('',book);
+  f.sqlite.prepare('DELETE FROM book_tags WHERE book_id=?').run(book);
+  const beforeFiles=count(f.sqlite,'epub_files'),beforeImages=count(f.sqlite,'edition_images');
+  const preview=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+file),
+   f.db,'/api/epubs/backfill/file/'+file,f.env);
+  assert.equal(preview.status,200);
+  const payload=await preview.json();
+  assert.equal(payload.book_id,book);
+  assert.equal(payload.synopsis,'My private synopsis');
+  assert.deepEqual(payload.subjects,['Fantasy','Romance']);
+  assert.equal(payload.cover_missing,true);
+  assert.equal(payload.cover_unavailable,false);
+  assert.ok(payload.expected_updated_at);
+  assert.ok(!JSON.stringify(payload).includes('private_object_key'));
+  assert.equal(beforeFiles,count(f.sqlite,'epub_files'));
+  assert.equal(beforeImages,count(f.sqlite,'edition_images'));
+  assert.equal(count(f.sqlite,'book_tags'),0);
+ }finally{f.sqlite.close();}
+});
+test('Single EPUB repair preview never exposes archived book or nonexistent file',async()=>{
+ const f=fixture();
+ try{
+  const unknown='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const result=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+unknown),
+   f.db,'/api/epubs/backfill/file/'+unknown,f.env);
+  assert.equal(result.status,404);
+  const uploaded=await post(f.db,f.env,'/api/epubs/upload',form(await validMeta()));
+  const item=await uploaded.json();
+  f.sqlite.prepare('UPDATE books SET archived_at=? WHERE id=?')
+   .run('2026-11-01',item.book_id);
+  const hidden=await handleEpubBackfillApi(new Request(
+   'https://books.example.com/api/epubs/backfill/file/'+item.file_id),
+   f.db,'/api/epubs/backfill/file/'+item.file_id,f.env);
+  assert.equal(hidden.status,404);
+ }finally{f.sqlite.close();}
+});
+
+test('A prior tag repair does not block a newly available embedded EPUB cover',async()=>{
+ const f=fixture();
+ try{
+  const bytes=epubArchiveWithCover();
+  const sha=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis) VALUES(?,?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer','Do not replace me');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(editionId,bookId,'Standard');
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(fileId,sha,'novel.epub','epubs/private/compl.epub',
+    JSON.stringify({subjects:['Fantasy']}),bookId,editionId);
+  await f.env.BOOK_FILES.put('epubs/private/compl.epub',bytes);
+  const stamp=f.sqlite.prepare('SELECT updated_at FROM books WHERE id=?').get(bookId).updated_at;
+  const request=()=>new Request('https://books.example.com/api/epubs/backfill/apply',
+    {method:'POST',body:JSON.stringify({file_id:fileId,expected_updated_at:stamp})});
+  // Simulate an early repair run without private R2 available.
+  const first=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',{});
+  assert.equal(first.status,200,await first.clone().text());
+  const firstResult=await first.json();
+  assert.equal(firstResult.tags_added,1);
+  assert.equal(firstResult.cover_added,false);
+  const second=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(second.status,200,await second.clone().text());
+  const result=await second.json();
+  assert.equal(result.status,'applied');
+  assert.equal(result.tags_added,0);
+  assert.equal(result.cover_added,true);
+  assert.equal(count(f.sqlite,'edition_images'),1);
+  assert.equal(count(f.sqlite,'epub_files'),1);
+  assert.equal(f.sqlite.prepare('SELECT synopsis FROM books WHERE id=?').get(bookId).synopsis,'Do not replace me');
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM change_log WHERE action='epub_backfill'").get().n,2);
+  const third=await handleEpubBackfillApi(request(),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal((await third.json()).status,'already_processed');
+  assert.equal(count(f.sqlite,'edition_images'),1);
+ }finally{f.sqlite.close();}
+});
+
+test('Repair selects exactly one previously saved EPUB cover without reuploading it',async()=>{
  const f=fixture();
  try{
   const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const editionId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author,synopsis,updated_at) VALUES(?,?,?,?,?,?,?)')
-   .run(bookId,'A Novel','Writer','a novel','writer','User-edited summary','2026-11-07');
+  const coverId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer');
   f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
    .run(editionId,bookId,'Standard');
-  f.sqlite.prepare("INSERT INTO tags(id,label,kind) VALUES (?,?,?)")
-   .run('dddddddd-dddd-4ddd-8ddd-dddddddddddd','Fantasy','personal');
-  f.sqlite.prepare('INSERT INTO book_tags(book_id,tag_id,source) VALUES(?,?,?)')
-   .run(bookId,'dddddddd-dddd-4ddd-8ddd-dddddddddddd','manual');
+  f.sqlite.prepare("INSERT INTO edition_images(id,edition_id,role,origin,private_object_key,match_status,display_cover) "+
+   "VALUES (?,?,'cover','epub','epub-covers/existing.png','unverified',0)")
+   .run(coverId,editionId);
   f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
-   .run(fileId,'a'.repeat(64),'old.epub','epubs/old.epub',
-    JSON.stringify({description:'Old file summary',subjects:['Fantasy','Magic']}),bookId,editionId);
-  const before=f.queries();
-  const response=await handleEpubBackfillApi(new Request(
-   'https://books.example.com/api/epubs/backfill/file/'+fileId+'/preview'),
-   f.db,'/api/epubs/backfill/file/'+fileId+'/preview',f.env);
-  assert.equal(response.status,200);
-  assert.deepEqual((await response.json()).subjects,['Magic']);
-  const refreshed=await handleEpubBackfillApi(new Request(
-   'https://books.example.com/api/epubs/backfill/file/'+fileId+'/preview'),
-   f.db,'/api/epubs/backfill/file/'+fileId+'/preview',f.env);
-  const item=await refreshed.json();
-  assert.equal(item.expected_updated_at,'2026-11-07');
-  assert.equal(item.synopsis,'','Existing user summary must not be offered for overwrite');
-  assert.equal(item.cover_missing,true);
-  assert.equal(f.queries()-before,6,'Three indexed reads per explicit file refresh');
-  assert.equal(f.objects.size,0,'Preview never reads or writes R2');
+   .run(fileId,'a'.repeat(64),'novel.epub','epubs/private/existing.epub','{}',bookId,editionId);
+  const preview=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/preview'),
+   f.db,'/api/epubs/backfill/preview',f.env);
+  const entry=(await preview.json()).files[0];
+  assert.equal(entry.cover_missing,false);
+  assert.equal(entry.cover_unselected,true);
+  const applied=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/apply',{
+   method:'POST',body:JSON.stringify({
+    file_id:fileId,expected_updated_at:entry.expected_updated_at
+   })}),f.db,'/api/epubs/backfill/apply',f.env);
+  assert.equal(applied.status,200,await applied.clone().text());
+  const result=await applied.json();
+  assert.equal(result.cover_selected,true);
+  assert.equal(result.cover_added,false);
+  assert.equal(f.sqlite.prepare('SELECT display_cover FROM edition_images WHERE id=?').get(coverId).display_cover,1);
+  assert.equal(f.objects.size,0,'No EPUB or cover reupload needed');
+  const undo=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/undo',{
+   method:'POST',body:JSON.stringify({change_id:result.change_id})
+  }),f.db,'/api/epubs/backfill/undo',f.env);
+  assert.equal(undo.status,200,await undo.clone().text());
+  assert.equal(f.sqlite.prepare('SELECT display_cover FROM edition_images WHERE id=?').get(coverId).display_cover,0);
+  assert.equal(count(f.sqlite,'edition_images'),1,'Original cover never deleted');
+ }finally{f.sqlite.close();}
+});
+test('Existing verified manual artwork prevents automatic EPUB cover selection',async()=>{
+ const f=fixture();
+ try{
+  const bookId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const ebook='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const special='ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const fileId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(bookId,'A Novel','Writer','a novel','writer');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(ebook,bookId,'Standard');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'hardcover',1)")
+   .run(special,bookId,'FairyLoot');
+  f.sqlite.prepare("INSERT INTO edition_images(id,edition_id,role,origin,private_object_key,match_status,display_cover) "+
+   "VALUES ('dddddddd-dddd-4ddd-8ddd-dddddddddddd',?,'cover','epub','epub-covers/existing.png','unverified',0)")
+   .run(ebook);
+  f.sqlite.prepare("INSERT INTO edition_images(id,edition_id,role,origin,private_object_key,match_status,display_cover) "+
+   "VALUES ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',?,'cover','manual','covers/owned.png','user_verified',0)")
+   .run(special);
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(fileId,'a'.repeat(64),'novel.epub','epubs/private/test.epub','{}',bookId,ebook);
+  const response=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/preview'),
+   f.db,'/api/epubs/backfill/preview',f.env);
+  const item=(await response.json()).files[0];
+  assert.equal(item.cover_unselected,false);
+  assert.equal(f.sqlite.prepare('SELECT SUM(display_cover) AS n FROM edition_images').get().n,0);
+ }finally{f.sqlite.close();}
+});
+test('Undo of selected EPUB cover blocks later owner verification',async()=>{
+ const f=fixture();
+ try{
+  const b='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',e='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const p='cccccccc-cccc-4ccc-8ccc-cccccccccccc',c='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  f.sqlite.prepare('INSERT INTO books(id,title,author,normalized_title,normalized_author) VALUES(?,?,?,?,?)')
+   .run(b,'A Novel','Writer','a novel','writer');
+  f.sqlite.prepare("INSERT INTO editions(id,book_id,edition_name,format,is_special) VALUES (?,?,?,'ebook',0)")
+   .run(e,b,'Standard');
+  f.sqlite.prepare("INSERT INTO edition_images(id,edition_id,role,origin,private_object_key,display_cover) "+
+   "VALUES (?,?,'cover','epub','epub-covers/existing.png',0)").run(c,e);
+  f.sqlite.prepare('INSERT INTO epub_files(id,sha256,original_filename,private_object_key,metadata_json,book_id,edition_id) VALUES(?,?,?,?,?,?,?)')
+   .run(p,'a'.repeat(64),'novel.epub','epubs/private/test.epub','{}',b,e);
+  const preview=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/preview'),
+   f.db,'/api/epubs/backfill/preview',f.env);
+  const item=(await preview.json()).files[0];
+  const applied=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/apply',{
+   method:'POST',body:JSON.stringify({file_id:p,expected_updated_at:item.expected_updated_at})
+  }),f.db,'/api/epubs/backfill/apply',f.env);
+  const result=await applied.json();
+  assert.equal(result.cover_selected,true);
+  f.sqlite.prepare("UPDATE edition_images SET match_status='user_verified' WHERE id=?").run(c);
+  const undo=await handleEpubBackfillApi(new Request('https://books.example.com/api/epubs/backfill/undo',{
+   method:'POST',body:JSON.stringify({change_id:result.change_id})
+  }),f.db,'/api/epubs/backfill/undo',f.env);
+  assert.equal(undo.status,409);
+  assert.equal(f.sqlite.prepare('SELECT display_cover FROM edition_images WHERE id=?').get(c).display_cover,1);
  }finally{f.sqlite.close();}
 });

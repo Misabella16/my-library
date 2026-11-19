@@ -1,16 +1,10 @@
-import {normalizeEpubTitle,normalizeEpubAuthor} from './epub-metadata.mjs';
+import {normalizeEpubTitle,normalizeEpubAuthor,cleanEpubTitle as sharedCleanEpubTitle} from './epub-metadata.mjs';
 // Pure, browser-and-Node-friendly helpers for large personal EPUB collections.
 // Never infer ownership, a special edition, or a trustworthy author from a filename.
-export const MAX_BULK_FILES=3000;
+export const MAX_BULK_FILES=10000;
 export const IDENTITY_PAGE_SIZE=50;
 const squash=text=>String(text||'').normalize('NFKC').replace(/\s+/g,' ').trim();
-export function cleanEpubTitle(value){
- let title=squash(value).replace(/\.epub$/i,'');
- title=title.replace(/^\s*(?:\[\s*)?(?:z[-_\s]?library|libgen)(?:\s*\])?[\s\-_|:]+/i,'');
- title=title.replace(/(?:\s*(?:\(|\[)\s*(?:z[-_\s]?library|libgen)\s*(?:\)|\]))+\s*$/gi,'');
- title=title.replace(/\s*(?:\(|\[)\s*(?:\d+|copy\s*\d+)\s*(?:\)|\])\s*$/i,'');
- return title.replace(/[\s\-_]+$/g,'').trim();
-}
+export const cleanEpubTitle=sharedCleanEpubTitle;
 export function suggestEpubIdentity(metadata,fileName){
  const rawTitle=squash(metadata?.title),rawAuthor=squash(metadata?.author);
  const cleaned=cleanEpubTitle(rawTitle);

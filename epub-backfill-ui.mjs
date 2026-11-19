@@ -9,52 +9,54 @@ const el=(tag,text,css)=>{
  if(css)node.className=css;
  return node;
 };
-export function initEpubBackfill(api){
+// Scan positions survive a page refresh in this browser tab (sessionStorage:
+// cursors and counts only, never book data).
+const sessionStore=()=>{try{return window.sessionStorage;}catch{return null;}};
+export function initEpubBackfill(api,{storage=sessionStore()}={}){
  const root=document.getElementById('epub-backfill');
  if(!root)return;
  const preview=root.querySelector('#epub-backfill-preview');
  const health=root.querySelector('#epub-backfill-health');
- const reset=root.querySelector('#epub-backfill-reset');
  const healthExport=root.querySelector('#epub-health-report');
  const healthStatus=root.querySelector('#epub-backfill-health-status');
  const apply=root.querySelector('#epub-backfill-apply');
  const next=root.querySelector('#epub-backfill-next');
  const status=root.querySelector('#epub-backfill-status');
  const results=root.querySelector('#epub-backfill-results');
- const undo=root.querySelector('#epub-backfill-undo');
- const history=root.querySelector('#epub-backfill-history');
- const historyList=root.querySelector('#epub-backfill-history-list');
+ const undo=(document.getElementById('epub-backfill-undo')||root.querySelector('#epub-backfill-undo'));
+ const history=(document.getElementById('epub-backfill-history')||root.querySelector('#epub-backfill-history'));
+ const historyList=(document.getElementById('epub-backfill-history-list')||root.querySelector('#epub-backfill-history-list'));
  const bulk=root.querySelector('#epub-backfill-bulk');
- const reportButton=root.querySelector('#epub-backfill-report');
- const retryButton=root.querySelector('#epub-backfill-retry');
+ const repairAll=root.querySelector('#epub-backfill-all');
+ const rescan=root.querySelector('#epub-backfill-rescan');
+ const reset=root.querySelector('#epub-backfill-reset');
+ const pauseButton=root.querySelector('#epub-backfill-pause');
+ const retryButton=(document.getElementById('epub-backfill-retry')||root.querySelector('#epub-backfill-retry'));
+ const reportButton=(document.getElementById('epub-backfill-report')||root.querySelector('#epub-backfill-report'));
  let items=[],cursor='',nextCursor=null,busy=false,changes=[];
- let bulkCursor='',bulkFinished=false;
+ let bulkCursor='',bulkFinished=false,bulkActive=false,pauseRequested=false;
  let reportRows=[];
- const failedRepairs=new Map();
+ const failedQueue=new Map();
  let healthCursor='',healthFinished=false,healthScanned=0,healthRows=[];
- const storage=typeof sessionStorage==='undefined'?null:sessionStorage;
  const saved=readEpubScanProgress(storage);
- bulkCursor=saved.bulkCursor||'';
- healthCursor=saved.healthCursor||'';
- bulkFinished=!!saved.bulkFinished;
- healthFinished=!!saved.healthFinished;
+ bulkCursor=saved.bulkCursor||'';bulkFinished=!!saved.bulkFinished;
+ healthCursor=saved.healthCursor||'';healthFinished=!!saved.healthFinished;
  healthScanned=saved.healthScanned||0;
- const checkpoint=()=>saveEpubScanProgress(storage,{
-  bulkCursor,bulkFinished,healthCursor,healthFinished,healthScanned
- });
- if(bulkCursor||healthCursor){
-  status.textContent='Previous repair scan found. Resume where you stopped or restart.';
-  healthStatus.textContent='Previous health scan found. Resume where you stopped or restart.';
- }
+ const checkpoint=()=>saveEpubScanProgress(storage,
+  {bulkCursor,bulkFinished,healthCursor,healthFinished,healthScanned});
  const update=()=>{
   preview.disabled=busy;
   health.disabled=busy||healthFinished;
-  if(reset)reset.disabled=busy;
   if(healthExport)healthExport.disabled=busy||healthRows.length===0;
   bulk.disabled=busy||bulkFinished;
+  if(repairAll)repairAll.disabled=busy||bulkFinished;
+  if(rescan)rescan.disabled=busy;
+  if(reset)reset.disabled=busy;
+  if(pauseButton)pauseButton.disabled=!bulkActive||pauseRequested;
+  if(retryButton)retryButton.disabled=busy||!failedQueue.size;
   if(reportButton)reportButton.disabled=busy||!reportRows.length;
-  if(retryButton)retryButton.disabled=busy||failedRepairs.size===0;
-  apply.disabled=busy||!items.some(x=>x.synopsis||x.subjects?.length||x.cover_missing);
+  apply.disabled=busy||!items.some(x=>x.synopsis||x.synopsis_recheck||
+   x.subjects?.length||x.cover_missing||x.cover_unselected);
   next.disabled=busy||!nextCursor;
   undo.disabled=busy||changes.length===0;
  };
@@ -63,9 +65,13 @@ export function initEpubBackfill(api){
   for(const item of items){
    const section=el('article',undefined,'epub-preview-card');
    section.append(el('strong',item.title||'Untitled'));
-   section.append(el('p',(item.synopsis?'Missing synopsis · ':'')+
+   section.append(el('p',(item.synopsis?'Description ready to recover · ':
+    item.synopsis_recheck?'Missing synopsis: reopen saved EPUB once · ':
+    item.synopsis_source_unavailable?'EPUB contains no usable synopsis · ':'')+
     (item.subjects?.length||0)+' EPUB subjects available · '+
-    (item.cover_missing?'Ebook cover check available':'Ebook cover already present'),'muted'));
+    (item.cover_unavailable?'No embedded EPUB cover found (checked)':
+      item.cover_unselected?'Saved EPUB cover found, not displayed (repairable)':
+      item.cover_missing?'Ebook cover check available':'Ebook cover already present'),'muted'));
    if(item.synopsis)section.append(el('p',item.synopsis.slice(0,240),'muted'));
    if(item.subjects?.length)section.append(el('p',item.subjects.join(' · '),'muted'));
    results.append(section);
@@ -101,104 +107,160 @@ export function initEpubBackfill(api){
   anchor.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  });
- retryButton?.addEventListener('click',async()=>{
-  if(busy||!failedRepairs.size)return;
-  busy=true;update();
-  let recovered=0,remaining=0;
-  // Retry only ten explicitly failed entries per click to avoid sudden D1
-  // quota spikes, and do not restart the whole folder or rescan R2 objects.
-  const attempts=[...failedRepairs.values()].slice(0,10);
-  for(const item of attempts){
-   try{
-    const fresh=await api('/api/epubs/backfill/file/'+encodeURIComponent(item.file_id)+'/preview');
-    if(fresh?.file_id!==item.file_id)throw Error('EPUB repair preview no longer matches this file');
-    item.expected_updated_at=fresh.expected_updated_at;
-    const needsRepair=!!(fresh.synopsis||fresh.subjects?.length||fresh.cover_missing);
-    const outcome=needsRepair?await api('/api/epubs/backfill/apply',{method:'POST',data:{
-     file_id:item.file_id,expected_updated_at:fresh.expected_updated_at
-    }}):{status:'no_changes'};
-    if(outcome.status==='applied'&&outcome.change_id)changes.push(outcome.change_id);
-    failedRepairs.delete(item.file_id);
-    recovered++;
-    reportRows.push({file_id:item.file_id,title:item.title,status:outcome.status,
-     synopsis_filled:outcome.synopsis_filled,tags_added:outcome.tags_added,
-     cover_added:outcome.cover_added});
-   }catch(error){
-    remaining++;
-    reportRows.push({file_id:item.file_id,title:item.title,
-     status:'retry_failed',error:error?.message||'Request failed'});
-    const code=error?.payload?.code;
-    if(['database_read_quota','database_write_quota',
-     'database_storage_limit','database_limit_reached'].includes(code))break;
-   }
-  }
-  status.textContent='Retry complete: '+recovered+' resolved · '+failedRepairs.size+
-   ' still need attention. Completed repairs remain saved.';
-  busy=false;update();
+ pauseButton?.addEventListener('click',()=>{
+  if(!bulkActive)return;
+  pauseRequested=true;
+  pauseButton.disabled=true;
+  status.textContent='Pause requested. The current EPUB will finish before stopping.';
  });
- bulk.addEventListener('click',async()=>{
-  if(busy)return;
+ const runRepairs=async(repairEntireCatalogue=true,coversAndSynopsesOnly=false,onProgress=()=>{})=>{
+  if(busy)return {complete:false,reason:'Saved EPUB inspection is already running.'};
+  if(bulkFinished)return {complete:true,checked:0,applied:0,failed:0};
+  bulkActive=true;pauseRequested=false;
   busy=true;update();
-  let after=bulkCursor,checked=0,applied=0,unchanged=0,failed=0;
-  const target=50;
+  let after=bulkCursor,checked=0,applied=0,unchanged=0,failed=0,recovered=0,selected=0,
+   missingSynopsis=0,reinspection=0,noSourceSynopsis=0,skippedComplete=0;
+  const target=Infinity;
   try{
-   while(checked<target){
+   while(checked<target&&!pauseRequested){
     const params=new URLSearchParams({limit:'10'});
     if(after)params.set('after',after);
     const page=await api('/api/epubs/backfill/preview?'+params);
     if(!Array.isArray(page.files))throw Error('Incomplete EPUB metadata page');
     for(const item of page.files){
+     if(pauseRequested)break;
      // Commit the cursor only AFTER handling an item. If Cloudflare reaches
      // its daily quota halfway through a page, the failed item must be first
      // in the next click, not silently skipped with the rest of that page.
-     if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing){
+     if(item.synopsis_missing)missingSynopsis++;
+     if(!item.synopsis&&!item.synopsis_recheck&&
+       (coversAndSynopsesOnly||!item.subjects?.length)&&
+       !item.cover_missing&&!item.cover_unselected){
       unchanged++;
-      reportRows.push({file_id:item.file_id,title:item.title,status:'no_changes'});
+      if(item.synopsis_source_unavailable)noSourceSynopsis++;
+      else if(!item.synopsis_missing)skippedComplete++;
+      reportRows.push({file_id:item.file_id,title:item.title,status:'no_changes',
+       synopsis_source_unavailable:!!item.synopsis_source_unavailable});
      }else{
       try{
        const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
-        file_id:item.file_id,expected_updated_at:item.expected_updated_at
+        file_id:item.file_id,expected_updated_at:item.expected_updated_at,
+        only_cover_synopsis:coversAndSynopsesOnly
        }});
        if(outcome.status==='applied'){
         changes.push(outcome.change_id);applied++;
+         if(outcome.cover_added)recovered++;
+         if(outcome.cover_selected)selected++;
        }else unchanged++;
-       failedRepairs.delete(item.file_id);
+       if(outcome.description_rechecked)reinspection++;
+       if(outcome.source_synopsis_unavailable)noSourceSynopsis++;
        reportRows.push({file_id:item.file_id,title:item.title,status:outcome.status,
         synopsis_filled:outcome.synopsis_filled,
-        tags_added:outcome.tags_added,cover_added:outcome.cover_added});
+        tags_added:outcome.tags_added,cover_added:outcome.cover_added,
+         cover_selected:outcome.cover_selected});
       }catch(error){
        failed++;
-       failedRepairs.set(item.file_id,item);
        reportRows.push({file_id:item.file_id,title:item.title,
         status:'failed',error:error?.message||'Request failed'});
        const code=error?.payload?.code;
        if(['database_read_quota','database_write_quota',
-        'database_storage_limit','database_limit_reached'].includes(code))throw error;
+        'database_storage_limit','database_limit_reached','database_temporarily_unavailable'].includes(code))throw error;
+       // Transient non-quota failures remain individually retryable even
+       // after the bulk cursor advances past this item.
+       failedQueue.set(item.file_id,item);
       }
      }
      checked++;
      bulkCursor=item.file_id;
      checkpoint();
+     onProgress({checked,applied,failed});
     }
     status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
-     failed+' need review. Changes are logged for Undo.';
-    if(!page.next_cursor||page.files.length===0){
+     failed+' need review · '+recovered+' covers extracted · '+selected+
+     ' existing covers displayed. Changes are logged for Undo.';
+    if(repairEntireCatalogue&&checked%50===0)await new Promise(resolve=>setTimeout(resolve,0));
+    if(!pauseRequested&&(!page.next_cursor||page.files.length===0)){
      bulkFinished=true;
      checkpoint();
      break;
     }
     after=bulkCursor;
    }
-   status.textContent='Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
-    unchanged+' unchanged · '+failed+' need refresh or review.'+
-    (bulkFinished?' Entire saved EPUB catalogue scanned.':' Use Repair next 50 to continue.');
+   status.textContent=(pauseRequested?'Paused safely. Select Repair my library to resume. ':'')+
+    'Checked '+checked+' saved EPUBs · '+applied+' repaired · '+
+    unchanged+' unchanged · '+failed+' need refresh or review · '+
+     recovered+' covers extracted · '+selected+' existing covers displayed · '+
+     missingSynopsis+' missing book synopses · '+reinspection+
+     ' source EPUBs reinspected · '+noSourceSynopsis+
+     ' EPUBs with no usable source synopsis · '+skippedComplete+
+     ' already-complete records. '+
+     'Books whose EPUBs contain no summary can still use targeted online matching. '+
+     'Run Catalogue Health scan again to refresh its earlier counts.'+
+    (bulkFinished?' Entire saved EPUB catalogue scanned.':
+     ' Select Repair my library to continue.');
   }catch(error){
    status.textContent='Repair stopped safely after '+checked+' files: '+
     (error.message||'Request failed')+'. Completed changes remain saved.';
   }finally{
-   busy=false;update();
+   busy=false;bulkActive=false;pauseRequested=false;update();
   }
+  return {complete:bulkFinished,checked,applied,failed,reason:status.textContent};
+ };
+ bulk.addEventListener('click',()=>runRepairs(true));
+ repairAll?.addEventListener('click',()=>runRepairs(true));
+ rescan?.addEventListener('click',async()=>{
+  if(busy)return;
+  bulkCursor='';bulkFinished=false;failedQueue.clear();reportRows=[];checkpoint();
+  changes=[];status.textContent='Starting a new saved-EPUB scan of missing covers and descriptions.';
+  update();await runRepairs(true,true);
  });
+ retryButton?.addEventListener('click',async()=>{
+  if(busy||!failedQueue.size)return;
+  busy=true;update();
+  let repaired=0,stillFailed=0;
+  // Retry at most ten failed files per click. Server-side edit guards still
+  // reject stale previews; no forced matches or destructive overwrites.
+  for(const item of [...failedQueue.values()].slice(0,10)){
+   try{
+    const outcome=await api('/api/epubs/backfill/apply',{method:'POST',data:{
+     file_id:item.file_id,expected_updated_at:item.expected_updated_at
+    }});
+    failedQueue.delete(item.file_id);
+    if(outcome.status==='applied'){
+     repaired++;
+     changes.push(outcome.change_id);
+    }
+    reportRows.push({file_id:item.file_id,title:item.title,status:'retry_'+outcome.status,
+     synopsis_filled:outcome.synopsis_filled,
+     tags_added:outcome.tags_added,cover_added:outcome.cover_added,
+         cover_selected:outcome.cover_selected});
+   }catch(error){
+    stillFailed++;
+    const code=error?.payload?.code;
+    if(['database_read_quota','database_write_quota',
+     'database_storage_limit','database_limit_reached'].includes(code))break;
+   }
+  }
+  status.textContent='Retried failed EPUB repairs: '+repaired+' repaired · '+
+   failedQueue.size+' still need attention'+
+   (stillFailed?' (some may need a fresh preview).':'')+'.';
+  busy=false;update();
+ });
+ // Start both saved-EPUB scans over. Saved repairs and Undo history stay.
+ reset?.addEventListener('click',()=>{
+  if(busy)return;
+  bulkCursor='';bulkFinished=false;healthCursor='';healthFinished=false;healthScanned=0;healthRows=[];
+  clearEpubScanProgress(storage);
+  health.textContent='Scan all saved EPUBs (no edits)';
+  healthStatus.textContent='Health scan reset. Ready to check saved EPUBs from the beginning.';
+  status.textContent='Repair scan reset. Saved changes and Undo history remain unchanged.';
+  update();
+ });
+ if(bulkCursor||healthCursor){
+  healthStatus.textContent='Previous scan found in this tab. Resume where you stopped, or restart.';
+  if(healthCursor&&!healthFinished)health.textContent='Resume saved EPUB scan (no edits)';
+  else if(healthFinished)health.textContent='Health scan complete';
+ }
  healthExport?.addEventListener('click',()=>{
   if(!healthRows.length)return;
   const data=epubHealthCsv(healthRows);
@@ -209,12 +271,12 @@ export function initEpubBackfill(api){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  });
  health.addEventListener('click',async()=>{
-  if(busy)return;
-  busy=true;update();
+  if(busy||healthFinished)return;
+  busy=true;bulkActive=true;pauseRequested=false;update();
   const inspected=[];
   let after=healthCursor,complete=false;
   try{
-   while(inspected.length<50){
+   while(!pauseRequested){
     const params=new URLSearchParams({limit:'10'});
     if(after)params.set('after',after);
     const page=await api('/api/epubs/backfill/preview?'+params);
@@ -222,41 +284,28 @@ export function initEpubBackfill(api){
     inspected.push(...page.files);
     healthRows.push(...page.files);
     // Advance after each completed page, not before the read completes.
-    if(page.files.length){
-     healthCursor=page.files.at(-1).file_id;
-     healthScanned+=page.files.length;
-     checkpoint();
-    }
+    if(page.files.length){healthCursor=page.files.at(-1).file_id;checkpoint();}
     if(!page.next_cursor||page.files.length===0){complete=true;break;}
     after=page.next_cursor;
+    await new Promise(resolve=>setTimeout(resolve,0));
    }
    const stats=summarizeEpubHealth(inspected);
+   healthScanned+=stats.checked;
    healthFinished=complete;
    checkpoint();
-   health.textContent=complete?'Health scan complete':'Check next 50 EPUBs (no edits)';
+   health.textContent=complete?'Health scan complete':'Resume saved EPUB scan (no edits)';
    healthStatus.textContent='Scanned '+stats.checked+' saved EPUBs in this batch ('+
     healthScanned+' total) · '+
     stats.missingSynopsis+' missing synopses · '+stats.missingSubjects+
     ' with missing subject tags · '+stats.missingCover+
-    ' without ebook covers · '+stats.ready+' needing no changes.'+
-    (complete?' End of saved EPUBs reached.':' Click again to inspect the next 50.');
+    ' needing cover checks · '+stats.unselectedCover+
+    ' saved covers not displayed · '+stats.unavailableCover+
+    ' confirmed without embedded covers · '+stats.ready+' needing no changes.'+
+    (complete?' End of saved EPUBs reached.':' Paused; resume to continue the remaining EPUBs.');
   }catch(error){
    healthStatus.textContent='Health check interrupted after '+inspected.length+
     ' EPUBs: '+(error.message||'Request failed')+'. No metadata was changed.';
-  }finally{busy=false;update();}
- });
- reset?.addEventListener('click',()=>{
-  if(busy)return;
-  healthCursor='';healthFinished=false;healthScanned=0;healthRows=[];
-  health.textContent='Check next 50 EPUBs (no edits)';
-  bulkCursor='';bulkFinished=false;
-  failedRepairs.clear();
-  items=[];cursor='';nextCursor=null;
-  clearEpubScanProgress(storage);
-  results.replaceChildren();
-  healthStatus.textContent='Health scan reset. Ready to check saved EPUBs from the beginning.';
-  status.textContent='Repair scan reset. Saved changes and Undo history remain unchanged.';
-  update();
+  }finally{busy=false;bulkActive=false;pauseRequested=false;update();}
  });
  preview.addEventListener('click',()=>load(''));
  next.addEventListener('click',()=>{if(nextCursor)load(nextCursor);});
@@ -265,7 +314,7 @@ export function initEpubBackfill(api){
   busy=true;update();
   let applied=0,unchanged=0,errors=0;
   for(const item of items){
-   if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing)continue;
+   if(!item.synopsis&&!item.subjects?.length&&!item.cover_missing&&!item.cover_unselected)continue;
    try{
     const output=await api('/api/epubs/backfill/apply',{method:'POST',data:{
       file_id:item.file_id,expected_updated_at:item.expected_updated_at
@@ -275,7 +324,10 @@ export function initEpubBackfill(api){
      changes.push(output.change_id);
     }else unchanged++;
     // Another file of the same book may need a fresh preview.
-   }catch{errors++;}
+   }catch(error){
+    errors++;
+    failedQueue.set(item.file_id,item);
+   }
   }
   status.textContent='Applied '+applied+' safe repairs · '+unchanged+' unchanged · '+
    errors+' need refresh. No existing synopsis or reviews were overwritten.';
@@ -332,4 +384,9 @@ export function initEpubBackfill(api){
   }finally{busy=false;update();}
  });
  update();
+ return {repairAll:({coversAndSynopsesOnly=false,onProgress=()=>{}}={})=>
+   runRepairs(true,coversAndSynopsesOnly,onProgress),pause:()=>{if(bulkActive)pauseRequested=true;},
+  restart:()=>{if(!busy){bulkCursor='';bulkFinished=false;checkpoint();update();}},
+  status:()=>({complete:bulkFinished,busy})};
 }
+

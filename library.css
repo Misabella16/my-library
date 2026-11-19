@@ -6,3 +6,310 @@
 details.collapse{border-top:1px solid var(--line);padding:14px 0}details.collapse>summary{font-weight:750;font-size:14px;cursor:pointer;list-style-position:outside;color:var(--forest)}.nested{margin-top:12px;padding:12px;background:#fbfaf5;border:1px solid var(--line);border-radius:8px}.nested details{padding:8px 0}.nested p{margin:6px 0}.nested h4{font-size:17px;margin:0}.edition-actions{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0}.copy-box{border:1px solid #e7e7de;background:#fff;padding:10px;border-radius:7px;margin:10px 0}.copy-box summary{cursor:pointer;font-weight:700}.copy-info{font-size:12px;color:var(--muted);margin:5px 0 0}.edit-form{margin:12px 0 0}.form label,.edit-form label{display:block;font-weight:700;font-size:12px;color:var(--forest);margin-bottom:10px}.form input:not([type=checkbox]),.form select,.form textarea,.edit-form input:not([type=checkbox]),.edit-form textarea,.edit-form select{width:100%;border:1px solid #ced7cc;border-radius:6px;padding:9px 11px;background:white;display:block;margin-top:4px;max-width:100%}.form textarea,.edit-form textarea{resize:vertical}.form .check,.edit-form .check{display:flex;align-items:center;gap:8px}.form .check input,.edit-form .check input{margin:0}.two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.surface{background:var(--paper);padding:24px;border:1px solid var(--line);border-radius:11px}.tip{background:#edf3e9;padding:14px 16px;border-radius:8px;border:1px solid #d7e3d3;margin:12px 0}.tip p{margin:3px 0}.loadmore{display:flex;justify-content:center;margin-top:20px}.preview-pictures{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}.preview-pictures figure{margin:0;width:145px}.preview-pictures img{width:145px;height:155px;object-fit:cover;border-radius:7px}.preview-pictures figcaption{font-size:10px;overflow-wrap:anywhere}.upload{display:block;border:2px dashed #afc1ab;padding:20px;border-radius:8px;background:#f8faf4;max-width:650px}.upload input{display:block;margin-top:10px;max-width:100%}.cover-thumbs{display:flex;gap:8px;flex-wrap:wrap}.cover-thumb{border:1px solid var(--line);border-radius:7px;padding:5px;display:flex;flex-direction:column;align-items:center;background:white;gap:4px}.cover-thumb img{width:78px;height:103px;object-fit:cover}.cover-thumb span{font-size:10px}footer{text-align:center;font-size:11px;color:var(--muted);padding:20px}.close{background:transparent;border:0;font-size:26px;color:var(--muted)}dialog{border:1px solid var(--line);border-radius:12px;padding:24px;background:var(--paper);color:var(--ink);box-shadow:0 22px 70px #14291f55;width:min(550px,calc(100vw - 28px));max-height:90vh;overflow-y:auto}dialog::backdrop{background:#162d22ad}.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.modal-head h2{margin:0;font-size:26px}
 @media(max-width:1100px){.book-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.layout{grid-template-columns:minmax(0,1fr) minmax(340px,1fr)}}@media(max-width:800px){.layout{display:flex;flex-direction:column-reverse}.detail{position:static;max-height:none;width:100%}.book-grid{width:100%;grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:570px){.top{padding:12px}.brand strong{font-size:18px}.brand small{font-size:8px;letter-spacing:1px}.brand-mark{width:32px;height:32px;font-size:21px}.privacy{font-size:9px;padding:6px}.hero-inner{padding:34px 16px}.main{padding:18px 12px 70px}.library-header{align-items:end}.library-header h2{font-size:26px}.book-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.detail{padding:16px}.detail-title{font-size:24px}.two-columns{grid-template-columns:1fr}.book-data strong{font-size:15px}.tabs .tab{padding:8px 9px;font-size:11px}.surface{padding:15px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+
+
+/* Owner-only site customization, designed to preserve the garden layout. */
+.site-studio{max-width:100%;overflow:hidden}.site-studio .edit-form{max-width:920px;display:grid;gap:12px}
+.site-studio label{display:grid;gap:5px}.site-studio input,.site-studio textarea{width:100%}
+.site-studio-images{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:16px 0}
+.site-studio-image-slot{min-width:0;display:grid;align-content:start;gap:9px;padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+.site-studio-image-slot img{max-width:100%;width:100%;height:170px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#f4f0ea}
+.site-studio-image-slot img[hidden]{display:none}.site-studio-image-slot input[type=file]{font-size:12px}
+.brand-mark .site-custom-logo{height:100%;width:100%;object-fit:contain;border-radius:inherit}
+.hero.site-custom-background{background-image:linear-gradient(90deg,rgba(22,36,31,.9),rgba(22,36,31,.58)),url('/api/site-content/image/background');background-size:cover;background-position:center}
+.hero-art .site-custom-hero{width:100%;height:100%;max-height:330px;object-fit:contain;display:block}
+.hero-art .antique-frame[hidden]{display:none}
+@media(max-width:750px){.site-studio-images{grid-template-columns:1fr}}
+
+/* Local shelf cover crop and private-artwork candidate cards. */
+.photo-cover-canvas{display:block;max-width:100%;width:auto;height:auto;touch-action:none;border-radius:12px;border:1px solid var(--line);background:var(--paper);cursor:crosshair}
+.photo-cover-candidate{display:flex;gap:14px;align-items:flex-start;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px}
+.photo-cover-candidate>img{width:84px;height:116px;object-fit:contain;flex-shrink:0}
+.photo-cover-candidate>div{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.photo-cover-candidate>div strong,.photo-cover-candidate>div p{flex-basis:100%;margin:0}
+@media(max-width:600px){.photo-cover-candidate{gap:9px}.photo-cover-candidate>img{width:65px;height:96px}}
+
+/* Private physical inventory, grouped by actual room / bookcase / shelf. */
+.visual-shelf-browser{margin-top:18px}
+.visual-shelf-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.visual-shelf-toolbar h3{margin:3px 0}
+.visual-shelf-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:20px 0}
+.visual-shelf-location{display:grid;text-align:left;gap:12px;padding:16px;border:1px solid var(--line);
+ border-radius:12px;background:var(--paper);color:var(--ink);cursor:pointer;font:inherit}
+.visual-shelf-location:hover,.visual-shelf-location:focus-visible{outline:2px solid #9d866b;outline-offset:2px}
+.visual-shelf-address{font-weight:600;line-height:1.4}
+.visual-shelf-location strong{font-size:.83rem;font-weight:500;color:var(--muted)}
+.visual-shelf-contents{margin-top:20px}
+.visual-shelf-books{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:13px;margin:15px 0}
+.visual-shelf-book{display:flex;align-items:flex-start;gap:12px;padding:13px;border:1px solid var(--line);
+ border-radius:12px;background:var(--paper);min-width:0}
+.visual-shelf-cover{width:64px;min-width:64px;height:94px;border-radius:5px;overflow:hidden;background:#e8dfd3;
+ display:grid;place-items:center}
+.visual-shelf-cover img{width:100%;height:100%;object-fit:cover}
+.visual-shelf-cover-placeholder{font-size:27px;color:#8d776b}
+.visual-shelf-details{display:grid;align-content:start;gap:5px;min-width:0;overflow-wrap:anywhere}
+.visual-shelf-details p{margin:0;font-size:.83rem}
+.visual-shelf-details .btn{justify-self:start;margin-top:4px}
+@media(max-width:620px){.visual-shelf-groups{grid-template-columns:repeat(2,minmax(0,1fr))}
+.visual-shelf-books{grid-template-columns:1fr}}
+
+/* Optional decorative spine shelf. Same authenticated copy data as the card view. */
+.visual-shelf-selected-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.visual-shelf-selected-header h3{margin:0}
+.visual-shelf-mode-toggle{display:flex;gap:6px;flex-wrap:wrap}
+.visual-shelf-mode-toggle [aria-pressed="true"]{background:#3d5146;color:#fff;border-color:#3d5146}
+.visual-shelf-books.spines-view{display:flex;flex-wrap:wrap;align-items:end;justify-content:flex-start;gap:3px 2px;
+ border-bottom:13px solid #8c6f56;padding:12px 12px 0;border-radius:3px;
+ background:linear-gradient(90deg,#e8dbc7,#f1e7d6 48%,#e4d6bf);
+ box-shadow:0 8px 0 #6d5446,0 11px 16px #33271933}
+.visual-shelf-book .visual-shelf-spine{display:none}
+.visual-shelf-books.spines-view .visual-shelf-book{width:var(--spine-width,45px);flex:0 0 auto;
+ border:0;border-radius:0;padding:0;margin:0;background:transparent;box-shadow:none}
+.visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-cover,
+.visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-details{display:none}
+.visual-shelf-books.spines-view .visual-shelf-spine{display:flex;flex-direction:column;
+ align-items:center;justify-content:space-between;position:relative;
+ width:var(--spine-width,45px);height:var(--spine-height,190px);padding:12px 3px 8px;
+ border:1px solid #332d2980;border-bottom:0;border-radius:4px 4px 0 0;
+ color:#f8eee0;cursor:pointer;background:#4c615a;
+ box-shadow:inset 2px 0 #ffffff15,inset -3px 0 #00000025,2px 0 2px #29241930;
+ transition:transform .15s ease}
+.visual-shelf-books.spines-view .visual-shelf-spine:focus-visible{outline:3px solid #c48b47;outline-offset:3px}
+.visual-shelf-books.spines-view .visual-shelf-spine:hover{transform:translateY(-7px)}
+.visual-shelf-spine[data-tone="0"]{background:#546557}
+.visual-shelf-spine[data-tone="1"]{background:#6c4b49}
+.visual-shelf-spine[data-tone="2"]{background:#34495d}
+.visual-shelf-spine[data-tone="3"]{background:#857055}
+.visual-shelf-spine[data-tone="4"]{background:#756475}
+.visual-shelf-spine[data-tone="5"]{background:#57504b}
+.visual-shelf-spine[data-tone="6"]{background:#9a6b5b}
+.visual-shelf-spine-title{writing-mode:vertical-rl;text-orientation:mixed;overflow:hidden;
+ max-height:70%;font-family:Georgia,serif;font-size:11px;font-weight:700;line-height:1.15}
+.visual-shelf-spine-author{writing-mode:vertical-rl;overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap;max-height:24%;font-size:8px;letter-spacing:.04em}
+.visual-shelf-spine-mark{position:absolute;bottom:2px;right:3px;font-size:9px;color:#f9dba8}
+@media (prefers-reduced-motion:reduce){
+ .visual-shelf-books.spines-view .visual-shelf-spine{transition:none}
+ .visual-shelf-books.spines-view .visual-shelf-spine:hover{transform:none}
+}
+
+/* Hover/focus shelf details. Touch users may press Details to pin the panel. */
+.visual-shelf-book{position:relative}
+.visual-shelf-hover{display:block;opacity:0;visibility:hidden;pointer-events:none;transition:none;position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);
+ transform:translateX(-50%);width:min(340px,calc(100vw - 44px));max-height:330px;overflow:auto;
+ background:#fffaf0;color:#263b31;padding:15px;border:1px solid #bfa98b;border-radius:10px;
+ box-shadow:0 12px 32px #231d1944;overflow-wrap:anywhere;text-align:left}
+.visual-shelf-hover strong{display:block;font-family:Georgia,serif;font-size:15px}
+.visual-shelf-hover p{margin:5px 0;font-size:12px;line-height:1.45}
+.visual-shelf-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.visual-shelf-tags .badge{font-size:10px;padding:4px 7px}
+.visual-shelf-book:hover .visual-shelf-hover{opacity:1;visibility:visible;pointer-events:auto;
+ transition:opacity .12s ease 2s,visibility 0s linear 2s}
+.visual-shelf-book:focus-within .visual-shelf-hover,
+.visual-shelf-book.details-open .visual-shelf-hover{opacity:1;visibility:visible;pointer-events:auto;transition:none}
+.visual-shelf-details-toggle{margin-top:4px}
+.visual-shelf-order-buttons{display:flex;gap:3px}
+.visual-shelf-order-buttons .btn{min-width:26px;min-height:30px}
+.visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-order-buttons{position:absolute;
+ top:-34px;left:50%;transform:translateX(-50%);display:none;z-index:6}
+.visual-shelf-books.spines-view .visual-shelf-book:hover>.visual-shelf-order-buttons,
+.visual-shelf-books.spines-view .visual-shelf-book:focus-within>.visual-shelf-order-buttons{display:flex}
+.visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-hover{bottom:calc(100% + 45px)}
+.visual-shelf-layout-editor{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:13px 0 4px}
+.visual-shelf-layout-editor label{display:grid;gap:4px;min-width:min(250px,100%);font-size:12px}
+.visual-shelf-layout-editor input{padding:8px 10px;border:1px solid #b7ab9c;border-radius:7px}
+.visual-shelf-layout-editor p{flex-basis:100%;margin:0;font-size:12px}
+@media(hover:none){
+ .visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-order-buttons{display:flex;
+  position:static;transform:none;justify-content:center;margin-top:4px}
+ .visual-shelf-books.spines-view .visual-shelf-book{display:flex;flex-direction:column;align-items:center}
+ .visual-shelf-books.spines-view .visual-shelf-book>.visual-shelf-hover{bottom:calc(100% + 4px)}
+}
+@media(max-width:600px){
+ .visual-shelf-hover{max-height:260px}
+ .visual-shelf-layout-editor{align-items:stretch}
+}
+
+/* Batch physical-shelf tools use only already paged book records. */
+.visual-shelf-batch-tools{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:14px 0}
+.visual-shelf-batch-tools label{display:flex;flex-direction:column;gap:5px;font-size:12px;min-width:145px}
+.visual-shelf-batch-tools label:first-child{min-width:min(280px,100%);flex:1}
+.visual-shelf-batch-tools input[type=search],.visual-shelf-batch-tools select{
+ padding:8px 10px;max-width:100%;min-height:37px;border-radius:7px;border:1px solid #b7ab9c;
+ background:var(--paper);color:var(--ink)}
+.visual-shelf-batch-tools input[type=checkbox]{width:18px;height:18px}
+.visual-shelf-batch-tools p{flex-basis:100%;margin:0}
+.visual-shelf-book[hidden],.visual-shelf-books.spines-view .visual-shelf-book[hidden]{display:none!important}
+.visual-shelf-book.dragging{opacity:.52;outline:2px dashed #ac8262}
+.visual-shelf-books.spines-view .visual-shelf-book{cursor:grab}
+.visual-shelf-books.spines-view .visual-shelf-book.dragging{cursor:grabbing}
+@media(max-width:620px){.visual-shelf-batch-tools{align-items:stretch}
+ .visual-shelf-batch-tools label{flex:1 1 100%}}
+
+/* More owner-editable site sections, without touching edition artwork. */
+.site-studio-expand{border:1px solid var(--line);border-radius:11px;margin:10px 0;padding:14px;min-width:0}
+.site-studio-expand legend{font:600 15px Georgia,serif;padding:0 8px}
+.site-studio-expand label{display:grid;gap:6px;margin:8px 0}
+.site-studio-expand input,.site-studio-expand textarea{width:100%;min-width:0;max-width:100%}
+.site-section-artwork{margin-bottom:18px;max-height:260px;overflow:hidden;border-radius:12px;
+ border:1px solid var(--line);background:#f4f0e9}
+.site-section-artwork[hidden]{display:none}
+.site-section-artwork img{display:block;width:100%;max-height:260px;object-fit:cover;object-position:center}
+.site-studio-images{grid-template-columns:repeat(auto-fit,minmax(225px,1fr))}
+@media(max-width:620px){.site-studio-expand{padding:10px}.site-studio-images{grid-template-columns:1fr}}
+
+/* Read-only collection health report, intentionally loaded only on demand. */
+.collection-health{margin-bottom:18px}
+.collection-health-actions{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:14px 0}
+.collection-health-actions label{display:grid;gap:5px;font-size:12px}
+.collection-health-actions select{min-height:39px;padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink)}
+.collection-health-metrics{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}
+.collection-health-metrics strong,.collection-health-metrics .health-metric{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--paper);font-size:12px}
+.collection-health-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.collection-health .health-result{display:flex;align-items:start;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:9px;padding:12px;background:var(--paper)}
+.health-result-details{min-width:0;overflow-wrap:anywhere}
+.health-result-details strong{font:600 15px Georgia,serif}
+.health-result-details p{font-size:12px;margin:5px 0}
+@media(max-width:590px){.collection-health-actions{align-items:stretch}.collection-health-actions label{width:100%}.collection-health-results{grid-template-columns:1fr}}
+
+/* Existing-name cleanup is preview-first and never touches stored EPUB bytes. */
+.epub-title-cleanup-result{display:flex;align-items:start;gap:12px;
+ padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--paper)}
+.epub-title-cleanup-result>input{flex-shrink:0;width:18px;height:18px;margin-top:5px}
+.epub-title-cleanup-result .epub-title-cleanup-labels{display:grid;gap:5px;flex:1;min-width:0;overflow-wrap:anywhere}
+.epub-title-cleanup-labels strong{font:600 15px Georgia,serif}
+.epub-title-cleanup-labels span{font-size:12px}
+@media(max-width:650px){.epub-title-cleanup-result{flex-wrap:wrap}
+ .epub-title-cleanup-result>.btn{margin-left:30px}}
+
+/* Keep full scan controls usable while 10k+ records are scanned in small D1 pages. */
+#collection-health-scan[disabled]{opacity:.75;cursor:progress}
+#collection-health-pause{min-width:105px}
+#collection-health-shown{margin:12px 0 6px}
+#collection-health-more{margin-top:8px}
+#collection-health-results .health-result{max-width:100%;min-width:0}
+@media(max-width:590px){
+ #collection-health-scan,#collection-health-pause,#collection-health-repair,
+ #collection-health-export,#collection-health-more{width:100%}
+}
+
+
+/* Imports: one primary repair, with optional tools progressively disclosed. */
+#imports > .surface, #imports > .imports-disclosure { margin-bottom: 1.25rem; }
+.imports-disclosure { margin: 1rem 0; border: 1px solid var(--line, #d7cbc5); border-radius: 12px; padding: 1rem; }
+.imports-disclosure > summary, .repair-options > summary { cursor: pointer; font-weight: 600; padding: .5rem; }
+.imports-disclosure[open] > summary { margin-bottom: 1rem; }
+#imports nav a { padding: .5rem .75rem; }
+#imports [inert] { opacity: .65; }
+#imports [id] { scroll-margin-top: 1rem; }
+#imports .collection-health-actions, #imports .goodreads-actions { flex-wrap: wrap; }
+@media (max-width: 640px) {
+ .imports-disclosure { padding: .65rem; }
+ #imports .surface { min-width: 0; }
+ #imports button, #imports input { max-width: 100%; }
+}
+
+/* ISBN Recovery result cards: readable evidence, even with long titles and IDs.
+   Scoped to the ISBN tool so other EPUB and collection layouts are unchanged. */
+#isbn-recovery-results{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  align-items:stretch;
+  width:100%;
+  min-width:0;
+}
+.collection-health #isbn-recovery-results > .health-result{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:8px;
+  min-width:0;
+  max-width:100%;
+  padding:16px;
+}
+#isbn-recovery-results > .health-result > *{
+  min-width:0;
+  max-width:100%;
+}
+#isbn-recovery-results > .health-result > strong{
+  display:block;
+  font:600 16px/1.4 Georgia,serif;
+  overflow-wrap:anywhere;
+}
+#isbn-recovery-results > .health-result p{
+  margin:0;
+  line-height:1.55;
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+#isbn-recovery-results > .health-result .btn{
+  align-self:flex-start;
+  max-width:100%;
+  white-space:normal;
+  text-align:left;
+  overflow-wrap:anywhere;
+}
+#isbn-recovery-results > .health-result label.collection-health-actions{
+  display:flex;
+  align-items:flex-start;
+  flex-wrap:nowrap;
+  gap:9px;
+  margin:5px 0;
+  overflow-wrap:anywhere;
+}
+#isbn-recovery-results > .health-result label.collection-health-actions input{
+  flex:none;
+  margin-top:4px;
+}
+@media(max-width:780px){
+  #isbn-recovery-results{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Independently verified ISBN queue, kept readable at desktop and mobile widths. */
+#isbn-verification{margin:22px 0;padding:18px;border:1px solid var(--line);border-radius:12px;min-width:0}
+#isbn-verification-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:100%;min-width:0}
+.collection-health #isbn-verification-results > .health-result{
+  display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;
+  gap:8px;padding:15px;min-width:0;max-width:100%;
+}
+#isbn-verification-results > .health-result > *{min-width:0;max-width:100%;overflow-wrap:anywhere}
+#isbn-verification-results > .health-result > strong{font:600 16px/1.4 Georgia,serif}
+#isbn-verification-results > .health-result p{margin:0;line-height:1.5}
+#isbn-verification-results > .health-result label.collection-health-actions{
+  display:flex;align-items:flex-start;flex-wrap:nowrap;gap:9px;margin:5px 0;
+}
+#isbn-verification-results > .health-result input[type=checkbox]{flex:none;margin-top:4px}
+#isbn-verification #isbn-verification-stats{font-size:12px;line-height:1.65}
+@media(max-width:850px){
+  #isbn-verification-results{grid-template-columns:minmax(0,1fr)}
+  #isbn-verification{padding:12px}
+}
+
+/* A single edition-and-cover workflow, with actionable ISBN review cards. */
+#edition-metadata-workflow{margin:20px 0;min-width:0}
+#edition-metadata-workflow > .imports-disclosure{margin:13px 0;background:var(--paper)}
+#edition-metadata-workflow > .imports-disclosure > summary{font:600 18px/1.4 Georgia,serif;color:var(--forest)}
+#edition-metadata-workflow #isbn-recovery{margin:0}
+#edition-metadata-workflow #isbn-recovery-extra{margin:18px 0;background:var(--cream)}
+.isbn-workflow-steps{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
+.isbn-workflow-steps a{background:var(--sage);border:1px solid var(--line);color:var(--forest);font-size:12px;font-weight:700;border-radius:8px;padding:8px 12px}
+.isbn-workflow-steps a:hover,.isbn-workflow-steps a:focus-visible{background:#dfe9d9}
+#isbn-verification .isbn-source-links,
+#isbn-verification .isbn-card-actions{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+#isbn-verification .isbn-source-links a{border:1px solid var(--line);border-radius:7px;padding:6px 10px;background:var(--cream);color:var(--forest);font-size:12px;text-decoration:underline}
+#isbn-verification .isbn-card-actions .btn{white-space:normal;text-align:left;line-height:1.4}
+#isbn-verification-results .health-result p{overflow-wrap:anywhere}
+@media(max-width:690px){
+ #edition-metadata-workflow{padding:12px}
+ #edition-metadata-workflow .surface{padding:12px}
+ #isbn-verification .isbn-card-actions{align-items:stretch}
+ #isbn-verification .isbn-card-actions .btn{width:100%}
+}
+/* Reading priority badges (1st / 2nd / 3rd) */
+.badge.priority-badge{margin-left:5px;font-weight:700;white-space:nowrap}
+.badge.priority-1{background:#f6e3e6;color:#8a3d4c;border-color:#e8c2ca}
+.badge.priority-2{background:#f3ead6;color:#7d5c2c;border-color:#e3d1a6}
+.badge.priority-3{background:#e7eef0;color:#3f5d68;border-color:#c9d9de}
+.virtual-book .priority-badge{position:absolute;top:6px;left:6px;z-index:3;margin:0;font-size:10px;padding:2px 7px}

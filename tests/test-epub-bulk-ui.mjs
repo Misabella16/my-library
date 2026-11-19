@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {initEpubImport} from '../epub-ui.mjs';
 import {bulkEpubReport,flagPossibleEpubDuplicates} from '../epub-bulk.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
@@ -46,7 +47,8 @@ class FakeNode{
  async dispatch(type){for(const fn of this.listeners[type]||[])await fn({target:this});}
 }
 const ids=['epub-files','epub-folder','preview-epubs','upload-epubs',
- 'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary','epub-review-filter','pause-epub-upload'];
+ 'epub-preview-list','epub-preview-status','epub-import-progress','epub-import-summary','epub-review-filter','pause-epub-upload',
+ 'epub-save-all','epub-recheck-failures','epub-issues-report','pause-epub-preview'];
 function fixture(count=101,{failFirst=false,failPreviewAt=0,reviewMatch=false,previewAsExisting=false,pauseAfterFirst=false,verifiedExisting=false}={}){
  const nodes=new Map(ids.map(id=>[id,new FakeNode()]));
  nodes.get('epub-review-filter').value='all';
@@ -439,5 +441,121 @@ test('Embedded EPUB cover previews load locally only when clicked, with no extra
   await button.dispatch('click');
   assert.equal(area.children.length,0);
   assert.equal(f.calls.length,before);
+ }finally{f.restore();}
+});
+
+test('A collection of 10,000 EPUBs may be selected; larger selections are held safely',async()=>{
+ const f=fixture(1);
+ try{
+  const input=f.get('epub-folder');
+  input.files=Array(10000).fill(f.files[0]);
+  await input.dispatch('change');
+  assert.equal(f.get('preview-epubs').disabled,false);
+  assert.match(f.get('epub-preview-status').textContent,/10000 EPUBs selected/);
+  input.files=Array(10001).fill(f.files[0]);
+  await input.dispatch('change');
+  assert.equal(f.get('preview-epubs').disabled,true);
+  assert.match(f.get('epub-preview-status').textContent,/10000 at a time/);
+  assert.equal(f.stats().uploads,0);
+ }finally{f.restore();}
+});
+test('A 502-file EPUB selection saves 500 first, then remaining two without duplicates',async()=>{
+ const f=fixture(502);
+ try{
+  const folder=f.get('epub-folder');
+  folder.files=f.files;
+  await folder.dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.equal(f.get('upload-epubs').disabled,false);
+  assert.match(f.get('upload-epubs').textContent,/Save 500 eligible/);
+  const before=f.calls.filter(x=>x.path==='/api/epubs/preview').length;
+  assert.equal(before,11,'50-row bounded previews for 502 files');
+  await f.get('upload-epubs').dispatch('click');
+  assert.equal(f.stats().uploads,500);
+  assert.match(f.get('upload-epubs').textContent,/Save 2 eligible/);
+  assert.match(f.get('epub-preview-status').textContent,/2 eligible files remain/);
+  await f.get('upload-epubs').dispatch('click');
+  assert.equal(f.stats().uploads,502);
+  assert.equal(f.get('upload-epubs').disabled,true);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,before);
+ }finally{f.restore();}
+});
+
+test('One click saves all 502 verified EPUBs beyond the prior 500-file group limit',async()=>{
+ const f=fixture(502);
+ try{
+  f.get('epub-folder').files=f.files;
+  await f.get('epub-folder').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  assert.equal(f.get('epub-save-all').disabled,false);
+  assert.match(f.get('epub-save-all').textContent,/502 eligible EPUBs/);
+  const previews=f.calls.filter(x=>x.path==='/api/epubs/preview').length;
+  await f.get('epub-save-all').dispatch('click');
+  assert.equal(f.stats().uploads,502);
+  assert.equal(f.stats().refresh,1);
+  assert.equal(f.get('upload-epubs').disabled,true);
+  assert.equal(f.get('epub-save-all').disabled,true);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,previews);
+ }finally{f.restore();}
+});
+test('One-click all respects quota pause and resumes without duplicating saved EPUBs',async()=>{
+ const f=fixture(5,{failFirst:true});
+ try{
+  f.get('epub-files').files=f.files;
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  await f.get('epub-save-all').dispatch('click');
+  assert.equal(f.stats().uploads,0);
+  assert.match(f.get('epub-preview-status').textContent,/database limit/i);
+  assert.equal(f.get('epub-save-all').disabled,false);
+  await f.get('epub-save-all').dispatch('click');
+  assert.equal(f.stats().uploads,5);
+  assert.equal(new Set(f.calls.filter(x=>x.path==='/api/epubs/upload').map(
+   x=>x.opts.formData?.get('epub')?.name)).size,5);
+ }finally{f.restore();}
+});
+test('Failed uploads can be rechecked by SHA before retry, avoiding already-uploaded server copies',async()=>{
+ const f=fixture(2,{failFirst:true});
+ try{
+  f.get('epub-files').files=f.files;
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  await f.get('upload-epubs').dispatch('click');
+  assert.equal(f.get('epub-recheck-failures').disabled,false);
+  await f.get('epub-recheck-failures').dispatch('click');
+  assert.equal(f.get('epub-recheck-failures').disabled,true);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,2);
+  assert.match(f.get('epub-preview-status').textContent,/Rechecked 1 failed EPUB/);
+  assert.equal(f.get('epub-save-all').disabled,false);
+ }finally{f.restore();}
+});
+test('New EPUB bulk controls and repair-all are exposed in Imports without replacing existing 500/50 buttons',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ for(const id of ['epub-save-all','epub-recheck-failures','epub-issues-report',
+  'pause-epub-preview','epub-backfill-all','upload-epubs','epub-backfill-bulk']){
+  assert.match(html,new RegExp('id="'+id+'"'));
+ }
+});
+
+test('Oversized EPUB still displays a cleaned title, stays blocked, and preserves original filename',async()=>{
+ const f=fixture(0);
+ try{
+  const filename='Textual Poachers (z-library.sk, ilib.sk, z-lib.sk).epub';
+  const file=new File([new Uint8Array([80,75,3,4])],filename,
+   {type:'application/epub+zip'});
+  Object.defineProperty(file,'size',{value:96*1024*1024+1}); // Size-only preview guard
+  f.get('epub-files').files=[file];
+  await f.get('epub-files').dispatch('change');
+  await f.get('preview-epubs').dispatch('click');
+  const card=f.get('epub-preview-list').children[0];
+  assert.equal(card.children[0].textContent,'Textual Poachers');
+  assert.match(card.children[1].textContent,/Textual Poachers \(z-library.sk, ilib.sk, z-lib.sk\)\.epub/);
+  assert.match(card.children[2].textContent,/Too large/);
+  assert.match(card.children.find(x=>x.className==='epub-preview-note').textContent,/96 MB/);
+  assert.equal(f.get('upload-epubs').disabled,true);
+  assert.equal(f.get('epub-save-all').disabled,true);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/preview').length,0);
+  assert.equal(f.calls.filter(x=>x.path==='/api/epubs/upload').length,0);
+  assert.equal(file.name,filename,'The EPUB filename must not be changed');
  }finally{f.restore();}
 });

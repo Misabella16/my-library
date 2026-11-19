@@ -221,3 +221,39 @@ test('Existing shelf memberships are preserved; later Goodreads sync adds only m
   assert.equal(existing.shelf_id,shelf);
  }finally{f.sqlite.close();}
 });
+
+test('CSV link sync attaches exact Goodreads ID to a matched unlinked book and Undo restores it',async()=>{
+ const f=fixture();
+ try{
+  f.sqlite.prepare('UPDATE books SET goodreads_id=NULL WHERE id=?').run(BOOK);
+  const source=sample({myRating:null,review:'',dateStarted:'',dateRead:'',shelves:[]});
+  const plan=await planGoodreadsSync(f.db,validateSyncRows([source]));
+  assert.equal(plan[0].status,'ready');
+  assert.deepEqual(plan[0].changes,{goodreads_id:'93823121'});
+  assert.equal(fetchBook(f.sqlite).goodreads_id,null);
+  const response=await call(f.db,'/api/imports/goodreads/sync',[source]);
+  assert.equal(response.status,200,await response.clone().text());
+  const synced=await response.json();
+  assert.equal(synced.updated,1);
+  assert.equal(synced.fields_added,1);
+  assert.equal(fetchBook(f.sqlite).goodreads_id,'93823121');
+  assert.equal(count(f.sqlite,'book_shelves'),0);
+  const undo=await call(f.db,'/api/imports/goodreads/sync/'+synced.batch_id+'/undo',[]);
+  assert.equal(undo.status,200,await undo.clone().text());
+  assert.equal((await undo.json()).restored,1);
+  assert.equal(fetchBook(f.sqlite).goodreads_id,null);
+ }finally{f.sqlite.close();}
+});
+test('CSV link sync rejects mismatched Goodreads edition IDs and duplicate source IDs',async()=>{
+ const f=fixture();
+ try{
+  const plan=await planGoodreadsSync(f.db,validateSyncRows([
+   sample({goodreadsId:'22334455',shelves:[]})]));
+  assert.equal(plan[0].status,'review');
+  assert.match(plan[0].reason,/different Goodreads edition ID/);
+  assert.equal(fetchBook(f.sqlite).goodreads_id,'93823121');
+  const second='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  assert.throws(()=>validateSyncRows([
+   sample(),sample({book_id:second})]),/One Goodreads Book ID was matched/);
+ }finally{f.sqlite.close();}
+});
