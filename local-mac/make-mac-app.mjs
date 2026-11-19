@@ -59,6 +59,17 @@ if ! running; then
     exit 1
   fi
 fi
+# Open in an app-style window (no tabs or address bar) when Chrome, Brave or
+# Edge is installed; otherwise use the default browser.
+for APP in "Google Chrome" "Brave Browser" "Microsoft Edge"; do
+  for DIR in /Applications "$HOME/Applications"; do
+    BIN="$DIR/$APP.app/Contents/MacOS/$APP"
+    if [ -x "$BIN" ]; then
+      nohup "$BIN" --app="$URL" >/dev/null 2>&1 </dev/null &
+      exit 0
+    fi
+  done
+done
 /usr/bin/open "$URL"
 `;
 }

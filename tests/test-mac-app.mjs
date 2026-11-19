@@ -13,6 +13,8 @@ test('launcher quotes odd folder names and only talks to the loopback site',()=>
  assert.match(s,/http:\/\/127\.0\.0\.1:8788\//);
  assert.match(s,/npm run local:start/);
  assert.match(s,/arch -arm64/);
+ assert.match(s,/--app="\$URL"/);
+ assert.match(s,/\/usr\/bin\/open "\$URL"/);
  assert.doesNotMatch(s,/--remote|wrangler deploy|d1 execute/);
  const syntax=spawnSync('/bin/bash',['-n'],{input:s});
  assert.equal(syntax.status,0,String(syntax.stderr));
